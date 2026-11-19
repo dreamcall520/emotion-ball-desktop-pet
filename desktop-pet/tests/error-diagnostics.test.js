@@ -80,3 +80,19 @@ test('process/load/download diagnostics retain fixed classifications and bounded
   for (const downloadStage of ['prepare', 'start', 'save', 'transfer', 'cancel']) assert.equal(normalizeDiagnostic('', {}, { downloadStage }).context.downloadStage, downloadStage);
   for (const netErrorCode of [0, 1, NaN, -1.5]) assert.equal(normalizeDiagnostic('', {}, { netErrorCode }).context.netErrorCode, undefined);
 });
+
+
+test('native phase diagnostics preserve the full website schema and add only bounded location facts', () => {
+  const safe = normalizeDiagnostic('天气', { code: 'LOCATION_TIMEOUT' }, {
+    locationAppActive: false, locationAuthorizationCallbacks: 2, locationPhase: 'acquisition',
+    locationElapsedMs: 15012, locationPhaseElapsedMs: 15001, source: 'main.js', line: 2,
+    latitude: 123, message: 'private', token: 'private'
+  });
+  assert.deepEqual(safe, { name: 'Error', code: 'LOCATION_TIMEOUT', context: {
+    source: 'main.js', line: 2, locationAppActive: false, locationAuthorizationCallbacks: 2,
+    locationPhase: 'acquisition', locationElapsedMs: 15012, locationPhaseElapsedMs: 15001
+  } });
+  assert.doesNotMatch(JSON.stringify(safe), /latitude|private|token|message/);
+  assert.deepEqual(normalizeDiagnostic('天气', {}, { locationAppActive: 1, locationAuthorizationCallbacks: -1,
+    locationPhase: 'private', locationElapsedMs: 3600001, locationPhaseElapsedMs: NaN }).context, {});
+});

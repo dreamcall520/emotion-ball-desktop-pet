@@ -449,3 +449,71 @@ test('weather failure reporting preserves bounded stage/status without promoting
   assert.equal((await pending).cancelled, true);
   assert.equal(cancelled.errors.length, 0, 'a location discarded by its owner is not reported as a user failure');
 });
+
+test('closing and reopening the picker starts a fresh native deadline instead of reusing its last second', async t => {
+  const { createLocationBridge } = require('../lib/weather-location');
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  let active = null, nativeCalls = 0;
+  const events = [];
+  const bridge = createLocationBridge({ platform: 'darwin', onDiagnostic: event => events.push(event), native: {
+    status: () => ({ status: 'granted', servicesEnabled: true }),
+    locate() {
+      assert.equal(active, null, 'the old native manager must retire before another starts');
+      nativeCalls++;
+      const request = {};
+      request.promise = new Promise((_, reject) => {
+        request.reject = reject;
+        request.timer = setTimeout(() => { if (active === request) active = null; reject(Object.assign(Error('deadline'), { code: 'LOCATION_TIMEOUT' })); }, 15000);
+      });
+      active = request;
+      return request.promise;
+    },
+    cancel(promise) {
+      if (active?.promise !== promise) return false;
+      const request = active; active = null; clearTimeout(request.timer);
+      request.reject(Object.assign(Error('cancelled'), { code: 'CANCELLED' }));
+      return true;
+    }
+  } });
+  const f = fixture(t, { locationBridge: bridge });
+  const first = f.invoke('location'); await Promise.resolve();
+  t.mock.timers.tick(10000); f.invoke('resize', { expanded: true, picker: false, height: 400 });
+  t.mock.timers.tick(4000); f.invoke('resize', { expanded: true, picker: true, height: 250 });
+  const retryStart = Date.now(); let retrySettled = false;
+  const retry = f.invoke('location').then(value => { retrySettled = true; return value; });
+  await Promise.resolve();
+  assert.equal(nativeCalls, 2, 'a new explicit attempt must not inherit the old 1-second deadline');
+  assert.equal((await first).cancelled, true);
+  assert.equal(f.errors.length, 0, 'expected cancellation is not a weather fault');
+  assert.equal(events.filter(event => event.outcome === 'cancelled').length, 1);
+  t.mock.timers.tick(14999); await Promise.resolve();
+  assert.equal(retrySettled, false);
+  t.mock.timers.tick(1);
+  assert.equal((await retry).locationError.code, 'LOCATION_TIMEOUT');
+  assert.equal(Date.now() - retryStart, 15000);
+});
+
+test('window lifecycle and manual city selection retire pending native location without reporting cancellation', async t => {
+  const { createLocationBridge } = require('../lib/weather-location');
+  for (const action of ['reset', 'disable', 'pause', 'close', 'destroy', 'manual-city', 'hide']) {
+    let reject, promise, cancellations = 0;
+    const bridge = createLocationBridge({ platform: 'darwin', native: {
+      status: () => ({ status: 'granted', servicesEnabled: true }),
+      locate() { return promise = new Promise((_, fail) => { reject = fail; }); },
+      cancel(token) { assert.equal(token, promise); cancellations++; reject(Object.assign(Error('cancelled'), { code: 'CANCELLED' })); return true; }
+    } });
+    const f = fixture(t, { locationBridge: bridge });
+    const old = f.invoke('location'); await Promise.resolve();
+    if (action === 'reset') f.controller.resetExpanded();
+    if (action === 'disable') f.controller.setEnabled(false);
+    if (action === 'pause') f.controller.pause();
+    if (action === 'close') f.controller.getWindow().destroy();
+    if (action === 'destroy') f.controller.destroy();
+    if (action === 'manual-city') await f.invoke('city', cityB);
+    if (action === 'hide') { f.setPetVisible(false); f.controller.reposition(); }
+    assert.equal(cancellations, 1, action + ' must stop its native request');
+    assert.equal((await old).cancelled, true);
+    assert.equal(f.errors.length, 0);
+    assert.equal(f.requests.length, action === 'manual-city' ? 1 : 0, 'only manual city starts a normal forecast');
+  }
+});

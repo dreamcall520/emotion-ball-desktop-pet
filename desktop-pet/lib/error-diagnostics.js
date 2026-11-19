@@ -86,8 +86,14 @@ function normalizeDiagnostic(_scope, error, context = {}) {
   if (Number.isSafeInteger(delay) && delay >= 0 && delay <= 86400000) safe.retryDelayMs = delay;
   const authorization = own(context, 'locationAuthorization');
   if (['not-determined','restricted','denied','granted','unknown'].includes(authorization)) safe.locationAuthorization = authorization;
-  for (const key of ['locationMainThread','locationStarted']) if (typeof own(context,key) === 'boolean') safe[key] = own(context,key);
-  for (const key of ['locationCallbacks','locationUnknownFailures','locationSamplesRejected']) if (Number.isSafeInteger(own(context,key)) && own(context,key) >= 0 && own(context,key) <= 1000000) safe[key] = own(context,key);
+  for (const key of ['locationMainThread','locationStarted','locationAppActive']) if (typeof own(context,key) === 'boolean') safe[key] = own(context,key);
+  for (const key of ['locationCallbacks','locationUnknownFailures','locationSamplesRejected','locationAuthorizationCallbacks']) if (Number.isSafeInteger(own(context,key)) && own(context,key) >= 0 && own(context,key) <= 1000000) safe[key] = own(context,key);
+  const phase = own(context, 'locationPhase');
+  if (['authorization', 'acquisition', 'geocode'].includes(phase)) safe.locationPhase = phase;
+  for (const key of ['locationElapsedMs', 'locationPhaseElapsedMs']) {
+    const value = own(context, key);
+    if (Number.isSafeInteger(value) && value >= 0 && value <= 3600000) safe[key] = value;
+  }
   return { name, code, context: safe };
 }
 

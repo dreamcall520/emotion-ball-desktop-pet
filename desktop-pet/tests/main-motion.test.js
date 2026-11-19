@@ -5091,3 +5091,24 @@ test('bootstrap天气窗口回调只服务当前存活pet和原controller，退�
   f.app.emit('before-quit');
  }
 });
+test('website weather diagnostics keep the existing consent policy and full main reporter context', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  assert.equal(typeof f.weather.options.locationBridge.locate, 'function');
+  assert.equal(typeof f.weather.options.locationBridge.cancel, 'function');
+  assert.equal(f.weather.options.requireLocationConsent, undefined, 'website does not adopt the MAS confirmation gate');
+  const main = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
+  const functions = ['writeLocalLogLine', 'writeError'].map(name =>
+    main.match(new RegExp('^function ' + name + '\\([^\\n]*\\) \\{[\\s\\S]*?^\\}', 'm'))[0]).join('\n');
+  const captured = [];
+  vm.runInNewContext(functions + ';(' + f.weather.options.onError.toString() + ')(failure, details)', {
+    failure: { code: 'TIMEOUT' }, details: { stage: 'weather-refresh', httpStatus: 503, latitude: 123 },
+    normalizeDiagnostic: require('../lib/error-diagnostics').normalizeDiagnostic,
+    sourceLocation: require('../lib/error-diagnostics').sourceLocation,
+    isQuitting: false, process: { stderr: { write() {} } }, path,
+    app: { getPath: () => '/synthetic-weather-profile' }, fs: { mkdirSync() {}, appendFileSync() {} },
+    feedbackReporting: { capture(scope, error, context) { captured.push(require('../lib/error-diagnostics').normalizeDiagnostic(scope, error, context)); } }
+  });
+  assert.deepEqual(captured, [{ name: 'Error', code: 'TIMEOUT', context: {
+    process: 'main', severity: 'error', stage: 'weather-refresh', httpStatus: 503
+  } }]);
+});

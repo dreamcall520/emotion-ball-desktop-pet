@@ -2,7 +2,7 @@ const { createCodexIconPreference } = require('./lib/codex-icon-preference');
 const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
 const { createFeedbackReporting } = require('./lib/feedback-reporting');
 const { trackWindowErrors } = require('./lib/window-error-reporting');
-const { sourceLocation } = require('./lib/error-diagnostics');
+const { normalizeDiagnostic, sourceLocation } = require('./lib/error-diagnostics');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -104,6 +104,7 @@ const { normalizeCustomization, normalizeAppearance, effectiveAppearance } = req
 const QuotaDisplay = require('./lib/quota-display');
 
 const { createWeatherWindow } = require('./lib/weather-window');
+const { createLocationBridge } = require('./lib/weather-location');
 const { weatherContext, weatherReminder } = require('./lib/weather-context');
 let lastWeatherReminderAt = -Infinity;
 function currentWeatherState() { return { ...weatherWindow?.getState(), enabled: weatherWindow?.isEnabled() === true }; }
@@ -259,19 +260,38 @@ process.on('uncaughtExceptionMonitor', (error, origin) => {
   try { feedbackReporting?.capture(origin === 'unhandledRejection' ? '未处理异步错误' : '主进程异常', error, {stage:'main-process',process:'main',severity:'fatal'}); } catch (_) {}
 });
 
-function writeError(scope, error, context = {}) {
-  const message = error instanceof Error ? error.stack || error.message : error && typeof error === 'object' ? JSON.stringify({code:error.code, ...context}) : String(error);
-  const caller = {stack: new Error().stack.split('\n').filter((_,index) => index !== 1).join('\n')};
+function writeLocalLogLine(scope, message) {
   const line = `[${new Date().toISOString()}] ${scope}: ${message}\n`;
   process.stderr.write(line);
-  if (!isQuitting) { try { feedbackReporting?.capture(scope, error, {process: 'main', severity: 'error', ...sourceLocation(caller), ...sourceLocation(error), ...context}); } catch (_) {} }
   try {
     const logFile = path.join(app.getPath('userData'), 'errors.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     fs.appendFileSync(logFile, line, 'utf8');
   } catch (logError) {
-    process.stderr.write(`无法写入错误日志: ${logError.message}\n`);
+    process.stderr.write(scope === '天气' ? '无法写入天气诊断日志\n' : `无法写入错误日志: ${logError.message}\n`);
   }
+}
+
+function writeError(scope, error, context = {}) {
+  const caller = {stack: new Error().stack.split('\n').filter((_,index) => index !== 1).join('\n')};
+  const diagnosticContext = {process: 'main', severity: 'error', ...sourceLocation(caller), ...sourceLocation(error), ...context};
+  const message = scope === '天气'
+    ? JSON.stringify({ event: 'weather-error', ...normalizeDiagnostic(scope, error, diagnosticContext) })
+    : error instanceof Error ? error.stack || error.message : error && typeof error === 'object' ? JSON.stringify({code:error.code, ...context}) : String(error);
+  if (scope === '天气') { try { writeLocalLogLine(scope, message); } catch (_) {} }
+  else writeLocalLogLine(scope, message);
+  if (!isQuitting) { try { feedbackReporting?.capture(scope, error, diagnosticContext); } catch (_) {} }
+}
+
+function writeWeatherLocationDiagnostic(record) {
+  try {
+    if (!record || !['success', 'failure', 'cancelled'].includes(record.outcome)) return;
+    const normalized = normalizeDiagnostic('天气', record.outcome === 'failure' ? record : null, record.diagnostic);
+    const safe = { context: normalized.context };
+    if (record.outcome === 'failure' && normalized.code.startsWith('LOCATION_')) safe.code = normalized.code;
+    safe.context.stage = 'weather-location';
+    writeLocalLogLine('天气', JSON.stringify({ event: `location-${record.outcome}`, ...safe }));
+  } catch (_) { /* Local diagnostics must never change a location result. */ }
 }
 
 function validPoint(value) {
@@ -4638,6 +4658,7 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   weatherWindow = createWeatherWindow({ BrowserWindow, ipcMain, screen, getReducedMotion: quotaReducedMotion, fetch: (...args) => net.fetch(...args),
+    locationBridge: createLocationBridge({ onDiagnostic: writeWeatherLocationDiagnostic }),
     getCollectionWindow: () => quotaCardGroupWindow?.getWindow?.(),
     alwaysOnTop: settings.alwaysOnTop, filePath: path.join(app.getPath('userData'), 'weather.json'), getPetWindow: () => petWindow,
     getStackAnchor: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean).sort((a,b) => b.y+b.height-a.y-a.height)[0] || null,
