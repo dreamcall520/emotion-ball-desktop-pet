@@ -190,7 +190,7 @@ static NSString *CleanLocality(NSString *value) {
     SetDiagnosticPhase("acquisition");
     // Permission-dialog reading time must not consume the location acquisition deadline.
     if (self.timer) dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRequestTimeout * NSEC_PER_SEC)), DISPATCH_TIME_FOREVER, 100 * NSEC_PER_MSEC);
-    [self.manager requestLocation];
+    [self.manager startUpdatingLocation];
   }
 }
 - (void)start {
@@ -263,12 +263,11 @@ static NSString *CleanLocality(NSString *value) {
     if (age < -30 || age > 300) diagnostic.staleSamples++;
     else diagnostic.invalidSamples++;
   }
-  [self finish:nil error:"LOCATION_NO_FIX"];
 }
 - (void)locationManager:(CLLocationManager *)manager didFailWithError:(NSError *)error {
   if (self.completed || manager != self.manager) return;
   diagnostic.nativeErrorCode = (int)error.code;
-  if (error.code == kCLErrorLocationUnknown) { diagnostic.unknownFailures++; [self finish:nil error:"LOCATION_NO_FIX"]; return; }
+  if (error.code == kCLErrorLocationUnknown) { diagnostic.unknownFailures++; return; }
   [self finish:nil error:error.code == kCLErrorDenied ? "LOCATION_DENIED" : "LOCATION_UNAVAILABLE"];
 }
 - (void)abandon {
