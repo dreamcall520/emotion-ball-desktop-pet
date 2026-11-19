@@ -6,38 +6,49 @@ const { createHash } = require('node:crypto');
 
 const root = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'updates/index.html'), 'utf8');
-const [milestone, ...articles] = [...html.matchAll(/<article[^>]*data-release-panel[^>]*>([\s\S]*?)<\/article>/g)].map(m => m[1]);
+const allBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
+const milestoneBlock = allBlocks.find(block => block.includes('id="v1.0.0-app-store"'));
+const milestone = milestoneBlock.match(/<article[^>]*>([\s\S]*?)<\/article>/)[1];
+const articleBlocks = allBlocks.filter(block => block !== milestoneBlock);
+const articles = articleBlocks.map(block => block.match(/<article[^>]*>([\s\S]*?)<\/article>/)[1]);
 const downloads = [...html.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
-const [milestoneBlock, ...articleBlocks] = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
 
 const storeURL = 'https://apps.apple.com/cn/app/%E7%90%83%E7%90%83%E6%A1%8C%E5%AE%A0/id6829348954?mt=12';
 
-const globalArticles = articles.slice(3), globalBlocks = articleBlocks.slice(3);
-const oldArticles = articles.slice(5), oldBlocks = articleBlocks.slice(5);
+const globalArticles = articles.slice(4), globalBlocks = articleBlocks.slice(4);
+const oldArticles = articles.slice(6), oldBlocks = articleBlocks.slice(6);
 
-test('Mac App Store 1.0.0 milestone is the first record and links to the listing', () => {
+test('Mac App Store 1.0.0 milestone stays available and links to the listing', () => {
   assert.match(milestoneBlock, /id="v1\.0\.0-app-store"/);
   assert.match(milestone, /<time datetime="2026-11-16">2026-11-16 <small class="release-milestone">里程碑<\/small><\/time>/);
   assert.match(milestone, /<h3 id="v1\.0\.0-app-store-title">1\.0\.0 App Store 版<\/h3>/);
   assert.match(milestone, /<div class="update-group"><h4>1\.【发布】Mac App Store 首发<\/h4><ul><li>球球桌宠正式上架/);
-  assert.equal(downloads[0], storeURL);
+  assert.ok(milestone.includes(`href="${storeURL}"`));
   assert.match(html, /<option value="v1\.0\.0-app-store">2026-11-16 · 1\.0\.0 App Store 版 · 里程碑<\/option>/);
   assert.match(html, /href="#v1\.0\.0-app-store" data-release-link>[^\n]*<span>1\.0\.0 App Store 版<\/span>/);
 });
 
-test('0.4.14 improves weather, bubbles and diagnostics',()=>{assert.match(articleBlocks[0],/v0\.4\.14-apple/);for(const text of ['天气','城市搜索结果更清晰','统一圆角与描边','问题诊断'])assert.ok(articles[0].includes(text));});
+test('0.4.15 leads with the mirror and edge fix while retaining store-first downloads', () => {
+  assert.match(allBlocks[0], /id="v0\.4\.15-apple"/);
+  assert.match(articles[0], /datetime="2026-11-19"/);
+  for (const text of ['皮肤朝向', '停在左侧向右看', '停在右侧向左看', '左右吸附', '角色实际轮廓收起约一半', '悬停探出、移开收回', '透明区域误触']) assert.ok(articles[0].includes(text));
+  assert.match(articles[0], /v0\.4\.15\/Qiuqiu-0\.4\.15-macOS-arm64\.dmg/);
+  assert.doesNotMatch(articles[0], /1\.0\.1|验收通过|测试通过|上架/);
+});
 
-test('0.4.13 adds the two user-facing improvements and keeps prior releases',()=>{ assert.match(articleBlocks[1],/v0\.4\.13-apple/);for(const text of ['小白动画','走动动画更连贯','互动气泡','长内容换行更整齐'])assert.ok(articles[1].includes(text));});
+test('0.4.14 improves weather, bubbles and diagnostics',()=>{assert.match(articleBlocks[1],/v0\.4\.14-apple/);for(const text of ['天气','城市搜索结果更清晰','统一圆角与描边','问题诊断'])assert.ok(articles[1].includes(text));});
+
+test('0.4.13 adds the two user-facing improvements and keeps prior releases',()=>{ assert.match(articleBlocks[2],/v0\.4\.13-apple/);for(const text of ['小白动画','走动动画更连贯','互动气泡','长内容换行更整齐'])assert.ok(articles[2].includes(text));});
 
 test('0.4.12 Apple release preserves every 0.4.09 platform and the retained history',()=>{
- assert.match(articleBlocks[2], /id="v0\.4\.12-apple"/);
- assert.match(articles[2], /datetime="2026-11-01"/);
- for(const text of ['1.【新增】官方皮肤','新增小白、小宇两款官方皮肤。','2.【新增】主题配色','新增暮光紫主题配色。','3.【新增】意见反馈','支持上传截图、查看提交记录。','4.【新增】官方定制活动上线','让喜欢的它，住进你的桌面。'])assert.ok(articles[2].includes(text));
- assert.equal((articles[2].match(/<h4>/g)||[]).length,4);
- assert.equal((articles[2].match(/<li>/g)||[]).length,4);
- assert.doesNotMatch(articles[2], /release-download-note|Intel|Windows|排在|咩咩之后|小宇之前|等待就绪|回调|首帧|焦点|验收/);
- assert.match(articles[2], /v0\.4\.12\/Qiuqiu-0\.4\.12-macOS-arm64\.dmg/);
- assert.doesNotMatch(articles[2], /macOS-x64\.dmg|Windows-x64-Setup|mac-app-store|Windows r6/);
+ assert.match(articleBlocks[3], /id="v0\.4\.12-apple"/);
+ assert.match(articles[3], /datetime="2026-11-01"/);
+ for(const text of ['1.【新增】官方皮肤','新增小白、小宇两款官方皮肤。','2.【新增】主题配色','新增暮光紫主题配色。','3.【新增】意见反馈','支持上传截图、查看提交记录。','4.【新增】官方定制活动上线','让喜欢的它，住进你的桌面。'])assert.ok(articles[3].includes(text));
+ assert.equal((articles[3].match(/<h4>/g)||[]).length,4);
+ assert.equal((articles[3].match(/<li>/g)||[]).length,4);
+ assert.doesNotMatch(articles[3], /release-download-note|Intel|Windows|排在|咩咩之后|小宇之前|等待就绪|回调|首帧|焦点|验收/);
+ assert.match(articles[3], /v0\.4\.12\/Qiuqiu-0\.4\.12-macOS-arm64\.dmg/);
+ assert.doesNotMatch(articles[3], /macOS-x64\.dmg|Windows-x64-Setup|mac-app-store|Windows r6/);
 });
 
 test('0.4.09 adds weather and card improvements while retaining 0.4.08', () => {
@@ -70,8 +81,8 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
   assert.match(html, /<title>球球桌宠 · 更新日志<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/qiuqiu.pet\/updates\/"/);
   assert.equal(articles.length, 17);
-  assert.equal((html.match(/data-release-link/g) || []).length, 23);
-  assert.equal((html.match(/<option /g) || []).length, 23);
+  assert.equal((html.match(/data-release-link/g) || []).length, 24);
+  assert.equal((html.match(/<option /g) || []).length, 24);
   assert.doesNotMatch(html, /v0\.4\.03-apple|本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建/);
   assert.match(articleBlocks[0], /id="v0\.4\.05-apple"/);
   assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1].replace(/^\d+\.\s*/, '')), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
@@ -103,8 +114,8 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
 });
 
 test('platform installer links and historical downloads stay accurate', () => {
-  assert.equal(downloads.length, 26);
-  assert.equal(new Set(downloads).size, 26);
+  assert.equal(downloads.length, 27);
+  assert.equal(new Set(downloads).size, 27);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => [storeURL, 'https://share.weiyun.com/6WH6LkRl', 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe'].includes(url) || /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
