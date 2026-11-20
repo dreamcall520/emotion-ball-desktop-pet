@@ -2,11 +2,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
 const { createHash } = require('node:crypto');
 const { setTimeout: wait } = require('node:timers/promises');
-const { dialog } = require('electron');
+const { app, dialog } = require('electron');
 const { pointerClick } = require('./verify-chat-integration');
 const { capturePaintedWindow } = require('./verify-codex-companion');
 
-async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, localStore, sendCommand, packaged, edgeTuck, getMenu, openChat, getChatWindow }) {
+async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, localStore, sendCommand, packaged, edgeTuck, getMenu, openChat, getChatWindow, openCustomization, getMask }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_CODEX_PETS_ONLY, '1');
   const folder = process.env.PET_LOCAL_PET_QA_FOLDER, output = process.env.PET_CODEX_PETS_QA_OUT;
@@ -25,6 +25,10 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
   };
   const view = () => desktop(`(()=>{const c=document.querySelector('#pet .codex-pet-sprite');return c?{...c.dataset,width:c.width,height:c.height,cssHeight:c.getBoundingClientRect().height,mode:document.querySelector('#pet').dataset.mode}:null})()`);
   const capture = (win, name) => capturePaintedWindow({ win, artifactPath: path.join(output, name + '.png') });
+  const importPreview = () => page(`(()=>{const c=document.querySelector('#stage .codex-pet-sprite');
+    return{selected:document.querySelector('#local-pet-grid .pet-card[aria-pressed=true]')?.dataset.petId,
+      preview:c?.dataset.codexPetId,ready:c?.dataset.codexReady,busy:document.querySelector('#import-local-pet').disabled};})()`);
+
   const errors = [];
   for (const win of [pet, customize]) {
     win.webContents.on('did-fail-load', (_event, code, description) => errors.push({ code, description }));
@@ -32,6 +36,23 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
     win.webContents.on('console-message', event => {
       if (event.level >= 3 || event.level === 'error') errors.push({ type: 'console', message: event.message });
     });
+  }
+  const nativeIdentity = () => ({ execPath: process.execPath, packaged: app.isPackaged,
+    mas: process.mas === true, resourcesPath: process.resourcesPath, userData: app.getPath('userData') });
+  if (process.env.PET_LOCAL_PET_QA_PHASE === 'resume') {
+    const baseline = JSON.parse(fs.readFileSync(process.env.PET_UPGRADE_BASELINE, 'utf8'));
+    assert.deepEqual(getSettings(), baseline.settings, 'upgrade / restart preserves every persisted preference');
+    const current = await poll(view, value => value?.codexPetId === baseline.importedId && value.codexReady === 'ready', 'upgraded startup skin');
+    assert.equal(getSettings().startupAppearance.codexPetId, baseline.importedId);
+    const copied = localStore.getImported(baseline.importedId);
+    const copiedResources = copied.version === 3 ? Object.values(copied.sheets).map(sheet => sheet.path) : [copied.spritesheetPath];
+    assert.deepEqual(copiedResources.map(hash), baseline.copiedResourceHashes, 'upgrade / restart keeps every imported asset byte');
+    assert.deepEqual(pet.getBounds(), baseline.bounds, 'upgrade / restart preserves size and position');
+    await capture(pet, 'upgraded-startup');
+    fs.writeFileSync(path.join(output, 'report-resume.json'), JSON.stringify({ ok: true,
+      nativeIdentity: nativeIdentity(), settings: getSettings(), current, bounds: pet.getBounds(),
+      copiedResourceHashes: copiedResources.map(hash) }, null, 2));
+    process.stdout.write('PET_LOCAL_PET_MOTION_OK\n'); return;
   }
   await poll(() => page('window.__customizerReady'), Boolean, 'customizer ready');
   await pointerClick(customize, '#source-local');
@@ -43,23 +64,55 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
     return { canceled: false, filePaths: [folder] };
   };
   try { await pointerClick(customize, '#import-local-pet');
-    await poll(() => page("document.querySelector('#stage .codex-pet-sprite')?.dataset.codexReady"), x => x === 'ready', 'real local import preview');
+    await poll(importPreview, value => !value.busy && value.selected && value.preview === value.selected && value.ready === 'ready', 'actual completed local import preview');
   } finally { dialog.showOpenDialog = originalPicker; }
   assert.equal(pickerCalls, 1); assert.equal(JSON.stringify(getSettings().customization), before, 'import alone does not change desktop');
   const importedId = await page("document.querySelector('#local-pet-grid .pet-card[aria-pressed=true]').dataset.petId");
   const imported = localStore.getImported(importedId);
-  assert.equal(imported.name, manifest.displayName); assert(imported.frameMap);
+  assert.equal(imported.name, manifest.displayName); if (manifest.spriteVersionNumber === 3) assert(imported.frameMap);
   for(const file of resources){const target=manifest.spriteVersionNumber===3?Object.values(imported.sheets).find(s=>s.path.endsWith('/'+file))?.path:imported.spritesheetPath;assert.equal(hash(target),hash(path.join(folder,file)),'independent imported bytes stay identical');}
+  const previewPlayback = [];
+  if (manifest.spriteVersionNumber === 3 && process.env.PET_LOCAL_PET_QA_PHASE !== 'seed') {
+    customize.webContents.setBackgroundThrottling(false);
+    const options = await page("Array.from(document.querySelector('#pet-action').options).map(option=>option.value)");
+    for (const sheet of Object.keys(manifest.sheets)) {
+      const action = options.find(id => manifest.frameMap[id]?.sheet === sheet);
+      assert(action, 'each declared sheet has a selectable preview action: ' + sheet);
+      const spec = manifest.frameMap[action], duration = spec.durations.reduce((sum, value) => sum + value, 0);
+      await page(`(()=>{window.__motionFrames=[];window.__motionObserver?.disconnect();
+        const root=document.querySelector('#preview-ball');
+        const observe=()=>{const d=root.querySelector('canvas.codex-pet-sprite')?.dataset;
+          if(d?.codexReady==='ready'&&d.codexAction===${JSON.stringify(action)}&&d.codexSheet===${JSON.stringify(sheet)}&&!window.__motionFrames.includes(Number(d.codexFrame)))window.__motionFrames.push(Number(d.codexFrame));};
+        window.__motionObserver=new MutationObserver(observe);window.__motionObserver.observe(root,{attributes:true,subtree:true,childList:true});
+        const select=document.querySelector('#pet-action');select.value=${JSON.stringify(action)};select.dispatchEvent(new Event('change',{bubbles:true}));observe();})()`);
+      const frames = await poll(() => page('window.__motionFrames'), values => values.includes(spec.count - 1) && values.length >= spec.count - 2,
+        'actual preview frames ' + action, duration * 2 + 1500);
+      previewPlayback.push({ sheet, action, authoredFrames: spec.count, observedFrames: frames });
+    }
+    await page('window.__motionObserver?.disconnect()');
+  }
   await page("document.getElementById('startup-default').checked=true");
   await pointerClick(customize, '#save');
   await poll(() => getSettings().customization.appearance.codexPetId, id => id === importedId, 'saved actual local pet');
   assert.equal(getSettings().startupAppearance.codexPetId, importedId);
   await poll(view, v => v?.codexReady === 'ready' && v.codexPetId === importedId, 'desktop local pet ready');
+  if (process.env.PET_LOCAL_PET_QA_PHASE === 'seed') {
+    setSize('small');
+    await poll(view, value => value?.codexReady === 'ready' && Math.abs(value.cssHeight - 120) < 1, 'saved baseline size');
+    await wait(300);
+    const copiedResources = imported.version === 3 ? Object.values(imported.sheets).map(sheet => sheet.path) : [imported.spritesheetPath];
+    fs.writeFileSync(path.join(output, 'upgrade-baseline.json'), JSON.stringify({ importedId,
+      settings: getSettings(), bounds: pet.getBounds(), nativeIdentity: nativeIdentity(),
+      copiedResourceHashes: copiedResources.map(hash) }, null, 2));
+    await capture(pet, 'baseline-imported');
+    process.stdout.write('PET_LOCAL_PET_MOTION_OK\n'); return;
+  }
   const sizes = [];
   for (const [name, pixels] of [['micro', 60], ['tiny', 80], ['compact', 108], ['small', 120], ['medium', 180], ['large', 260]]) {
     assert.notEqual(setSize(name), false);
     const state = await poll(view, v => v?.codexReady === 'ready' && Math.abs(v.cssHeight - pixels) < 1, 'desktop size ' + name);
-    assert.deepEqual([state.width, state.height], [576, 624]); sizes.push({ name, ...state });
+    const baseFrameWidth = imported.version === 3 ? (manifest.sheets.base.frameWidth || 192) : 192;
+    assert.deepEqual([state.width, state.height], [baseFrameWidth * imported.spriteScale, 208 * imported.spriteScale]); sizes.push({ name, ...state });
   }
   await capture(customize, 'local-import-saved');
   await capture(pet, 'desktop-large-idle');
@@ -169,10 +222,60 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
   } finally { await input('mouseReleased', x - 35, y, false); }
   sendCommand('rest');
   if(visualFixes){edgeTuck.pin(false,'drag-qa');edgeTuck.restore();}
+  const skinSwitches = [];
+  if (process.env.PET_LOCAL_PET_QA_REGRESSION_FOLDERS) {
+    const folders = JSON.parse(process.env.PET_LOCAL_PET_QA_REGRESSION_FOLDERS);
+    assert(Array.isArray(folders) && folders.every(value => typeof value === 'string' && path.isAbsolute(value)));
+    const switchedState = () => desktop(`(()=>{const p=document.querySelector('#pet'),c=p.querySelector('canvas.codex-pet-sprite');
+      return{id:c?.dataset.codexPetId,ready:c?.dataset.codexReady,action:c?.dataset.codexAction,characterId:p.dataset.characterId,
+        idleFacing:p.dataset.spriteIdleFacing,tuck:p.style.getPropertyValue('--sprite-edge-tuck')};})()`);
+    const saved = async (id, declared) => {
+      await page("document.getElementById('startup-default').checked=false"); await pointerClick(customize, '#save');
+      await poll(() => getSettings().customization.appearance.codexPetId, value => value === id, 'switch save completes in main process');
+      const state = await poll(switchedState, value => value.id === id && value.ready === 'ready' &&
+        (declared ? value.idleFacing === manifest.idleFacing : value.idleFacing === undefined && value.tuck === ''), 'switch renders replacement skin and declaration');
+      if (!declared) { assert.equal(state.idleFacing, undefined); assert.equal(state.tuck, ''); }
+      else assert.equal(state.idleFacing, manifest.idleFacing);
+      if (getMask) { const mask = getMask(); assert(mask === null || mask.id === id, 'switch clears previous native alpha hit map'); }
+      assert.equal(getSettings().startupAppearance.codexPetId, importedId, 'temporary switches preserve startup skin');
+      return state;
+    };
+    for (const nextFolder of folders) {
+      const next = JSON.parse(fs.readFileSync(path.join(nextFolder, 'pet.json'), 'utf8'));
+      assert.equal(next.idleFacing, undefined); assert.equal(next.edgeTuck, undefined);
+      openCustomization(); await pointerClick(customize, '#source-local');
+      const picker = dialog.showOpenDialog; dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [nextFolder] });
+      let selected;
+      try { await pointerClick(customize, '#import-local-pet');
+        selected = await poll(importPreview, value => !value.busy && value.selected && value.selected !== importedId &&
+          value.preview === value.selected && value.ready === 'ready', 'compatibility import completes with new selected preview');
+      } finally { dialog.showOpenDialog = picker; }
+      const id = selected.selected;
+      assert.equal(localStore.getImported(id).name, next.displayName, 'selected import is the requested compatibility fixture');
+      const current = await saved(id, false); skinSwitches.push({ version: next.spriteVersionNumber || 1, name: next.displayName, current });
+      openCustomization(); await pointerClick(customize, '#source-local');
+      await pointerClick(customize, `[data-pet-id="${importedId}"]`);
+      await saved(importedId, true);
+    }
+    openCustomization(); await pointerClick(customize, '#source-ball');
+    const dogId = await page("document.querySelector('[data-official-pet=xiaobai]')?.dataset.petId");
+    assert(dogId, 'official built-in Xiaobai remains available');
+    await pointerClick(customize, '[data-official-pet=xiaobai]');
+    const dog = await saved(dogId, false); assert.equal(dog.characterId, 'xiaobai'); skinSwitches.push({ builtin: 'xiaobai', current: dog });
+    openCustomization(); await pointerClick(customize, '#source-ball'); await pointerClick(customize, '[data-shape=blob]');
+    await page("document.getElementById('startup-default').checked=false"); await pointerClick(customize, '#save');
+    await poll(() => getSettings().customization.appearance.shape, value => value === 'blob', 'built-in ball save completes in main process');
+    const ball = await poll(switchedState, value => !value.id && value.idleFacing === undefined && value.tuck === '', 'built-in ball clears sprite player and declaration');
+    assert.equal(ball.idleFacing, undefined); assert.equal(ball.tuck, '');
+    if (getMask) assert.equal(getMask(), null, 'built-in ball clears native sprite alpha map');
+    skinSwitches.push({ builtin: 'blob', current: ball });
+    openCustomization(); await pointerClick(customize, '#source-local');
+    await pointerClick(customize, `[data-pet-id="${importedId}"]`); await saved(importedId, true);
+  }
   assert.equal(createHash('sha256').update(resources.map(file=>hash(path.join(folder,file))).join('')).digest('hex'),sourceHash); assert.deepEqual(errors, []);
-  const result = { ok: true, packaged, source: folder, actualName: imported.name, importedId, sourceHash,
+  const result = { ok: true, packaged, nativeIdentity: nativeIdentity(), source: folder, actualName: imported.name, importedId, sourceHash,
     nativeDirectoryPickerAutomated: false, directoryResultInjectedOnlyInExplicitSmoke: true,
-    actualLocalImportIpc: true, savedStartup: true, chatAvatar, extraActions, visualFixes, variationCheck, sizes, sleeping, sleepProgress, waking, awake, walks, errors,
+    actualLocalImportIpc: true, savedStartup: true, chatAvatar, previewPlayback, skinSwitches, extraActions, visualFixes, variationCheck, sizes, sleeping, sleepProgress, waking, awake, walks, errors,
     realModelCalls: 0, installedProfileModified: false };
   fs.writeFileSync(path.join(output, 'report-local-motion.json'), JSON.stringify(result, null, 2));
   process.stdout.write('PET_LOCAL_PET_MOTION_OK\n');

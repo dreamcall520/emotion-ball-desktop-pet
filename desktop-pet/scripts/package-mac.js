@@ -85,6 +85,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/feedback-reporting.js',
     'desktop-pet/lib/error-diagnostics.js',
     'desktop-pet/lib/window-error-reporting.js',
+    'desktop-pet/scripts/verify-weather-integration.js',
     'desktop-pet/global-settings-shortcuts.js',
     'desktop-pet/lib/global-settings.js',
     'desktop-pet/color-mode.css',

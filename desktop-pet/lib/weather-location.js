@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const ERRORS = Object.freeze({
+  CANCELLED: '定位已取消。',
   LOCATION_UNSUPPORTED: '此系统暂不支持定位，请手动选择城市。',
   LOCATION_NATIVE_UNAVAILABLE: '系统定位组件不可用，请手动选择城市。',
   LOCATION_DENIED: '定位未授权，可在系统设置中允许球球使用定位，或手动选择城市。',
@@ -20,13 +21,17 @@ function locationError(code) {
 function safeDiagnostic(value) {
   const result = {};
   if (['not-determined', 'restricted', 'denied', 'granted', 'unknown'].includes(value?.locationAuthorization)) result.locationAuthorization = value.locationAuthorization;
-  for (const key of ['locationMainThread', 'locationStarted']) if (typeof value?.[key] === 'boolean') result[key] = value[key];
-  for (const key of ['locationCallbacks', 'locationUnknownFailures', 'locationSamplesRejected']) {
+  for (const key of ['locationMainThread', 'locationStarted', 'locationAppActive', 'locationRecoveryAttempted']) if (typeof value?.[key] === 'boolean') result[key] = value[key];
+  for (const key of ['locationAuthorizationCallbacks', 'locationCallbacks', 'locationUnknownFailures', 'locationSamplesRejected']) {
     if (Number.isSafeInteger(value?.[key]) && value[key] >= 0 && value[key] <= 1000000) result[key] = value[key];
+  }
+  if (['authorization', 'acquisition', 'geocode'].includes(value?.locationPhase)) result.locationPhase = value.locationPhase;
+  for (const key of ['locationElapsedMs', 'locationPhaseElapsedMs', 'locationRecoveryAfterMs']) {
+    if (Number.isSafeInteger(value?.[key]) && value[key] >= 0 && value[key] <= 3600000) result[key] = value[key];
   }
   return result;
 }
-function createLocationBridge({ native, platform = process.platform } = {}) {
+function createLocationBridge({ native, platform = process.platform, onDiagnostic = () => {} } = {}) {
   let binding = native, loaded = native !== undefined, pending = null;
   function getBinding() {
     if (platform !== 'darwin') throw locationError('LOCATION_UNSUPPORTED');
@@ -45,9 +50,20 @@ function createLocationBridge({ native, platform = process.platform } = {}) {
       return { status: current.status, servicesEnabled: current.servicesEnabled };
     } catch (error) { throw locationError(error?.code); }
   }
+  function report(outcome, code, diagnostic) {
+    try { onDiagnostic({ outcome, ...(code ? { code } : {}), diagnostic: { ...diagnostic } }); }
+    catch { /* Local diagnostics must never change location results. */ }
+  }
   function locate() {
-    if (pending) return pending;
-    pending = Promise.resolve().then(() => getBinding().locate()).then(value => {
+    if (pending) return pending.promise;
+    const request = { promise: null, nativePromise: null, started: false, cancelled: false };
+    pending = request;
+    request.promise = Promise.resolve().then(() => {
+      if (request.cancelled) throw locationError('CANCELLED');
+      request.nativePromise = getBinding().locate(); request.started = true;
+      return request.nativePromise;
+    }).then(value => {
+      if (request.cancelled) throw locationError('CANCELLED');
       if (!value || !Number.isFinite(value.latitude) || Math.abs(value.latitude) > 90 ||
           !Number.isFinite(value.longitude) || Math.abs(value.longitude) > 180 || !Number.isFinite(value.accuracy) || value.accuracy < 0) throw locationError('LOCATION_UNAVAILABLE');
       const result = { latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy };
@@ -56,14 +72,31 @@ function createLocationBridge({ native, platform = process.platform } = {}) {
         const text = value[key].replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
         if (text && text.length <= 80) result[key] = text;
       }
+      const diagnostic = safeDiagnostic(value.diagnostic);
+      if (Object.keys(diagnostic).length) result.diagnostic = diagnostic;
+      report('success', undefined, diagnostic);
       return result;
     }).catch(error => {
-      const failure = locationError(error?.code), diagnostic = safeDiagnostic(error?.diagnostic);
+      const failure = locationError(request.cancelled ? 'CANCELLED' : error?.code), diagnostic = safeDiagnostic(error?.diagnostic);
       if (Object.keys(diagnostic).length) failure.diagnostic = diagnostic;
+      report(failure.code === 'CANCELLED' ? 'cancelled' : 'failure', failure.code === 'CANCELLED' ? undefined : failure.code, diagnostic);
       throw failure;
-    }).finally(() => { pending = null; });
-    return pending;
+    }).finally(() => { if (pending === request) pending = null; });
+    return request.promise;
   }
-  return { status, locate };
+  function cancel() {
+    const request = pending;
+    if (!request) return false;
+    if (request.started) {
+      // Native must synchronously retire this exact manager before a new request starts.
+      // Older/missing bindings or a failed cancel retain the pending owner to avoid BUSY.
+      try { if (getBinding().cancel?.(request.nativePromise) !== true) return false; }
+      catch { return false; }
+    }
+    request.cancelled = true;
+    if (pending === request) pending = null;
+    return true;
+  }
+  return { status, locate, cancel };
 }
 module.exports = { createLocationBridge, locationError };

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { createHash, randomUUID } = require('node:crypto');
-const { normalizeFrameMap } = require('./codex-pet-player');
+const { normalizeFrameMap, normalizeActionLabels } = require('./codex-pet-player');
 
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
@@ -111,7 +111,12 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
         !raw.displayName.trim() || raw.displayName.length > 120 ||
         (raw.description !== undefined && (typeof raw.description !== 'string' || raw.description.length > 4000))) throw fail('宠物名称或描述不合法');
     const version = raw.spriteVersionNumber === undefined ? 1 : raw.spriteVersionNumber;
+    let actionLabels;
+    try { actionLabels = normalizeActionLabels(raw.actionLabels); } catch (_) { throw fail('宠物动作名称不合法'); }
     if(version===3){
+      const { idleFacing, edgeTuck } = raw;
+      if (idleFacing !== undefined && !['left', 'right'].includes(idleFacing)) throw fail('宠物待机朝向不合法');
+      if (edgeTuck !== undefined && (edgeTuck !== 'half' || !idleFacing)) throw fail('宠物贴边设置不合法');
       const sheets=raw.sheets;
       let frameMap;try{frameMap=normalizeFrameMap(raw.frameMap,0,sheets)}catch(_){throw fail('宠物动作映射不合法')}
       if(!frameMap || !sheets || Object.values(sheets).some(sheet=>Object.keys(sheet).some(key=>!['path','rows','frameWidth'].includes(key))))throw fail('宠物资源不合法');
@@ -129,7 +134,7 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
         resources.push({file:sheet.path,image,rows:sheet.rows,frameWidth:sheet.frameWidth||192});normalized[key]={path:image.file,rows:sheet.rows,...(sheet.frameWidth?{frameWidth:sheet.frameWidth}:{})};
       }
       const base=resources.find(item=>item.file===sheets.base.path),buffers=resources.map(item=>item.image.buffer);
-      return {descriptor:{id,importedId:namespace?digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,...buffers):digest(manifest.buffer,...buffers),name:raw.displayName.trim(),...(raw.characterId==='xiaobai'?{characterId:'xiaobai'}:{}),description:raw.description||'',version,rows:sheets.base.rows,spriteScale:scale,frameMap,sheets:normalized,spritesheetPath:base.image.file},manifest,image:base.image,resources,raw};
+      return {descriptor:{id,importedId:namespace?digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,...buffers):digest(manifest.buffer,...buffers),name:raw.displayName.trim(),...(actionLabels?{actionLabels}:{}),...(raw.characterId==='xiaobai'?{characterId:'xiaobai'}:{}),description:raw.description||'',...(idleFacing?{idleFacing}:{}),...(edgeTuck?{edgeTuck}:{}),version,rows:sheets.base.rows,spriteScale:scale,frameMap,sheets:normalized,spritesheetPath:base.image.file},manifest,image:base.image,resources,raw};
     }
     if (version !== 1 && version !== 2) throw fail('宠物精灵图版本暂不支持');
     const image = readFile(root, raw.spritesheetPath, MAX_IMAGE_BYTES);
@@ -143,7 +148,7 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
         size.height !== rows * 208 * spriteScale) throw fail('宠物精灵图尺寸不合法');
     const decoded = readImageSize ? readImageSize(image.buffer, extension, { ...size }) : size;
     if (!decoded || decoded.width !== size.width || decoded.height !== size.height) throw fail('宠物图片解码结果不合法');
-    return { descriptor: { id, importedId: namespace ? digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,image.buffer) : digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), ...(raw.characterId==='xiaobai'?{characterId:'xiaobai'}:{}), description: raw.description || '', version, rows, spriteScale, ...(frameMap ? { frameMap } : {}), spritesheetPath: image.file }, manifest, image, raw };
+    return { descriptor: { id, importedId: namespace ? digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,image.buffer) : digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), ...(actionLabels?{actionLabels}:{}), ...(raw.characterId==='xiaobai'?{characterId:'xiaobai'}:{}), description: raw.description || '', version, rows, spriteScale, ...(frameMap ? { frameMap } : {}), spritesheetPath: image.file }, manifest, image, raw };
   }
 
   function entries(root) {

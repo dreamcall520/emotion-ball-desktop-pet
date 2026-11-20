@@ -88,7 +88,46 @@ function normalizeDiagnostic(_scope, error, context = {}) {
   if (['not-determined','restricted','denied','granted','unknown'].includes(authorization)) safe.locationAuthorization = authorization;
   for (const key of ['locationMainThread','locationStarted']) if (typeof own(context,key) === 'boolean') safe[key] = own(context,key);
   for (const key of ['locationCallbacks','locationUnknownFailures','locationSamplesRejected']) if (Number.isSafeInteger(own(context,key)) && own(context,key) >= 0 && own(context,key) <= 1000000) safe[key] = own(context,key);
+  if (_scope === '天气') Object.assign(safe, normalizeWeatherDiagnostic(_scope, error, context).context);
   return { name, code, context: safe };
 }
 
-module.exports = { normalizeDiagnostic, sourceLocation };
+const WEATHER_CODES = new Set(['TIMEOUT', 'CONNECTION_FAILED', 'SERVICE_UNAVAILABLE', 'INVALID_RESPONSE', 'RATE_LIMITED',
+  'INVALID_LOCATION', 'DATA_OLD', 'LOCATION_UNSUPPORTED', 'LOCATION_NATIVE_UNAVAILABLE', 'LOCATION_DENIED',
+  'LOCATION_RESTRICTED', 'LOCATION_SERVICES_DISABLED', 'LOCATION_TIMEOUT', 'LOCATION_BUSY',
+  'LOCATION_MAIN_THREAD_REQUIRED', 'LOCATION_UNAVAILABLE', 'LOCATION_NO_FIX']);
+const WEATHER_STAGES = new Set(['weather-storage', 'weather-animation', 'weather-window', 'weather-refresh', 'weather-location', 'weather-search']);
+const WEATHER_TRANSPORT_CODES = new Set(['ERR_NAME_NOT_RESOLVED', 'ERR_INTERNET_DISCONNECTED', 'ERR_TIMED_OUT',
+  'ERR_CONNECTION_TIMED_OUT', 'ERR_CONNECTION_RESET', 'ERR_CONNECTION_CLOSED', 'ERR_CONNECTION_REFUSED',
+  'ERR_NETWORK_CHANGED', 'ERR_ADDRESS_UNREACHABLE', 'ERR_CERT_AUTHORITY_INVALID', 'ERR_CERT_DATE_INVALID',
+  'ERR_SSL_PROTOCOL_ERROR', 'ERR_FAILED', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT']);
+function normalizeWeatherDiagnostic(scope, error, context) {
+  if (scope !== '天气') return { context: {} };
+  const safe = {}, code = own(error, 'code'), stage = own(context, 'stage'), httpStatus = own(context, 'httpStatus');
+  if (WEATHER_STAGES.has(stage)) safe.stage = stage;
+  if (Number.isSafeInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599) safe.httpStatus = httpStatus;
+  const requestPhase = own(context, 'weatherRequestPhase'), transportCode = own(context, 'weatherTransportCode');
+  if (['headers', 'body'].includes(requestPhase)) safe.weatherRequestPhase = requestPhase;
+  if (WEATHER_TRANSPORT_CODES.has(transportCode)) safe.weatherTransportCode = transportCode;
+  const attempts = own(context, 'weatherAttempts'), elapsed = own(context, 'weatherElapsedMs'), mode = own(context, 'weatherSelectionMode');
+  if (Number.isInteger(attempts) && attempts >= 1 && attempts <= 2) safe.weatherAttempts = attempts;
+  if (Number.isSafeInteger(elapsed) && elapsed >= 0 && elapsed <= 3600000) safe.weatherElapsedMs = elapsed;
+  if (['manual', 'current'].includes(mode)) safe.weatherSelectionMode = mode;
+  const authorization = own(context, 'locationAuthorization');
+  if (['not-determined', 'restricted', 'denied', 'granted', 'unknown'].includes(authorization)) safe.locationAuthorization = authorization;
+  for (const key of ['locationMainThread', 'locationStarted', 'locationAppActive', 'locationRecoveryAttempted']) if (typeof own(context, key) === 'boolean') safe[key] = own(context, key);
+  for (const key of ['locationCallbacks', 'locationUnknownFailures', 'locationSamplesRejected', 'locationAuthorizationCallbacks']) {
+    const value = own(context, key);
+    if (Number.isSafeInteger(value) && value >= 0 && value <= 1000000) safe[key] = value;
+  }
+  const phase = own(context, 'locationPhase');
+  if (['authorization', 'acquisition', 'geocode'].includes(phase)) safe.locationPhase = phase;
+  for (const key of ['locationElapsedMs', 'locationPhaseElapsedMs', 'locationRecoveryAfterMs']) {
+    const value = own(context, key);
+    if (Number.isSafeInteger(value) && value >= 0 && value <= 3600000) safe[key] = value;
+  }
+  return { ...(WEATHER_CODES.has(code) ? { code } : {}), context: safe };
+}
+
+
+module.exports = { normalizeDiagnostic, normalizeWeatherDiagnostic, sourceLocation };

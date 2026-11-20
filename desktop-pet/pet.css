@@ -69,13 +69,16 @@ body {
 #pet[data-presentation="tucked"][data-edge="left"] { transform: translateX(-50%); }
 #pet[data-presentation="tucked"][data-edge="right"] { transform: translateX(50%); }
 /* Keep other mapped partners at their existing edge exposure. */
-#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="left"] { transform:translateX(-67.2%); }
-#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="right"] { transform:translateX(67.2%); }
-#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-character-id="xiaobai"][data-presentation="tucked"][data-edge="left"] { transform: translateX(-53.3538461538%); }
-#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-character-id="xiaobai"][data-presentation="tucked"][data-edge="right"] { transform: translateX(53.3538461538%); }
-/* Mapped artwork can be asymmetric. Reveal the same inward-facing half on
- * either edge; dragging keeps its own frame-map facing and tilt unchanged. */
-#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-edge="right"]:not(.dragging):is([data-presentation="tucked"],[data-presentation="peeked"]) .codex-pet-sprite { transform: scaleX(-1); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="left"] { transform:translateX(calc(-1 * var(--sprite-edge-tuck, 67.2%))); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="right"] { transform:translateX(var(--sprite-edge-tuck, 67.2%)); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-character-id="xiaobai"]:not([data-sprite-idle-facing])[data-presentation="tucked"][data-edge="left"] { transform: translateX(-53.3538461538%); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-character-id="xiaobai"]:not([data-sprite-idle-facing])[data-presentation="tucked"][data-edge="right"] { transform: translateX(53.3538461538%); }
+/* Authored directions face inward; running clips already encode their own direction. */
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"]:not([data-sprite-idle-facing])[data-edge="right"]:not(.dragging):is([data-presentation="tucked"],[data-presentation="peeked"]) .codex-pet-sprite,
+#pet[data-sprite-idle-facing="left"][data-edge="left"]:not(.dragging):is([data-presentation="tucked"],[data-presentation="peeked"]) .codex-pet-sprite:not([data-codex-action^="run-"]),
+#pet[data-sprite-idle-facing="right"][data-edge="right"]:not(.dragging):is([data-presentation="tucked"],[data-presentation="peeked"]) .codex-pet-sprite:not([data-codex-action^="run-"]),
+#pet[data-sprite-idle-facing="left"][data-presentation="free"][data-facing="right"]:not(.dragging) .codex-pet-sprite:not([data-codex-action^="run-"]),
+#pet[data-sprite-idle-facing="right"][data-presentation="free"][data-facing="left"]:not(.dragging) .codex-pet-sprite:not([data-codex-action^="run-"]) { transform: scaleX(-1); }
 /* The aurora cloud is a five-lobed reference image rather than the classic
  * round head. Leave a rounded outer lobe visible at rest; on hover show the
  * face while keeping the native window anchored inside the work area. */

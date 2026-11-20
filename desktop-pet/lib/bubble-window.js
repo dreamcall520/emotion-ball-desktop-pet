@@ -1,5 +1,5 @@
 const path = require('node:path');
-const { bubbleBounds } = require('./bubble-placement');
+const { bubbleBounds, bubbleMaxWidth } = require('./bubble-placement');
 
 function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = () => 'blob', getObstacles = () => [], onError, alwaysOnTop = true }) {
   let win = null;
@@ -30,17 +30,19 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = ()
     const pet = getPetWindow();
     if (!current || !ready || !win || win.isDestroyed() || !pet || pet.isDestroyed()) return;
     const petBounds = pet.getBounds();
+    const workArea = screen.getDisplayMatching(petBounds).workArea;
     const layout = bubbleBounds(
       petBounds,
-      screen.getDisplayMatching(petBounds).workArea,
+      workArea,
       current.actions.length > 0,
       current.preferredHeight,
       getShape(),
-      getObstacles()
+      getObstacles(),
+      current.preferredWidth
     );
     const { x, y, width, height, placement, anchorX } = layout;
     win.setBounds({ x, y, width, height }, false);
-    win.webContents.send('pet:bubble', { ...current, placement, anchorX });
+    win.webContents.send('pet:bubble', { ...current, placement, anchorX, maxWidth: bubbleMaxWidth(workArea) });
   }
 
   function present() {
@@ -99,7 +101,7 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = ()
 
   return {
     show(payload) {
-      current = { ...payload, preferredHeight: null };
+      current = { ...payload, preferredHeight: null, preferredWidth: null };
       clearTimeout(timer);
       ensureWindow();
       present();
@@ -108,8 +110,11 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = ()
     resize(payload) {
       if (!current || payload?.id !== current.id || !Number.isFinite(payload.height) || payload.height <= 0) return false;
       const height = Math.ceil(payload.height);
-      if (height === current.preferredHeight) return true;
+      const width = current.actions.length === 0 && height <= 66 && Number.isFinite(payload.width) && payload.width > 0
+        ? Math.ceil(payload.width) : null;
+      if (height === current.preferredHeight && width === current.preferredWidth) return true;
       current.preferredHeight = height;
+      current.preferredWidth = width;
       reposition();
       return true;
     },

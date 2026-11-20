@@ -116,7 +116,7 @@
     // One request per distinct content size avoids re-entering the quota layout.
     if (collapseAnimation || locationConsent.open) return Promise.resolve();
     const size = expanded
-      ? { width: 390, height: Math.min(680, Math.max(picker ? (state.requireLocationConsent ? 250 : 210) : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true }
+      ? { width: 390, height: Math.min(680, Math.max(picker ? (state.requireLocationConsent ? 250 : 210) : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true, picker }
       : { width: 128, height: 32, expanded: false };
     const key = JSON.stringify(size);
     if (key === resizeKey) return Promise.resolve();
@@ -245,7 +245,7 @@
   locationConsent.addEventListener('close', () => { if (locationConsent.open) return; el('quota-beam').inert = false; resize(); if (expanded && picker && !el('use-location').disabled) el('use-location').focus(); });
   async function locate(confirmed = false) {
     showPicker(true); text('search-status', '定位中…');
-    const generation = ++locationGeneration;
+    const generation = ++locationGeneration, revision = liveRevision;
     el('use-location').disabled = true;
     try {
       const next = await api.useLocation(confirmed);
@@ -253,7 +253,7 @@
       if (failure) throw Object.assign(new Error('location failed'), { code: failure.code });
       if (generation !== locationGeneration) return;
       if (next?.cancelled) { text('search-status', '定位已取消，请重试或选择城市'); return; }
-      if (next && !next.needsLocation) { locationWarning = ''; render(next); text('search-status', ''); showPicker(false); }
+      if (next && !next.needsLocation) { locationWarning = ''; render(revision === liveRevision ? next : state); text('search-status', ''); showPicker(false); }
       else text('search-status', '定位失败，请选城市');
     } catch (error) {
       if (generation !== locationGeneration) return;

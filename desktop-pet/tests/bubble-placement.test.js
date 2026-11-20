@@ -30,6 +30,26 @@ test('长文案测量高度会增高气泡并保持头顶间距', () => {
   });
 });
 
+test('单行自然高度缩小留白，多行和按钮气泡保留所需空间', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  const single = bubbleBounds(pet, workArea, false, 66);
+  assert.equal(single.height, 66);
+  assert.equal(single.y + single.height, pet.y - 8);
+  assert.equal(bubbleBounds(pet, workArea, false, 86).height, 86);
+  assert.equal(bubbleBounds(pet, workArea, false, 106).height, 106);
+  assert.equal(bubbleBounds(pet, workArea, true, 100).height, 118);
+});
+
+test('短句宽度居中且有最小尺寸，窄屏不越界', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  const short = bubbleBounds(pet, workArea, false, 66, 'blob', [], 162);
+  assert.equal(short.width, 162);
+  assert.equal(short.x + short.width / 2, pet.x + pet.width / 2);
+  assert.equal(bubbleBounds(pet, workArea, false, 66, 'blob', [], 1).width, 80);
+  assert.equal(bubbleBounds(pet, workArea, true, 118, 'blob', [], 80).width, 224);
+  assert.equal(bubbleBounds(pet, { ...workArea, width: 70 }, false, 66, 'blob', [], 80).width, 54);
+});
+
 test('顶部不够时自动放到宠物下方', () => {
   assert.deepEqual(bubbleBounds({ x: 600, y: 30, width: 80, height: 80 }, workArea), {
     x: 528, y: 118, width: 224, height: 86, placement: 'below', anchorX: 112

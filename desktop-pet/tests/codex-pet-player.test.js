@@ -257,6 +257,63 @@ test('legacy sheets retain all nine distinct preview rows',()=>{
  assert.deepEqual(new Set(Player.getPreviewActions(descriptor).map(a=>a.id)),new Set(Player.ACTIONS.map(a=>a.id)));
 });
 
+test('manifest action labels override runtime and preview names without changing action playback', () => {
+  const original = Player.getActions(descriptor);
+  const labelled = { ...descriptor, actionLabels: { idle: '  猫猫发呆  ', wave: '甩葱歌' } };
+  assert.equal(Player.getActions(labelled).find(a => a.id === 'wave').name, '甩葱歌');
+  assert.equal(Player.getPreviewActions(labelled).find(a => a.id === 'idle').name, '猫猫发呆');
+  assert.deepEqual(Player.getActions(labelled).map(({ name, ...a }) => a), original.map(({ name, ...a }) => a));
+  const partial = { ...labelled, frameMap: { sleep: { start: 56, count: 8, durations: Array(8).fill(100) } } };
+  assert.equal(Player.getActions(partial).find(a => a.id === 'wave').name, '甩葱歌');
+  const map = Object.fromEntries([...Player.ACTIONS.map(a => a.id), 'sleep', 'wakeup'].map(id =>
+    [id, { sheet: 'base', start: 0, count: 1, durations: [100], loop: true }]));
+  map.tail = { sheet: 'base', start: 1, count: 1, durations: [100], loop: false };
+  map.groom = { ...map.tail, start: 2 };
+  const multi = { ...descriptor, version: 3, rows: 1, sheets: { base: { rows: 1 } }, frameMap: map,
+    actionLabels: { tail: '晾猫猫', groom: '吃面' } };
+  assert.deepEqual(Player.getPreviewActions(multi).filter(a => ['tail', 'groom'].includes(a.id)).map(a => a.name), ['晾猫猫', '吃面']);
+  const { actionLabels, ...unlabelled } = multi;
+  assert.deepEqual(Player.getPreviewActions(unlabelled).filter(a => ['tail', 'groom'].includes(a.id)).map(a => a.name), ['摇尾', '舔爪']);
+});
+
+test('action labels reject unknown ids, unsafe structures and nonliteral or unbounded text', () => {
+  let getterReads = 0;
+  const getter = Object.defineProperty({}, 'wave', { enumerable: true, get() { getterReads++; return '不能调用'; } });
+  const inherited = Object.create({ wave: '继承值' });
+  const bad = [null, [], '不是映射', { unknown: '未知动作' }, { wave: '' }, { wave: '  ' },
+    { wave: 'a'.repeat(41) }, { wave: '名字\n换行' }, { wave: '\0动作' }, { wave: '\u202e反向' },
+    { wave: {} }, { wave: 3 }, getter, inherited, JSON.parse('{"__proto__":"危险"}')];
+  for (const actionLabels of bad) assert.equal(Player.validDescriptor({ ...descriptor, actionLabels }), false);
+  assert.equal(getterReads, 0);
+  const labels = Player.normalizeActionLabels({ wave: '  甩葱歌  ' });
+  assert.equal(labels.wave, '甩葱歌');
+  assert(Object.isFrozen(labels));
+  assert.equal(Player.normalizeActionLabels(undefined), undefined);
+});
+
+test('local, active and Codex-library descriptors preserve labels through real main-process mappings', async () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const main = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
+  const pet = { ...descriptor, spritesheetPath: '/synthetic/pet.png', importedId: descriptor.id,
+    actionLabels: { wave: '甩葱歌' } };
+  const handlers = {};
+  const context = vm.createContext({ pathToFileURL: require('node:url').pathToFileURL,
+    importedPet: () => pet, codexPets: { list: () => ({ pets: [pet], skipped: 0 }), listImported: () => ({ pets: [], skipped: 0 }) },
+    fromCustomizationWindow: () => true, screenLocked: false, masCodexPetLibrary: null,
+    ipcMain: { handle: (name, callback) => { handlers[name] = callback; } } });
+  vm.runInContext(main.slice(main.indexOf('function petSheetDescriptor(pet)'), main.indexOf('function importCodexAppearance(appearance)')), context);
+  vm.runInContext(main.slice(main.indexOf("  ipcMain.handle('pet:codex-pets-list'"), main.indexOf("  ipcMain.handle('pet:customization-size'")), context);
+  context.pet = pet;
+  const local = vm.runInContext('localPetDescriptor(pet)', context);
+  const active = vm.runInContext("codexPetDescriptor({shape:'codex-pet',codexPetId:pet.id})", context);
+  const library = await handlers['pet:codex-pets-list']({});
+  for (const mapped of [local, active, library.pets[0]]) {
+    assert.equal(mapped.actionLabels.wave, '甩葱歌');
+    assert.equal(Player.getPreviewActions(mapped).find(a => a.id === 'wave').name, '甩葱歌');
+    assert.equal(mapped.id, pet.id);
+  }
+});
+
 
 test('只有独立角色标识启用小白预解码，宽sheet保留600×416像素及真实比例', async () => {
   assert.equal(Player.isXiaobaiPet({ name: '小白' }), false);

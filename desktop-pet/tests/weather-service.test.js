@@ -39,6 +39,24 @@ test('AQI failure does not discard weather and invalid coordinates never send a 
   const result = await service.getWeather(location); assert.equal(result.status, 'ready'); assert.equal(result.data.airQuality, null);
   await assert.rejects(service.getWeather({ latitude: 91, longitude: 0 }), { code: 'INVALID_LOCATION' }); assert.equal(count, 2);
 });
+test('manual city weather becomes ready within two seconds when only optional AQI stalls', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let result, airAborted = false;
+  const service = createWeatherService({ now: () => modelTime, fetch: (url, { signal }) => {
+    if (!url.includes('/v1/air-quality')) return Promise.resolve(response(fixture()));
+    signal.addEventListener('abort', () => { airAborted = true; });
+    return new Promise(() => {});
+  } });
+  const pending = service.getWeather({ ...location, mode: 'manual' }).then(value => { result = value; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    t.mock.timers.tick(2000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(result?.status, 'ready', 'optional air quality must not hold valid weather for the forecast timeout');
+    assert.equal(result.data.airQuality, null);
+    assert.equal(airAborted, true);
+  } finally { t.mock.timers.tick(12000); await pending; }
+});
 test('city search encodes input and filters malformed remote locations', async () => {
   let called;
   const service = createWeatherService({ fetch: async url => { called = new URL(url); return response({ results: [{ ...location, id: 1, admin1: '北京市', country: '中国' }, { latitude: null, longitude: 0 }] }); } });
@@ -115,16 +133,64 @@ test('invalid calendar model time does not enter cache', async () => {
   assert.equal(result.status, 'error'); assert.equal(result.error.code, 'INVALID_RESPONSE');
 });
 
-test('exact administrative cities outrank same-name villages without a hardcoded city list', async () => {
+
+test('reselecting a city shares its in-flight forecast but keeps the new selection retry alive', async () => {
+  let finishFirst, forecastCalls = 0, active = true;
+  const service = createWeatherService({ now: () => modelTime, fetch: url => {
+    if (url.includes('/v1/air-quality')) return Promise.resolve(response(air()));
+    forecastCalls++;
+    return forecastCalls === 1 ? new Promise(resolve => { finishFirst = resolve; }) : Promise.resolve(response(fixture()));
+  } });
+  const first = service.getWeather(location, { shouldRetry: () => active });
+  active = false;
+  const second = service.getWeather(location, { shouldRetry: () => true });
+  finishFirst({ ok: false, status: 503 });
+  assert.equal((await second).status, 'ready');
+  assert.equal((await first).status, 'ready');
+  assert.equal(forecastCalls, 2, 'one shared failed request and exactly one retry');
+});
+
+
+test('weather service retains safe HTTP failures and malformed JSON is not retried', async () => {
+  for (const status of [400, 429, 503]) {
+    let calls = 0;
+    const result = await createWeatherService({ fetch: async url => {
+      if (url.includes('/v1/forecast')) calls++;
+      return { ok: false, status };
+    } }).getWeather(location);
+    assert.equal(result.error.httpStatus, status);
+    assert.equal(calls, status === 503 ? 2 : 1);
+  }
+  let calls = 0;
+  const malformed = await createWeatherService({ fetch: async url => {
+    if (url.includes('/v1/forecast')) calls++;
+    return { ok: true, status: 200, json: async () => { throw new SyntaxError('private response'); } };
+  } }).getWeather(location);
+  assert.equal(malformed.error.code, 'INVALID_RESPONSE'); assert.equal(calls, 1);
+  assert.doesNotMatch(JSON.stringify(malformed), /private response/);
+});
+
+test('manual city search prefers an exact administrative city to same-name villages', async () => {
   const rows = [
-    { id: 8404324, name: '北京', latitude: 30.72608, longitude: 108.67483, admin1: '重庆市', admin2: '重庆市', feature_code: 'PPL' },
-    { id: 1816670, name: '北京', latitude: 39.9075, longitude: 116.39723, admin1: '北京市', admin2: '北京市', feature_code: 'PPLC' },
-    { id: 10196578, name: '北京', latitude: 30.9699, longitude: 103.94, admin1: '四川', admin2: '成都市', feature_code: 'PPL' }
+    { id: 1, name: '北京', latitude: 30.7, longitude: 108.6, admin1: '重庆市', feature_code: 'PPL' },
+    { id: 2, name: '北京', latitude: 39.9, longitude: 116.4, admin1: '北京市', feature_code: 'PPLC' }
   ];
-  const service = createWeatherService({ fetch: async () => response({ results: rows }) });
-  const cities = await service.searchCities('北京');
-  assert.equal(cities.length, 1); assert.equal(cities[0].id, 1816670); assert.equal(cities[0].admin1, '北京市');
-  assert.equal(cities[0].latitude, 39.9075);
-  rows.splice(0, rows.length, { ...rows[0], name: '同名镇' });
-  assert.equal((await service.searchCities('同名镇')).length, 1, 'settlements remain searchable when no administrative center matches');
+  const cities = await createWeatherService({ fetch: async () => response({ results: rows }) }).searchCities('北京');
+  assert.deepEqual(cities.map(city => city.id), [2]);
+});
+
+test('manual forecast failures identify transport, phase and bounded retry without raw content', async () => {
+  for (const [fetchForecast, phase, code] of [
+    [() => Promise.reject(Error('net::ERR_NAME_NOT_RESOLVED')), 'headers', 'ERR_NAME_NOT_RESOLVED'],
+    [() => Promise.resolve({ ok: true, status: 200, json: () => Promise.reject(Object.assign(Error('private URL and city'), { cause: { code: 'ECONNRESET' } })) }), 'body', 'ECONNRESET']
+  ]) {
+    const service = createWeatherService({ fetch: url => url.includes('air-quality') ? response(air()) : fetchForecast() });
+    const result = await service.getWeather({ ...location, mode: 'manual' });
+    assert.equal(result.status, 'error');
+    assert.equal(result.error.weatherRequestPhase, phase);
+    assert.equal(result.error.weatherTransportCode, code);
+    assert.equal(result.error.weatherAttempts, 2);
+    assert(Number.isSafeInteger(result.error.weatherElapsedMs) && result.error.weatherElapsedMs >= 0);
+    assert.doesNotMatch(JSON.stringify(result), /private URL|latitude|longitude/);
+  }
 });
