@@ -7,9 +7,10 @@ const { createHash } = require('node:crypto');
 const root = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'updates/index.html'), 'utf8');
 const allBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
+const latestBlock = allBlocks.find(block => block.includes('id="v0.4.16-apple"'));
 const milestoneBlock = allBlocks.find(block => block.includes('id="v1.0.0-app-store"'));
 const milestone = milestoneBlock.match(/<article[^>]*>([\s\S]*?)<\/article>/)[1];
-const articleBlocks = allBlocks.filter(block => block !== milestoneBlock);
+const articleBlocks = allBlocks.filter(block => block !== milestoneBlock && block !== latestBlock);
 const articles = articleBlocks.map(block => block.match(/<article[^>]*>([\s\S]*?)<\/article>/)[1]);
 const downloads = [...html.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
 
@@ -28,8 +29,12 @@ test('Mac App Store 1.0.0 milestone stays available and links to the listing', (
   assert.match(html, /href="#v1\.0\.0-app-store" data-release-link>[^\n]*<span>1\.0\.0 App Store 版<\/span>/);
 });
 
-test('0.4.15 leads with the mirror and edge fix while retaining store-first downloads', () => {
-  assert.match(allBlocks[0], /id="v0\.4\.15-apple"/);
+test('0.4.16 leads with companion improvements while retaining 0.4.15 and store-first downloads', () => {
+  assert.equal(allBlocks[0], latestBlock);
+  assert.match(latestBlock, /datetime="2026-11-21"/);
+  for (const text of ['让桌面陪伴更自然一点。','导入的伙伴左右贴边更自然，收起、拖出更顺手。','简短对白使用更小巧的气泡，减少留白。','优化天气加载、城市切换和异常恢复体验。']) assert.ok(latestBlock.includes(text));
+  assert.match(latestBlock, /v0\.4\.16\/Qiuqiu-0\.4\.16-macOS-arm64\.dmg/);
+  assert.match(articleBlocks[0], /id="v0\.4\.15-apple"/);
   assert.match(articles[0], /datetime="2026-11-19"/);
   for (const text of ['皮肤朝向', '停在左侧向右看', '停在右侧向左看', '左右吸附', '角色实际轮廓收起约一半', '悬停探出、移开收回', '透明区域误触']) assert.ok(articles[0].includes(text));
   assert.match(articles[0], /v0\.4\.15\/Qiuqiu-0\.4\.15-macOS-arm64\.dmg/);
@@ -81,8 +86,8 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
   assert.match(html, /<title>球球桌宠 · 更新日志<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/qiuqiu.pet\/updates\/"/);
   assert.equal(articles.length, 17);
-  assert.equal((html.match(/data-release-link/g) || []).length, 24);
-  assert.equal((html.match(/<option /g) || []).length, 24);
+  assert.equal((html.match(/data-release-link/g) || []).length, 25);
+  assert.equal((html.match(/<option /g) || []).length, 25);
   assert.doesNotMatch(html, /v0\.4\.03-apple|本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建/);
   assert.match(articleBlocks[0], /id="v0\.4\.05-apple"/);
   assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1].replace(/^\d+\.\s*/, '')), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
@@ -114,8 +119,8 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
 });
 
 test('platform installer links and historical downloads stay accurate', () => {
-  assert.equal(downloads.length, 27);
-  assert.equal(new Set(downloads).size, 27);
+  assert.equal(downloads.length, 28);
+  assert.equal(new Set(downloads).size, 28);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => [storeURL, 'https://share.weiyun.com/6WH6LkRl', 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe'].includes(url) || /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
