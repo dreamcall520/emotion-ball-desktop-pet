@@ -21,12 +21,12 @@ function locationError(code) {
 function safeDiagnostic(value) {
   const result = {};
   if (['not-determined', 'restricted', 'denied', 'granted', 'unknown'].includes(value?.locationAuthorization)) result.locationAuthorization = value.locationAuthorization;
-  for (const key of ['locationMainThread', 'locationStarted', 'locationAppActive']) if (typeof value?.[key] === 'boolean') result[key] = value[key];
+  for (const key of ['locationMainThread', 'locationStarted', 'locationAppActive', 'locationRecoveryAttempted']) if (typeof value?.[key] === 'boolean') result[key] = value[key];
   for (const key of ['locationAuthorizationCallbacks', 'locationCallbacks', 'locationUnknownFailures', 'locationSamplesRejected']) {
     if (Number.isSafeInteger(value?.[key]) && value[key] >= 0 && value[key] <= 1000000) result[key] = value[key];
   }
   if (['authorization', 'acquisition', 'geocode'].includes(value?.locationPhase)) result.locationPhase = value.locationPhase;
-  for (const key of ['locationElapsedMs', 'locationPhaseElapsedMs']) {
+  for (const key of ['locationElapsedMs', 'locationPhaseElapsedMs', 'locationRecoveryAfterMs']) {
     if (Number.isSafeInteger(value?.[key]) && value[key] >= 0 && value[key] <= 3600000) result[key] = value[key];
   }
   return result;

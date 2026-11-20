@@ -96,3 +96,9 @@ test('native phase diagnostics preserve the full website schema and add only bou
   assert.deepEqual(normalizeDiagnostic('天气', {}, { locationAppActive: 1, locationAuthorizationCallbacks: -1,
     locationPhase: 'private', locationElapsedMs: 3600001, locationPhaseElapsedMs: NaN }).context, {});
 });
+
+ test('weather recovery and request fields preserve only safe values', () => {
+ const safe = {locationRecoveryAttempted:true,locationRecoveryAfterMs:3000,weatherSelectionMode:'manual',weatherRequestPhase:'body',weatherTransportCode:'ECONNRESET',weatherAttempts:2,weatherElapsedMs:16000};
+ assert.deepEqual(normalizeDiagnostic('天气',{code:'TIMEOUT'},{...safe,city:'private',latitude:12,url:'private'}).context,safe);
+ assert.deepEqual(normalizeDiagnostic('天气',{}, {locationRecoveryAttempted:'true',locationRecoveryAfterMs:-1,weatherSelectionMode:'private',weatherRequestPhase:'private',weatherTransportCode:'private',weatherAttempts:3,weatherElapsedMs:3600001}).context,{});
+});

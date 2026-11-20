@@ -988,12 +988,12 @@ function importedPet(id) {
 function fromLocalPetWindow(event) { return fromCustomizationWindow(event)&&customizationWindow.isVisible()&&event.senderFrame===customizationWindow.webContents.mainFrame; }
 function localPetImportIsCurrent() { const s=localPetImportSession;return Boolean(s&&!s.invalid&&customizationWindow===s.owner&&!s.owner.isDestroyed()&&s.owner.isVisible()&&s.owner.webContents.mainFrame===s.frame&&!screenLocked&&!isQuitting); }
 function petSheetDescriptor(pet){return pet.version===3?{sheets:Object.fromEntries(Object.entries(pet.sheets).map(([id,sheet])=>[id,{rows:sheet.rows,...(sheet.frameWidth?{frameWidth:sheet.frameWidth}:{}),imageURL:pathToFileURL(sheet.path).href}]))}:{};}
-function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
+function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.actionLabels?{actionLabels:pet.actionLabels}:{}),...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
 function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
-  return { id: pet.id, name: pet.name, ...(pet.characterId?{characterId:pet.characterId}:{}), version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
+  return { id: pet.id, name: pet.name, ...(pet.actionLabels?{actionLabels:pet.actionLabels}:{}), ...(pet.characterId?{characterId:pet.characterId}:{}), version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
     ...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
@@ -2647,7 +2647,7 @@ function settingsCommandTemplate() {
       click: item => { weatherWindow?.setEnabled(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
     { id: 'weather-visible', label: '显示天气卡', type: 'checkbox', checked: weatherWindow?.isCardVisible() !== false, enabled: weatherWindow?.isEnabled() === true,
       click: item => { weatherWindow?.setCardVisible(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
-    { id: 'weather-open', label: '天气与城市设置', click: () => weatherWindow?.openCity() }
+    { id: 'weather-open', label: '天气与城市设置', click: () => weatherWindow?.openCity(globalSettingsWindow) }
   ];
 }
 
@@ -3868,6 +3868,7 @@ function registerIpc() {
         pets: [...library.values()].map(pet => ({ id: pet.id, name: pet.name, importedId: pet.importedId,
           imported: pet.imported === true, version: pet.version, rows: pet.rows, ...petSheetDescriptor(pet),
           ...(pet.frameMap ? { frameMap: pet.frameMap } : {}),
+          ...(pet.actionLabels ? { actionLabels: pet.actionLabels } : {}),
           imageURL: pathToFileURL(pet.spritesheetPath).href })) };
     } catch (error) { writeError('读取 Codex 宠物', error); return { ok: false, error: '暂时无法读取宠物，请稍后重试' }; }
   });
@@ -4665,6 +4666,7 @@ async function bootstrap() {
     getBubbleBounds: quotaObstacleBounds, getPresentation: () => ({ ...quotaLayoutPresentation(), quotaGroupHidden: Boolean(quotaCardCollected('weather') || quotaFreeStackPlan()?.hidden?.includes('weather')), quotaGroupLayout: quotaFreeStackPlan()?.cards.weather }),
     getObstacles: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean),
     getSuppressed: () => quotaCardGroupInput().suppressed,
+    getCityPickerSuppressed: () => isQuitting || screenLocked,
     getAppearance: () => settings.codexQuotaAppearance,
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },

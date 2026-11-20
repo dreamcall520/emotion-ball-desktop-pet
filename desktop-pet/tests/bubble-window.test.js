@@ -119,3 +119,19 @@ test('快捷布局与长文案变化即时避让，仍保留互动鼠标与原�
   t.mock.timers.tick(1); assert.equal(win.visible, false, 'reposition does not restart the original lifetime');
   assert.equal(win.ignored, true);
 });
+
+test('单行宽度随测量变化，旧消息和按钮气泡不能误缩窄', async t => {
+  const f = fixture(() => Promise.resolve()); t.after(() => f.bubble.destroy());
+  f.show(1); await flush();
+  f.bubble.resize({ id: 1, height: 66, width: 162 });
+  assert.equal(f.windows[0].bounds.width, 162);
+  f.bubble.resize({ id: 1, height: 66, width: 180 });
+  assert.equal(f.windows[0].bounds.width, 180, 'same-height text can still change width');
+  assert.equal(f.bubble.resize({ id: 0, height: 66, width: 80 }), false);
+  f.bubble.resize({ id: 1, height: 106, width: 80 });
+  assert.equal(f.windows[0].bounds.width, 224, 'multiline measurement restores full width');
+  f.bubble.show({ id: 2, text: '再来吗？', actions: [{ id: 'again', label: '再来一次' }], durationMs: 4000 });
+  f.bubble.resize({ id: 2, height: 66, width: 80 });
+  assert.equal(f.windows[0].bounds.width, 224);
+  assert.equal(f.windows[0].bounds.height, 118);
+});

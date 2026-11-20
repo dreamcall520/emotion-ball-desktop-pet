@@ -2,16 +2,26 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const { petVisualBounds } = require('./pet-visual-bounds');
 const { adjacentBounds } = require('./window-placement');
 
-function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight = null, shape = 'blob', obstacles = []) {
+function bubbleMaxWidth(workArea) {
+  const width = Math.max(1, Math.floor(workArea.width));
+  return Math.min(224, width - Math.min(8, Math.floor((width - 1) / 2)) * 2);
+}
+
+function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight = null, shape = 'blob', obstacles = [], preferredWidth = null) {
   petBounds = petVisualBounds(petBounds, shape);
   const areaWidth = Math.max(1, Math.floor(workArea.width));
   const areaHeight = Math.max(1, Math.floor(workArea.height));
   const paddingX = Math.min(8, Math.floor((areaWidth - 1) / 2));
   const paddingY = Math.min(8, Math.floor((areaHeight - 1) / 2));
-  const width = Math.min(224, areaWidth - paddingX * 2);
+  const maxWidth = bubbleMaxWidth(workArea);
+  const width = !interactive && Number.isFinite(preferredWidth)
+    ? Math.min(maxWidth, Math.max(80, Math.ceil(preferredWidth))) : maxWidth;
   const baseHeight = interactive ? 118 : 86;
+  // A measured single line needs 44px of surface plus 22px for the cloud dots.
+  // Keep the larger initial estimate and interactive minimum until content is measured.
+  const minimumHeight = interactive ? baseHeight : 66;
   const requestedHeight = Number.isFinite(preferredHeight)
-    ? Math.max(baseHeight, Math.ceil(preferredHeight))
+    ? Math.max(minimumHeight, Math.ceil(preferredHeight))
     : baseHeight;
   const height = Math.min(requestedHeight, areaHeight - paddingY * 2);
   const minX = workArea.x + paddingX;
@@ -31,4 +41,4 @@ function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight 
   const anchorInset = Math.min(35, width / 2);
   return { x, y, width, height, placement, anchorX: clamp(centerX - x, anchorInset, width - anchorInset) };
 }
-module.exports = { bubbleBounds };
+module.exports = { bubbleBounds, bubbleMaxWidth };

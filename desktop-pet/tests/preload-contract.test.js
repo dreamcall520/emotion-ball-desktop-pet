@@ -47,6 +47,12 @@ test('气泡只允许当前普通或 Codex 固定按钮动作', () => {
   for (const action of ['again', 'rest', 'codex-open', 'codex-results', 'codex-list', 'codex-dismiss', 'shell', 'https://invalid']) api.reply(1, action);
   assert.equal(messages.length, 5);
   assert.deepEqual(messages.map(item => item[1].action), ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss']);
+  api.resize(1, 65.1, 161.1);
+  assert.equal(JSON.stringify(messages.at(-1)), JSON.stringify(['pet:bubble-resize', { id: 1, height: 66, width: 162 }]));
+  for (const width of [Infinity, -1, 1001, '162']) {
+    api.resize(1, 66, width);
+    assert.equal(Object.hasOwn(messages.at(-1)[1], 'width'), false);
+  }
 });
 
 test('气泡同ID先更新文字，动作不变时保留按钮、变化时才重建', () => {

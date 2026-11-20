@@ -19,9 +19,10 @@ contextBridge.exposeInMainWorld('petBubble', {
       ipcRenderer.send('pet:bubble-reply', { id, action });
     }
   },
-  resize: (id, height) => {
+  resize: (id, height, width) => {
     if (Number.isInteger(id) && Number.isFinite(height) && height > 0 && height <= 1000) {
-      ipcRenderer.send('pet:bubble-resize', { id, height: Math.ceil(height) });
+      ipcRenderer.send('pet:bubble-resize', { id, height: Math.ceil(height),
+        ...(Number.isFinite(width) && width > 0 && width <= 1000 ? { width: Math.ceil(width) } : {}) });
     }
   }
 });

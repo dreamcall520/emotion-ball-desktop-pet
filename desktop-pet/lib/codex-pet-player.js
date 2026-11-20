@@ -23,6 +23,24 @@
   const ACTIONS = Object.freeze(ids.map((id, row) => Object.freeze({ id, row, name: names[row],
     frameDurations: Object.freeze(durations[row]), durationMs: durations[row].reduce((sum, ms) => sum + ms, 0) })));
 
+  function normalizeActionLabels(value) {
+    if (value === undefined) return undefined;
+    const invalid = () => { throw new TypeError('Invalid pet action labels'); };
+    if (!value || typeof value !== 'object' || Array.isArray(value) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return invalid();
+    const allowed = [...ids, 'sleep', 'wakeup', 'tail', 'groom', 'stretch', 'bone', 'spin', 'happy', 'sleep-lying', 'walk-right', 'walk-left'];
+    const labels = {};
+    for (const key of Reflect.ownKeys(value)) {
+      const field = Object.getOwnPropertyDescriptor(value, key);
+      if (!allowed.includes(key) || !field || !('value' in field) || typeof field.value !== 'string' ||
+          /[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/.test(field.value)) return invalid();
+      const label = field.value.trim();
+      if (!label || label.length > 40) return invalid();
+      labels[key] = label;
+    }
+    return Object.freeze(labels);
+  }
+
   function normalizeFrameMap(value, rows, sheets) {
     if (value === undefined) return undefined;
     const invalid = () => { throw new TypeError('Invalid pet frame map'); };
@@ -64,17 +82,20 @@
   }
 
   function getActions(descriptor) {
+    const labels = normalizeActionLabels(descriptor.actionLabels);
     const map = normalizeFrameMap(descriptor.frameMap, descriptor.rows, descriptor.version===3?descriptor.sheets:undefined);
-    if (!map) return ACTIONS;
+    if (!map) return labels ? Object.freeze(ACTIONS.map(action => Object.freeze({ ...action, name: labels[action.id] || action.name }))) : ACTIONS;
     const base = [...ACTIONS, ...['sleep', 'wakeup','tail','groom','stretch','bone','spin','happy','sleep-lying','walk-right','walk-left'].filter(id => map[id]).map(id =>
       ({ id, row: id === 'sleep' ? 9 : 10, name: ({sleep:'睡觉',wakeup:'醒来',tail:'轻轻摇尾',groom:'舔舔爪',stretch:'伸个懒腰',bone:'玩骨头',spin:'旋转庆祝',happy:'开心庆祝','sleep-lying':'趴着睡','walk-right':'向右走','walk-left':'向左走'})[id] }))];
-    return Object.freeze(base.map(action => map[action.id] ? Object.freeze({ ...action,
+    return Object.freeze(base.map(action => map[action.id] ? Object.freeze({ ...action, name: labels?.[action.id] || action.name,
       ...(map[action.id].sheet?{sheet:map[action.id].sheet}:{}), ...(map[action.id].variation?{variation:map[action.id].variation}:{}), start: map[action.id].start, loop: map[action.id].loop, flipX: map[action.id].flipX,
       frameDurations: map[action.id].durations,
-      durationMs: map[action.id].durations.reduce((sum, ms) => sum + ms, 0) }) : action));
+      durationMs: map[action.id].durations.reduce((sum, ms) => sum + ms, 0) })
+      : labels?.[action.id] ? Object.freeze({ ...action, name: labels[action.id] }) : action));
   }
 
   function getPreviewActions(descriptor) {
+    const labels = normalizeActionLabels(descriptor.actionLabels);
     const actions = getActions(descriptor);
     const order = ['idle','wave','tail','groom','bone','stretch','jump','spin','happy','walk-right','walk-left','run-right','run-left','running','waiting','checking','fail','sleep','sleep-lying','wakeup'];
     const seen = new Set();
@@ -88,7 +109,7 @@
         action.variation?.clips.map(clip => [clip.start, clip.count]) || []]);
       if (seen.has(key)) return [];
       seen.add(key);
-      return [Object.freeze({...action, name: ({tail:'摇尾',groom:'舔爪'})[id] || action.name})];
+      return [Object.freeze({...action, name: labels?.[id] || ({tail:'摇尾',groom:'舔爪'})[id] || action.name})];
     }));
   }
 
@@ -109,7 +130,7 @@
         !((value.version === 1 && value.rows === 9) || (value.version === 2 && value.rows === 11) || (value.version===3 && value.sheets)) ||
         typeof value.imageURL !== 'string') return false;
     if(value.version===3 && !value.frameMap) return false;
-    try { normalizeFrameMap(value.frameMap, value.rows, value.version===3?value.sheets:undefined); } catch (_) { return false; }
+    try { normalizeFrameMap(value.frameMap, value.rows, value.version===3?value.sheets:undefined); normalizeActionLabels(value.actionLabels); } catch (_) { return false; }
     // Only the main process resolves local paths. Never download a sprite URL.
     return /^file:\/\/\//i.test(value.imageURL) || /^data:image\/(?:png|webp);base64,[a-z0-9+/=]+$/i.test(value.imageURL);
   }
@@ -390,5 +411,5 @@
     return { element: canvas, setPet, setAction, setSize, setOpacity, pause, whenReady, destroy };
   }
 
-  return Object.freeze({ isXiaobaiPet, ACTIONS, FRAME_WIDTH, FRAME_HEIGHT, COLUMNS, normalizeFrameMap, getActions, getPreviewActions, getInteractionActions, validDescriptor, create });
+  return Object.freeze({ isXiaobaiPet, ACTIONS, FRAME_WIDTH, FRAME_HEIGHT, COLUMNS, normalizeFrameMap, normalizeActionLabels, getActions, getPreviewActions, getInteractionActions, validDescriptor, create });
 }));

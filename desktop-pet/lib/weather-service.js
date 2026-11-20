@@ -1,8 +1,21 @@
 'use strict';
+const { performance } = require('node:perf_hooks');
 
 const CACHE_MS = 30 * 60 * 1000;
 const MAX_DATA_AGE_MS = 90 * 60 * 1000, MAX_FUTURE_MS = 15 * 60 * 1000;
 const FORECAST_RETRY_TIMEOUT_MS = 4000;
+const AIR_QUALITY_TIMEOUT_MS = 2000;
+const TRANSPORT_CODES = new Set(['ERR_NAME_NOT_RESOLVED', 'ERR_INTERNET_DISCONNECTED', 'ERR_TIMED_OUT',
+  'ERR_CONNECTION_TIMED_OUT', 'ERR_CONNECTION_RESET', 'ERR_CONNECTION_CLOSED', 'ERR_CONNECTION_REFUSED',
+  'ERR_NETWORK_CHANGED', 'ERR_ADDRESS_UNREACHABLE', 'ERR_CERT_AUTHORITY_INVALID', 'ERR_CERT_DATE_INVALID',
+  'ERR_SSL_PROTOCOL_ERROR', 'ERR_FAILED', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT']);
+function requestFacts(error) {
+  const facts = {};
+  for (const key of ['weatherRequestPhase', 'weatherTransportCode', 'weatherAttempts', 'weatherElapsedMs']) {
+    if (error[key] !== undefined) facts[key] = error[key];
+  }
+  return facts;
+}
 const MESSAGES = { INVALID_LOCATION: '请选择有效城市。', INVALID_RESPONSE: '天气数据不完整，本次未更新。',
   TIMEOUT: '天气查询超时，稍后重试。', RATE_LIMITED: '天气查询较频繁，请稍后重试。',
   DATA_OLD: '数据时间较早', CONNECTION_FAILED: '暂时无法连接天气服务。', SERVICE_UNAVAILABLE: '天气服务暂不可用。' };
@@ -55,12 +68,13 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
       error: stale ? { code: 'DATA_OLD', message: MESSAGES.DATA_OLD } : null };
   }
   async function request(url, deadlineMs = timeoutMs) {
-    const controller = new AbortController(); let timer, httpStatus;
+    const controller = new AbortController(); let timer, httpStatus, phase = 'headers';
     try {
       const response = await Promise.race([fetchImpl(url, { signal: controller.signal, redirect: 'error' }),
         new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(errorFor('TIMEOUT')); }, deadlineMs); })]);
       if (Number.isInteger(response.status) && response.status >= 100 && response.status <= 599) httpStatus = response.status;
       if (!response.ok) throw errorFor(response.status === 429 ? 'RATE_LIMITED' : 'SERVICE_UNAVAILABLE');
+      phase = 'body';
       // Keep the timeout active until the response body has completed too.
       const body = await Promise.race([response.json(), new Promise((_, reject) => {
         controller.signal.addEventListener('abort', () => reject(errorFor('TIMEOUT')), { once: true });
@@ -70,18 +84,32 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
     } catch (error) {
       const safe = error?.publicMessage ? error : errorFor(controller.signal.aborted ? 'TIMEOUT' : error?.name === 'SyntaxError' ? 'INVALID_RESPONSE' : 'CONNECTION_FAILED');
       if (httpStatus !== undefined) safe.httpStatus = httpStatus;
+      safe.weatherRequestPhase = phase;
+      // Copy only known transport tokens, never a URL, response body or raw error.
+      const transportCode = [error?.code, error?.cause?.code,
+        typeof error?.message === 'string' ? error.message.match(/^net::(ERR_[A-Z_]+)$/)?.[1] : null]
+        .find(code => TRANSPORT_CODES.has(code));
+      if (transportCode) safe.weatherTransportCode = transportCode;
       throw safe;
     }
     finally { clearTimeout(timer); }
   }
   async function requestForecast(endpoint, shouldRetry) {
+    const started = performance.now();
     try {
       return await request(endpoint);
     } catch (error) {
+      error.weatherAttempts = 1;
+      error.weatherElapsedMs = Math.round(performance.now() - started);
       const retryable = error.code === 'TIMEOUT' || error.code === 'CONNECTION_FAILED'
         || (error.httpStatus >= 500 && error.httpStatus <= 599);
       if (!retryable || !shouldRetry()) throw error;
-      return request(endpoint, Math.min(timeoutMs, FORECAST_RETRY_TIMEOUT_MS));
+      try { return await request(endpoint, Math.min(timeoutMs, FORECAST_RETRY_TIMEOUT_MS)); }
+      catch (retryError) {
+        retryError.weatherAttempts = 2;
+        retryError.weatherElapsedMs = Math.round(performance.now() - started);
+        throw retryError;
+      }
     }
   }
   function url(origin, path, params) { const value = new URL(path, origin); value.search = new URLSearchParams(params).toString(); return value.href; }
@@ -109,7 +137,9 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
     const active = { shouldRetry };
     const task = (async () => {
       const params = { latitude: String(location.latitude), longitude: String(location.longitude), timezone: 'auto' };
-      const air = request(url('https://air-quality-api.open-meteo.com', '/v1/air-quality', { ...params, current: 'us_aqi,pm2_5' }))
+      // AQI is optional: an unavailable AQI endpoint must not hold usable weather
+      // behind the full forecast deadline. The budget starts alongside forecast.
+      const air = request(url('https://air-quality-api.open-meteo.com', '/v1/air-quality', { ...params, current: 'us_aqi,pm2_5' }), Math.min(timeoutMs, AIR_QUALITY_TIMEOUT_MS))
         .then(parseAirQuality).catch(() => null);
       try {
         const raw = await requestForecast(url('https://api.open-meteo.com', '/v1/forecast', { ...params, forecast_days: '7', wind_speed_unit: 'kmh',
@@ -126,7 +156,8 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
         return result;
       } catch (error) {
         return { status: entry ? 'stale' : 'error', data: entry ? { ...entry.data, location } : null,
-          updatedAt: entry?.updatedAt ?? null, fromCache: Boolean(entry), error: { code: error.code, message: error.publicMessage, ...(Number.isInteger(error.httpStatus) ? { httpStatus: error.httpStatus } : {}) } };
+          updatedAt: entry?.updatedAt ?? null, fromCache: Boolean(entry), error: { code: error.code, message: error.publicMessage,
+            ...requestFacts(error), ...(Number.isInteger(error.httpStatus) ? { httpStatus: error.httpStatus } : {}) } };
       }
     })();
     active.promise = task; pending.set(key, active);

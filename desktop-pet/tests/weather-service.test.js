@@ -166,3 +166,38 @@ test('weather service retains safe HTTP failures and malformed JSON is not retri
   assert.equal(malformed.error.code, 'INVALID_RESPONSE'); assert.equal(calls, 1);
   assert.doesNotMatch(JSON.stringify(malformed), /private response/);
 });
+
+test('manual city weather becomes ready within two seconds when only optional AQI stalls', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let result, airAborted = false;
+  const service = createWeatherService({ now: () => modelTime, fetch: (url, { signal }) => {
+    if (!url.includes('/v1/air-quality')) return Promise.resolve(response(fixture()));
+    signal.addEventListener('abort', () => { airAborted = true; });
+    return new Promise(() => {});
+  } });
+  const pending = service.getWeather({ ...location, mode: 'manual' }).then(value => { result = value; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    t.mock.timers.tick(2000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(result?.status, 'ready', 'optional air quality must not hold valid weather for the forecast timeout');
+    assert.equal(result.data.airQuality, null);
+    assert.equal(airAborted, true);
+  } finally { t.mock.timers.tick(12000); await pending; }
+});
+
+test('manual forecast failures identify transport, phase and bounded retry without raw content', async () => {
+  for (const [fetchForecast, phase, code] of [
+    [() => Promise.reject(Error('net::ERR_NAME_NOT_RESOLVED')), 'headers', 'ERR_NAME_NOT_RESOLVED'],
+    [() => Promise.resolve({ ok: true, status: 200, json: () => Promise.reject(Object.assign(Error('private URL and city'), { cause: { code: 'ECONNRESET' } })) }), 'body', 'ECONNRESET']
+  ]) {
+    const service = createWeatherService({ fetch: url => url.includes('air-quality') ? response(air()) : fetchForecast() });
+    const result = await service.getWeather({ ...location, mode: 'manual' });
+    assert.equal(result.status, 'error');
+    assert.equal(result.error.weatherRequestPhase, phase);
+    assert.equal(result.error.weatherTransportCode, code);
+    assert.equal(result.error.weatherAttempts, 2);
+    assert(Number.isSafeInteger(result.error.weatherElapsedMs) && result.error.weatherElapsedMs >= 0);
+    assert.doesNotMatch(JSON.stringify(result), /private URL|latitude|longitude/);
+  }
+});
