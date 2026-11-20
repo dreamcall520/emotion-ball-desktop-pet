@@ -115,6 +115,11 @@ function runSmokeTest() {
           resolve(output);
           return;
         }
+        if (process.env.PET_SMOKE_WEATHER_ONLY === '1') {
+          assert.match(output, /PET_WEATHER_INTEGRATION_OK/);
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output); return;
+        }
         if (process.env.PET_SMOKE_CUSTOMIZE_ONLY === '1') {
           assert.match(output, /PET_CUSTOMIZE_SMOKE_OK/);
           assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

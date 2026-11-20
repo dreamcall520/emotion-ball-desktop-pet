@@ -277,15 +277,42 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
       assert(measurements.length - beforeMeasurements <= 8, 'no runaway resize IPC');
       checks.push({ name: 'reply-once-stable-buttons-and-height', height: stableHeight });
       const artifacts = process.env.PET_BUBBLE_ARTIFACT_DIR;
-      if (artifacts) {
-        fs.mkdirSync(artifacts, { recursive: true });
+      if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
         for (const appearance of ['light', 'dark']) {
-          await configure('standard', appearance);
+          await configure('standard', appearance, 'blue');
+          const shortPayload = await show({ text: '我转回来站好啦。', actions: [] });
+          const compact = await layout(`compact-single-line-${appearance}`, 0);
+          assert.equal(compact.height, 66, 'single-line native window follows its natural height');
+          assert(compact.width < 224 && compact.width >= 80, 'short text controls native width');
+          const singleLine = await textLines();
+          assert.equal(singleLine.lines.length, 1);
+          assert(singleLine.lines[0].left - compact.bubble.x >= 14 && singleLine.lines[0].left - compact.bubble.x <= 16,
+            'horizontal space follows padding rather than the old fixed width');
+          if (artifacts) fs.writeFileSync(path.join(artifacts, `native-bubble-compact-${appearance}.png`), (await controller.getWindow().webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+          controller.show({ ...shortPayload, text: '同一条气泡更新成长一些的内容时，仍然会恢复正常宽度并清楚地显示多行文字。' });
+          await frame(); await wait(25); await frame();
+          const expandedText = await layout(`same-id-long-after-short-${appearance}`, 0);
+          assert.equal(expandedText.width, 224);
+          assert(expandedText.height > 66);
+          await show({ text: '嗯。', actions: [] });
+          const tiny = await layout(`minimum-single-line-${appearance}`, 0);
+          assert.equal(tiny.width, 80);
+          assert.equal(tiny.height, 66);
+          await show({ text: '我转回来站好啦。', actions: [] });
+          area.width = 136; controller.reposition();
+          await frame(); await wait(25); await frame();
+          const narrow = await layout(`single-line-to-narrow-screen-${appearance}`, 0);
+          assert.equal(narrow.width, 120);
+          assert(narrow.height > 66, 'narrow screens may wrap the sentence');
+          area.width = 1440; controller.reposition();
+          await frame(); await wait(25); await frame();
+          const wideAgain = await layout(`narrow-to-wide-screen-${appearance}`, 0);
+          assert.equal(wideAgain.width, compact.width);
+          assert.equal(wideAgain.height, 66, 'screen changes remeasure the same message');
           await show({ text: '忙了一会儿，要不要休息一下？', actions: allowed.slice(0, 2) });
-          fs.writeFileSync(path.join(artifacts, `native-bubble-${appearance}.png`), (await controller.getWindow().webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+          if (artifacts) fs.writeFileSync(path.join(artifacts, `native-bubble-${appearance}.png`), (await controller.getWindow().webContents.capturePage(undefined, { stayHidden: true })).toPNG());
         }
-        fs.writeFileSync(path.join(artifacts, 'bubble-renderer-checks.json'), JSON.stringify(checks, null, 2));
-      }
+      if (artifacts) fs.writeFileSync(path.join(artifacts, 'bubble-renderer-checks.json'), JSON.stringify(checks, null, 2));
       assert.deepEqual(errors, []);
       controller.destroy();
       process.stdout.write(`BUBBLE_RENDERER_DOM_OK ${checks.length} real native layouts\n`);

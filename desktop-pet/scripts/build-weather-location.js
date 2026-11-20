@@ -15,7 +15,7 @@ function buildWeatherLocation(root = path.resolve(__dirname, '../..')) {
   try {
     execFileSync(compiler, ['-std=c++17', '-fobjc-arc', '-fblocks', '-mmacosx-version-min=11.0', '-arch', process.arch,
       '-isysroot', '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk', '-bundle', '-undefined', 'dynamic_lookup', '-DNAPI_VERSION=8', '-DNODE_GYP_MODULE_NAME=weather_location',
-      '-I', include, '-framework', 'Foundation', '-framework', 'CoreLocation', source, '-o', temporary], { stdio: 'inherit' });
+      '-I', include, '-framework', 'Foundation', '-framework', 'CoreLocation', '-framework', 'AppKit', source, '-o', temporary], { stdio: 'inherit' });
     fs.renameSync(temporary, output);
   } catch (error) {
     try { fs.unlinkSync(temporary); } catch {}

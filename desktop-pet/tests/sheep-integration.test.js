@@ -47,7 +47,7 @@ function fixture({ realClick = false } = {}) {
     activeMotion:null, dragState:null, facing:null, focusQuiet:false, codexEnabled:false,
     lastSheepClick:null,lastAuroraClick:null,nextSheepAmbientAt:0,lastSheepAmbient:null,sheepAutoNap:false,sheepLastInteractionAt:0,sheepLastNapAt:null,sheepAutomaticWakeUntil:0,lastWorkAttempt:0,singleClickTimer:null,helloTimer:null,petHovered:false,wakeOnDoubleClick:false,Math:Object.assign(Object.create(Math),{random:()=>0.01}),
     codexActiveTaskCount:0, codexThinking:false, codexThinkingVisible:false, codexThinkingTimer:null, quotaEffects:null, quotaPacket:{config:{}},
-    compactMode:null, officialAurora:null, clickVisual:null, codexPet:null, listeners:[],
+    compactMode:null, officialAurora:null, clickVisual:null, codexPet:null, listeners:[], lastSpriteInkSignature:'',
     petElement:{dataset:{},style:{setProperty(){},removeProperty(){}},querySelector:()=>null,replaceChildren(){},setAttribute(){}},
     petting:{reset:()=>calls.push(['petting-reset'])},
     document:{hidden:false},window:{innerWidth:180,EB_CUSTOM_SHAPES:{createShape:()=>null}},

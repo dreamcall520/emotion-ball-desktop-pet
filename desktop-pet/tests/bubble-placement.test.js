@@ -152,3 +152,23 @@ test('柔光团气泡按实际身体包络定位，不把透明画布或地面�
     assert.ok(Math.abs(below.y - (topInk.y + topInk.height) - 8) <= .5);
   }
 });
+
+test('单行自然高度缩小留白，多行和按钮气泡保留所需空间', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  const single = bubbleBounds(pet, workArea, false, 66);
+  assert.equal(single.height, 66);
+  assert.equal(single.y + single.height, pet.y - 8);
+  assert.equal(bubbleBounds(pet, workArea, false, 86).height, 86);
+  assert.equal(bubbleBounds(pet, workArea, false, 106).height, 106);
+  assert.equal(bubbleBounds(pet, workArea, true, 100).height, 118);
+});
+
+test('短句宽度居中且有最小尺寸，窄屏不越界', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  const short = bubbleBounds(pet, workArea, false, 66, 'blob', [], 162);
+  assert.equal(short.width, 162);
+  assert.equal(short.x + short.width / 2, pet.x + pet.width / 2);
+  assert.equal(bubbleBounds(pet, workArea, false, 66, 'blob', [], 1).width, 80);
+  assert.equal(bubbleBounds(pet, workArea, true, 118, 'blob', [], 80).width, 224);
+  assert.equal(bubbleBounds(pet, { ...workArea, width: 70 }, false, 66, 'blob', [], 80).width, 54);
+});

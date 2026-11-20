@@ -15,6 +15,10 @@ DOWNLOAD_REVEAL_FAILED DOWNLOAD_UNEXPECTED BROWSER_OPEN_FAILED SELECTION_SAVE_FA
 ZCODE_ACCOUNT_MISSING ZCODE_CREDENTIAL_DECRYPT_FAILED ZCODE_PROVIDER_UNSUPPORTED ZCODE_LOGIN_REQUIRED ZCODE_NETWORK_ERROR ZCODE_HTTP_ERROR ZCODE_BILLING_ERROR ZCODE_USAGE_UNAVAILABLE ZCODE_INVALID_RESPONSE ZCODE_INVALID_ACCOUNT_FILE ZCODE_TEAM_SELECTION_REQUIRED ZCODE_TEAM_KEY_MISSING ZCODE_TEAM_ACCESS_DENIED
 UNKNOWN_ERROR_CODE UNCLASSIFIED_ERROR`.split(/\s+/));
 const STAGES = new Set(['quota-query', 'quota-auth', 'quota-request', 'quota-parse', 'weather-storage', 'weather-animation', 'weather-window', 'weather-refresh', 'weather-location', 'weather-search', 'window-load', 'renderer-console', 'renderer-exception', 'main-process', 'operation', 'download']);
+const TRANSPORT_CODES = new Set(['ERR_NAME_NOT_RESOLVED', 'ERR_INTERNET_DISCONNECTED', 'ERR_TIMED_OUT',
+  'ERR_CONNECTION_TIMED_OUT', 'ERR_CONNECTION_RESET', 'ERR_CONNECTION_CLOSED', 'ERR_CONNECTION_REFUSED',
+  'ERR_NETWORK_CHANGED', 'ERR_ADDRESS_UNREACHABLE', 'ERR_CERT_AUTHORITY_INVALID', 'ERR_CERT_DATE_INVALID',
+  'ERR_SSL_PROTOCOL_ERROR', 'ERR_FAILED', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT']);
 const REASONS = new Set(['clean-exit', 'abnormal-exit', 'killed', 'crashed', 'oom', 'launch-failed', 'integrity-failure']);
 // Only shipped code names are eligible, never arbitrary user paths or imported assets.
 const PAGES = new Set(fs.readdirSync(ROOT).filter(name => /\.(?:html|js)$/.test(name)));
@@ -84,10 +88,23 @@ function normalizeDiagnostic(_scope, error, context = {}) {
   if (Number.isSafeInteger(status) && status >= 100 && status <= 599) safe.httpStatus = status;
   if (typeof retryable === 'boolean') safe.retryable = retryable;
   if (Number.isSafeInteger(delay) && delay >= 0 && delay <= 86400000) safe.retryDelayMs = delay;
+  const requestPhase = own(context, 'weatherRequestPhase'), transportCode = own(context, 'weatherTransportCode');
+  if (['headers', 'body'].includes(requestPhase)) safe.weatherRequestPhase = requestPhase;
+  if (TRANSPORT_CODES.has(transportCode)) safe.weatherTransportCode = transportCode;
+  const attempts = own(context, 'weatherAttempts'), elapsed = own(context, 'weatherElapsedMs'), mode = own(context, 'weatherSelectionMode');
+  if (Number.isInteger(attempts) && attempts >= 1 && attempts <= 2) safe.weatherAttempts = attempts;
+  if (Number.isSafeInteger(elapsed) && elapsed >= 0 && elapsed <= 3600000) safe.weatherElapsedMs = elapsed;
+  if (['manual', 'current'].includes(mode)) safe.weatherSelectionMode = mode;
   const authorization = own(context, 'locationAuthorization');
   if (['not-determined','restricted','denied','granted','unknown'].includes(authorization)) safe.locationAuthorization = authorization;
-  for (const key of ['locationMainThread','locationStarted']) if (typeof own(context,key) === 'boolean') safe[key] = own(context,key);
-  for (const key of ['locationCallbacks','locationUnknownFailures','locationSamplesRejected']) if (Number.isSafeInteger(own(context,key)) && own(context,key) >= 0 && own(context,key) <= 1000000) safe[key] = own(context,key);
+  for (const key of ['locationMainThread','locationStarted','locationAppActive','locationRecoveryAttempted']) if (typeof own(context,key) === 'boolean') safe[key] = own(context,key);
+  for (const key of ['locationCallbacks','locationUnknownFailures','locationSamplesRejected','locationAuthorizationCallbacks']) if (Number.isSafeInteger(own(context,key)) && own(context,key) >= 0 && own(context,key) <= 1000000) safe[key] = own(context,key);
+  const phase = own(context, 'locationPhase');
+  if (['authorization', 'acquisition', 'geocode'].includes(phase)) safe.locationPhase = phase;
+  for (const key of ['locationElapsedMs', 'locationPhaseElapsedMs', 'locationRecoveryAfterMs']) {
+    const value = own(context, key);
+    if (Number.isSafeInteger(value) && value >= 0 && value <= 3600000) safe[key] = value;
+  }
   return { name, code, context: safe };
 }
 

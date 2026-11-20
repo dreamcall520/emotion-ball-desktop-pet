@@ -44,7 +44,7 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
   }
   function publish({ cancelDrag = false } = {}) {
     if (disposed) return;
-    if (mode === 'tucked' && !dragging) setIgnored(!visibleHit(lastCursor));
+    if (['tucked', 'peeked'].includes(mode) && !dragging) setIgnored(!visibleHit(lastCursor));
     else setIgnored(false);
     onChange({ ...getPresentation(), ...(cancelDrag ? { cancelDrag: true } : {}) });
   }
@@ -77,7 +77,9 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
       if (hovered) { cancelTuck(); mode = 'peeked'; publish(); }
       return;
     }
-    const retained = pins.size > 0 || visibleHit(point) ||
+    const hovered = visibleHit(point);
+    setIgnored(!hovered);
+    const retained = pins.size > 0 || hovered || visibleHit(point, 'tucked') ||
       getRetentionBounds().some(bounds => contains(bounds, point, HOVER_MARGIN));
     if (retained) { cancelTuck(); return; }
     if (timer !== null) return;

@@ -44,7 +44,8 @@
   function emptyPresentation(state) {
     if (state.status === 'loading') return { kind: 'loading', title: '正在获取天气', message: '', retry: '获取中…' };
     if (state.status === 'unconfigured' || !state.city) return { kind: 'unconfigured', title: '选择天气位置', message: '使用定位或手动选择', retry: '使用当前位置' };
-    return { kind: 'error', title: '暂时无法获取天气', message: '请重试或选择城市', retry: '重试' };
+    const message = typeof state.error === 'string' && state.error ? state.error : '请重试或选择城市';
+    return { kind: 'error', title: '暂时无法获取天气', message, retry: '重试' };
   }
   function chart(data) {
     const valid = data.filter(day => finite(day.min) && finite(day.max));
@@ -76,11 +77,12 @@
       assert.equal(emptyPresentation({ status: 'loading' }).kind, 'loading');
       assert.equal(emptyPresentation({ status: 'unconfigured' }).retry, '使用当前位置');
       assert.equal(emptyPresentation({ status: 'error', city: { name: '北京' } }).kind, 'error');
+      assert.equal(emptyPresentation({ status: 'error', city: { name: '北京' }, error: '天气查询超时，稍后重试。' }).message, '天气查询超时，稍后重试。');
       assert.deepEqual(locationLabels({ mode: 'current', name: '当前位置', displayName: '北京市 · 朝阳区' }), { title: '当前位置', source: '北京市 · 朝阳区' });
       assert.equal(locationLabels({ mode: 'current', name: '北京' }).source, '北京');
       assert.equal(locationLabels({ mode: 'current', name: '当前位置' }).source, '设备定位');
       assert.deepEqual(locationLabels({ mode: 'manual', name: '上海', displayName: '旧定位' }), { title: '上海', source: '手动选择' });
-      assert.equal(locationMessage('LOCATION_DENIED'), '定位未授权'); assert.equal(locationMessage('LOCATION_TIMEOUT'), '定位超时，请重试'); assert.equal(locationMessage('unsafe detail'), '定位失败，请选城市');
+      assert.equal(locationMessage('LOCATION_DENIED'), '定位未授权'); assert.equal(locationMessage('LOCATION_TIMEOUT'), '定位超时，请重试或搜索城市'); assert.equal(locationMessage('unsafe detail'), '定位失败，请选城市');
       assert.equal(iconName(0, false), 'clear-night'); assert.equal(iconName(2, false), 'partly-cloudy-night');
       assert.equal(iconName(3, true), 'overcast'); assert.equal(iconName(3, false), 'overcast'); assert.equal(iconName(45), 'fog-day'); assert.equal(iconName(71, false), 'overcast-night-snow');
       assert.equal(iconName(95), 'thunderstorms-day-rain'); assert.equal(iconName(96), 'thunderstorms-day-hail');
@@ -110,7 +112,7 @@
     // One request per distinct content size avoids re-entering the quota layout.
     if (collapseAnimation) return Promise.resolve();
     const size = expanded
-      ? { width: 390, height: Math.min(680, Math.max(picker ? 210 : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true }
+      ? { width: 390, height: Math.min(680, Math.max(picker ? 210 : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true, picker }
       : { width: 128, height: 32, expanded: false };
     const key = JSON.stringify(size);
     if (key === resizeKey) return Promise.resolve();
@@ -211,10 +213,20 @@
   el('source-details').addEventListener('toggle', () => { el('source-toggle').setAttribute('aria-expanded', String(el('source-details').open)); resize(); });
   const contentSizeObserver = new ResizeObserver(resize);
   contentSizeObserver.observe(el('weather-details')); contentSizeObserver.observe(el('city-picker'));
-  async function act(action) { try { const next = await action(); if (next && !next.needsLocation) render(next); return next; } catch (error) { render({ ...state, status: 'error', error: '暂时无法获取天气' }); return null; } }
+  async function act(action) {
+    const revision = liveRevision;
+    try {
+      const next = await action();
+      if (revision === liveRevision && next && !next.needsLocation) render(next);
+      return next;
+    } catch {
+      if (revision === liveRevision) render({ ...state, status: 'error', error: '暂时无法获取天气' });
+      return null;
+    }
+  }
   async function locate(openPicker = true) {
     if (openPicker) { showPicker(true); text('search-status', '定位中…'); }
-    const generation = ++locationGeneration;
+    const generation = ++locationGeneration, revision = liveRevision;
     el('use-location').disabled = true;
     try {
       const next = await api.useLocation();
@@ -222,7 +234,7 @@
       if (failure) throw Object.assign(new Error('location failed'), { code: failure.code });
       if (generation !== locationGeneration) return;
       if (next?.cancelled) { if (openPicker) text('search-status', '定位已取消，请重试或选择城市'); return; }
-      if (next && !next.needsLocation) { locationWarning = ''; render(next); if (openPicker) { text('search-status', ''); showPicker(false); } }
+      if (next && !next.needsLocation) { locationWarning = ''; render(revision === liveRevision ? next : state); if (openPicker) { text('search-status', ''); showPicker(false); } }
       else if (openPicker) text('search-status', '定位失败，请选城市');
     } catch (error) {
       if (generation !== locationGeneration) return;

@@ -2,7 +2,7 @@ const { createCodexIconPreference } = require('./lib/codex-icon-preference');
 const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
 const { createFeedbackReporting } = require('./lib/feedback-reporting');
 const { trackWindowErrors } = require('./lib/window-error-reporting');
-const { sourceLocation } = require('./lib/error-diagnostics');
+const { normalizeDiagnostic, sourceLocation } = require('./lib/error-diagnostics');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -30,7 +30,7 @@ const { isXiaobaiPet } = require('./lib/codex-pet-player');
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const { createCodexPetStore } = require('./lib/codex-pets');
 const { XIAOBAI_ID, getBuiltinPet } = require('./lib/builtin-pets');
-const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, XIAOBAI_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
+const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, spriteHalfTuckFraction, XIAOBAI_TUCK_FRACTION, DIRECTIONAL_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
 const EdgePeek = require('./lib/edge-peek');
 const {
   SIZES,
@@ -104,6 +104,7 @@ const { normalizeCustomization, normalizeAppearance, effectiveAppearance } = req
 const QuotaDisplay = require('./lib/quota-display');
 
 const { createWeatherWindow } = require('./lib/weather-window');
+const { createLocationBridge } = require('./lib/weather-location');
 const { weatherContext, weatherReminder } = require('./lib/weather-context');
 let lastWeatherReminderAt = -Infinity;
 function currentWeatherState() { return { ...weatherWindow?.getState(), enabled: weatherWindow?.isEnabled() === true }; }
@@ -127,7 +128,7 @@ const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && (process.env.PET_SMOKE_CODEX_ONLY =
 
 let petWindow = null;
 let edgeTuck = null;
-let spriteEdgeInk=null,spriteEdgeMapped=false;
+let spriteEdgeInk=null,spriteEdgeMapped=false,spriteIdleFacing,spriteTuckFraction,spriteEdgeHalf=false;
 let edgeNotice = null;
 let edgeNoticeWindow = null;
 let edgeNoticeNow = () => performance.now();
@@ -259,19 +260,38 @@ process.on('uncaughtExceptionMonitor', (error, origin) => {
   try { feedbackReporting?.capture(origin === 'unhandledRejection' ? '未处理异步错误' : '主进程异常', error, {stage:'main-process',process:'main',severity:'fatal'}); } catch (_) {}
 });
 
-function writeError(scope, error, context = {}) {
-  const message = error instanceof Error ? error.stack || error.message : error && typeof error === 'object' ? JSON.stringify({code:error.code, ...context}) : String(error);
-  const caller = {stack: new Error().stack.split('\n').filter((_,index) => index !== 1).join('\n')};
+function writeLocalLogLine(scope, message) {
   const line = `[${new Date().toISOString()}] ${scope}: ${message}\n`;
   process.stderr.write(line);
-  if (!isQuitting) { try { feedbackReporting?.capture(scope, error, {process: 'main', severity: 'error', ...sourceLocation(caller), ...sourceLocation(error), ...context}); } catch (_) {} }
   try {
     const logFile = path.join(app.getPath('userData'), 'errors.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     fs.appendFileSync(logFile, line, 'utf8');
   } catch (logError) {
-    process.stderr.write(`无法写入错误日志: ${logError.message}\n`);
+    process.stderr.write(scope === '天气' ? '无法写入天气诊断日志\n' : `无法写入错误日志: ${logError.message}\n`);
   }
+}
+
+function writeError(scope, error, context = {}) {
+  const caller = {stack: new Error().stack.split('\n').filter((_,index) => index !== 1).join('\n')};
+  const diagnosticContext = {process: 'main', severity: 'error', ...sourceLocation(caller), ...sourceLocation(error), ...context};
+  const message = scope === '天气'
+    ? JSON.stringify({ event: 'weather-error', ...normalizeDiagnostic(scope, error, diagnosticContext) })
+    : error instanceof Error ? error.stack || error.message : error && typeof error === 'object' ? JSON.stringify({code:error.code, ...context}) : String(error);
+  if (scope === '天气') { try { writeLocalLogLine(scope, message); } catch (_) {} }
+  else writeLocalLogLine(scope, message);
+  if (!isQuitting) { try { feedbackReporting?.capture(scope, error, diagnosticContext); } catch (_) {} }
+}
+
+function writeWeatherLocationDiagnostic(record) {
+  try {
+    if (!record || !['success', 'failure', 'cancelled'].includes(record.outcome)) return;
+    const normalized = normalizeDiagnostic('天气', record.outcome === 'failure' ? record : null, record.diagnostic);
+    const safe = { context: normalized.context };
+    if (record.outcome === 'failure' && normalized.code.startsWith('LOCATION_')) safe.code = normalized.code;
+    safe.context.stage = 'weather-location';
+    writeLocalLogLine('天气', JSON.stringify({ event: `location-${record.outcome}`, ...safe }));
+  } catch (_) { /* Local diagnostics must never change a location result. */ }
 }
 
 function validPoint(value) {
@@ -968,12 +988,13 @@ function importedPet(id) {
 function fromLocalPetWindow(event) { return fromCustomizationWindow(event)&&customizationWindow.isVisible()&&event.senderFrame===customizationWindow.webContents.mainFrame; }
 function localPetImportIsCurrent() { const s=localPetImportSession;return Boolean(s&&!s.invalid&&customizationWindow===s.owner&&!s.owner.isDestroyed()&&s.owner.isVisible()&&s.owner.webContents.mainFrame===s.frame&&!screenLocked&&!isQuitting); }
 function petSheetDescriptor(pet){return pet.version===3?{sheets:Object.fromEntries(Object.entries(pet.sheets).map(([id,sheet])=>[id,{rows:sheet.rows,...(sheet.frameWidth?{frameWidth:sheet.frameWidth}:{}),imageURL:pathToFileURL(sheet.path).href}]))}:{};}
-function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
+function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.actionLabels?{actionLabels:pet.actionLabels}:{}),...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
 function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
-  return { id: pet.id, name: pet.name, ...(pet.characterId?{characterId:pet.characterId}:{}), version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
+  return { id: pet.id, name: pet.name, ...(pet.actionLabels?{actionLabels:pet.actionLabels}:{}), ...(pet.characterId?{characterId:pet.characterId}:{}), version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
+    ...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -1125,7 +1146,7 @@ function performChatAction(action) {
 
 function sendPresentation(packet) {
   if (!petWindow || petWindow.isDestroyed()) return;
-  try { petWindow.webContents.send('pet:presentation', packet); } catch (_) {}
+  try { petWindow.webContents.send('pet:presentation', { ...packet, ...(spriteIdleFacing ? { spriteTuckFraction } : {}) }); } catch (_) {}
 }
 
 function tickEdgeNotice(force = false) {
@@ -2397,6 +2418,8 @@ function sendCompanionSettings() {
   const descriptor=codexPetDescriptor(settings.customization.appearance);spriteEdgeMapped=Boolean(descriptor?.frameMap);
   dogDreamSkinId=descriptor?.id||null;dogDreamSkinEnabled=isXiaobaiPet(descriptor);dogSpriteDescriptor=dogDreamSkinEnabled?descriptor:null;syncDogDream();
   if(spriteEdgeInk?.id!==descriptor?.id)spriteEdgeInk=null;
+  spriteIdleFacing = descriptor?.idleFacing; spriteEdgeHalf = descriptor?.edgeTuck === 'half';
+  spriteTuckFraction = spriteEdgeHalf ? spriteHalfTuckFraction(spriteEdgeInk, spriteIdleFacing, petWindow.getBounds()) : descriptor?.edgeTuckFraction;
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
     focusQuiet: pomodoroQuiet,
@@ -2624,7 +2647,7 @@ function settingsCommandTemplate() {
       click: item => { weatherWindow?.setEnabled(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
     { id: 'weather-visible', label: '显示天气卡', type: 'checkbox', checked: weatherWindow?.isCardVisible() !== false, enabled: weatherWindow?.isEnabled() === true,
       click: item => { weatherWindow?.setCardVisible(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
-    { id: 'weather-open', label: '天气与城市设置', click: () => weatherWindow?.openCity() }
+    { id: 'weather-open', label: '天气与城市设置', click: () => weatherWindow?.openCity(globalSettingsWindow) }
   ];
 }
 
@@ -2816,6 +2839,14 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (IS_SMOKE_TEST && process.env.PET_SMOKE_WEATHER_ONLY === '1') {
+      await require('./scripts/verify-weather-integration').verifyWeatherIntegration({
+        app, pet: petWindow, weather: weatherWindow, net, feedback: feedbackReporting,
+        getSettings: () => structuredClone(settings), getProfile: () => app.getPath('userData')
+      });
+      app.quit(); return;
+    }
+
     if(process.env.PET_SMOKE_SOFT_ORB_ONLY==='1'){
       await require('./scripts/verify-soft-orb-integration').verifySoftOrb({pet:petWindow,monitor:activityMonitor,
         save:saveCustomization,getSettings:()=>settings,readSettings:()=>loadSettings(settingsFile),command:sendCommand,setSize:setPetSize,
@@ -2929,12 +2960,12 @@ async function finishSmokeTest() {
       return;
     }
     if (process.env.PET_SMOKE_CODEX_PETS_ONLY === '1') {
-      if(process.env.PET_CODEX_PETS_QA_PHASE==='edges'){await require('./scripts/verify-small-sprite-edge').verifySmallSpriteEdge({pet:petWindow,edgeTuck,setSize:setPetSize,screen,getMask:()=>spriteEdgeInk});app.quit();return;}
+      if(process.env.PET_CODEX_PETS_QA_PHASE==='edges'){await require('./scripts/verify-small-sprite-edge').verifySmallSpriteEdge({pet:petWindow,edgeTuck,setSize:setPetSize,screen,getMask:()=>spriteEdgeInk,sendCommand,getSettings:()=>settings,getMenu:()=>Menu.buildFromTemplate(menuTemplate()),monitor:activityMonitor});app.quit();return;}
       openCustomization();
       const verifyPets = process.env.PET_CODEX_PETS_QA_PHASE === 'folder'
         ? require('./scripts/verify-local-pet-motion').verifyLocalPetMotion
         : require('./scripts/verify-codex-pets').verifyCodexPets;
-      await verifyPets({ pet: petWindow, localStore: localPetStore, sendCommand, edgeTuck,
+      await verifyPets({ pet: petWindow, localStore: localPetStore, sendCommand, edgeTuck, getMask: () => spriteEdgeInk,
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
         setSize: setPetSize, store: codexPets, packaged: app.isPackaged,
@@ -3423,10 +3454,10 @@ function createPetWindow() {
   edgeTuck?.dispose();
 
   petWindow = candidatePetWindow;
-  spriteEdgeInk=null;spriteEdgeMapped=false;
+  spriteEdgeInk=null;spriteEdgeMapped=false;spriteIdleFacing=undefined;spriteTuckFraction=undefined;spriteEdgeHalf=false;
   edgeTuck = createEdgeTuck({ getWindow: () => petWindow,
     getVisibleHitTest: geometry => spriteEdgeMapped
-      ? containsSpriteEdgeInk(spriteEdgeInk, { ...geometry, ...(dogDreamSkinEnabled ? { tuckFraction: XIAOBAI_TUCK_FRACTION } : {}) })
+      ? containsSpriteEdgeInk(spriteEdgeInk, { ...geometry, idleFacing: spriteIdleFacing, tuckFraction: spriteTuckFraction ?? (dogDreamSkinEnabled ? XIAOBAI_TUCK_FRACTION : undefined) })
       : EdgePeek.containsVisibleBody(settings?.customization?.appearance?.shape, geometry),
     getTuckDelay: () => EdgePeek.specFor(settings?.customization?.appearance?.shape)?.delayMs ?? 650,
     getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
@@ -3837,6 +3868,7 @@ function registerIpc() {
         pets: [...library.values()].map(pet => ({ id: pet.id, name: pet.name, importedId: pet.importedId,
           imported: pet.imported === true, version: pet.version, rows: pet.rows, ...petSheetDescriptor(pet),
           ...(pet.frameMap ? { frameMap: pet.frameMap } : {}),
+          ...(pet.actionLabels ? { actionLabels: pet.actionLabels } : {}),
           imageURL: pathToFileURL(pet.spritesheetPath).href })) };
     } catch (error) { writeError('读取 Codex 宠物', error); return { ok: false, error: '暂时无法读取宠物，请稍后重试' }; }
   });
@@ -4071,7 +4103,9 @@ function registerIpc() {
     if(!fromPetWindow(event))return;
     if(packet===null){spriteEdgeInk=null;return;}
     const mask=normalizeSpriteEdgeInk(packet);if(!mask||!spriteEdgeMapped||mask.id!==settings.customization.appearance.codexPetId)return;
-    spriteEdgeInk=mask;edgeTuck?.publish();
+    spriteEdgeInk = mask;
+    if (spriteEdgeHalf) spriteTuckFraction = spriteHalfTuckFraction(mask, spriteIdleFacing, petWindow.getBounds());
+    edgeTuck?.publish();
   });
 
   ipcMain.on('pet:codex-availability', (event, packet) => {
@@ -4204,6 +4238,15 @@ async function bootstrap() {
     const smokeDirectory = app.commandLine.getSwitchValue('user-data-dir');
     if (!smokeDirectory || fs.realpathSync(app.getPath('userData')) !== fs.realpathSync(smokeDirectory)) {
       throw new Error(`冒烟检查必须使用独立设置目录：指定=${smokeDirectory} 实际=${app.getPath('userData')}`);
+    }
+    if (process.env.PET_SMOKE_WEATHER_ONLY === '1') {
+      const qaRootPath = process.env.PET_WEATHER_QA_ROOT;
+      if (!qaRootPath || !path.isAbsolute(qaRootPath)) throw new Error('天气检查必须使用专属隔离目录');
+      const qaRoot = fs.realpathSync(qaRootPath);
+      if (!/^qiuqiu-weather-qa-[\w-]+$/.test(path.basename(qaRoot)) ||
+          fs.realpathSync(app.getPath('userData')) !== path.join(qaRoot, 'profile')) {
+        throw new Error('天气检查不能使用正式资料目录或目录链接');
+      }
     }
     process.stdout.write('PET_USER_DATA_OK\n');
   }
@@ -4616,12 +4659,14 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   weatherWindow = createWeatherWindow({ BrowserWindow, ipcMain, screen, getReducedMotion: quotaReducedMotion, fetch: (...args) => net.fetch(...args),
+    locationBridge: createLocationBridge({ onDiagnostic: writeWeatherLocationDiagnostic }),
     getCollectionWindow: () => quotaCardGroupWindow?.getWindow?.(),
     alwaysOnTop: settings.alwaysOnTop, filePath: path.join(app.getPath('userData'), 'weather.json'), getPetWindow: () => petWindow,
     getStackAnchor: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean).sort((a,b) => b.y+b.height-a.y-a.height)[0] || null,
     getBubbleBounds: quotaObstacleBounds, getPresentation: () => ({ ...quotaLayoutPresentation(), quotaGroupHidden: Boolean(quotaCardCollected('weather') || quotaFreeStackPlan()?.hidden?.includes('weather')), quotaGroupLayout: quotaFreeStackPlan()?.cards.weather }),
     getObstacles: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean),
     getSuppressed: () => quotaCardGroupInput().suppressed,
+    getCityPickerSuppressed: () => isQuitting || screenLocked,
     getAppearance: () => settings.codexQuotaAppearance,
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },

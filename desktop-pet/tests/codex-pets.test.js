@@ -268,14 +268,28 @@ test('v3 bounded multi-sheet import validates every resource and preserves all a
   const entry=(sheet,start,count)=>({sheet,start,count,durations:Array(count).fill(100),loop:false});
   const frameMap=Object.fromEntries(['idle','run-right','run-left','wave','jump','fail','checking','waiting','running','sleep','wakeup'].map(id=>[id,entry('base',0,1)]));
   frameMap.wave=entry('motion',0,33);frameMap.tail=entry('motion',33,7);
-  const raw={displayName:'楚哥',spriteVersionNumber:3,sheets:{base:{path:'base.png',rows:1},motion:{path:'motion.png',rows:5}},frameMap};
+  const raw={displayName:'楚哥',spriteVersionNumber:3,sheets:{base:{path:'base.png',rows:1},motion:{path:'motion.png',rows:5}},frameMap,actionLabels:{wave:'甩葱歌',tail:'晾猫猫'}};
   fs.writeFileSync(path.join(folder,'base.png'),png(1536,208));fs.writeFileSync(path.join(folder,'motion.png'),png(1536,1040));
   const write=()=>fs.writeFileSync(path.join(folder,'pet.json'),JSON.stringify(raw));write();
   let decoded=0;const store=createCodexPetStore({namespace:'local',sourceRoot:folder,importRoot:path.join(root,'imports'),validateImport:()=>{decoded++;return true}});
   const pet=await store.importDirectory(folder);assert.equal(decoded,2);assert.equal(pet.version,3);assert.equal(pet.frameMap.wave.count,33);assert.equal(Object.keys(pet.sheets).length,2);
   assert(fs.existsSync(pet.sheets.motion.path));assert.equal(store.getImported(pet.id).frameMap.tail.count,7);
+  assert.deepEqual(store.getImported(pet.id).actionLabels, raw.actionLabels);
   fs.writeFileSync(path.join(folder,'motion.png'),png(1536,1040,1));
   const changedPet=await store.importDirectory(folder);assert.notEqual(changedPet.id,pet.id,'every resource contributes to imported identity');
+  assert.equal(pet.idleFacing, undefined);
+  for (const idleFacing of ['left', 'right']) {
+    raw.idleFacing = idleFacing; raw.edgeTuck = 'half'; write();
+    const directional = await store.importDirectory(folder);
+    assert.equal(store.getImported(directional.id).idleFacing, idleFacing);
+    assert.equal(store.getImported(directional.id).edgeTuck, 'half');
+  }
+  for (const fields of [{ idleFacing: 'up', edgeTuck: 'half' }, { edgeTuck: 'half' },
+      { idleFacing: 'left', edgeTuck: 'full' }]) {
+    delete raw.idleFacing; delete raw.edgeTuck; Object.assign(raw, fields); write();
+    await assert.rejects(async () => store.importDirectory(folder), { code: 'INVALID_PET' });
+  }
+  delete raw.idleFacing; delete raw.edgeTuck;
   raw.sheets.motion.path='BASE.png';write();await assert.rejects(async()=>store.importDirectory(folder));
   raw.sheets.motion.path='pet.json';write();await assert.rejects(async()=>store.importDirectory(folder));
   raw.sheets.motion.path='motion.png';
@@ -307,4 +321,22 @@ test('local deletion rejects path input, foreign namespace, symlink roots and fa
  await assert.rejects(f.store.trashImported(pet.id,async()=>calls++));assert.equal(calls,0);
  await assert.rejects(store.trashImported(pet.id,async()=>{throw Error('trash unavailable')}));assert.equal(store.getImported(pet.id).id,pet.id);
  const target=path.join(root,pet.id),moved=path.join(f.root,'moved');fs.renameSync(target,moved);fs.symlinkSync(moved,target);await assert.rejects(store.trashImported(pet.id,async()=>calls++));assert.equal(calls,0);assert(fs.existsSync(path.join(moved,'pet.json')));
+});
+
+
+test('already imported manifests retain custom action labels on reread without rewriting resources or identity', t => {
+  const { add, store, sourceRoot, importRoot } = fixture(t);
+  for (const version of [1, 2]) {
+    const source = add(`动作名${version}`, { spriteVersionNumber: version, actionLabels: { wave: '  甩葱歌  ' } });
+    const original = fs.readFileSync(path.join(source, 'pet.json'));
+    const pet = store.importDirectory(source);
+    assert.deepEqual(pet.actionLabels, { wave: '甩葱歌' });
+    assert(fs.readFileSync(path.join(importRoot, pet.id, 'pet.json')).equals(original));
+    const reopened = createCodexPetStore({ sourceRoot, importRoot });
+    assert.deepEqual(reopened.getImported(pet.id).actionLabels, { wave: '甩葱歌' });
+    assert.equal(reopened.getImported(pet.id).id, pet.id);
+    assert.deepEqual(reopened.listImported().pets.find(p => p.id === pet.id).actionLabels, { wave: '甩葱歌' });
+  }
+  const invalid = add('非法动作名', { actionLabels: { wave: '含\n控制字符' } });
+  assert.throws(() => store.importDirectory(invalid), { code: 'INVALID_PET' });
 });

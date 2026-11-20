@@ -36,7 +36,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const weather = { enabled: false, cardVisible: true, options: null, opens: 0, cityOpens: 0, repositions: 0, expanded: false,
     isEnabled() { return this.enabled; }, isExpanded() { return this.enabled && this.cardVisible && this.expanded; }, isCardVisible() { return this.cardVisible; }, getState: () => ({status:'unconfigured'}),
     setEnabled(value) { this.enabled = value === true; this.options.onChange({enabled:this.enabled}); },
-    setCardVisible(value) { this.cardVisible = value === true; this.options.onLayout(); }, open() { this.opens++; }, openCity() { this.cityOpens++; }, start() {},
+    setCardVisible(value) { this.cardVisible = value === true; this.options.onLayout(); }, open() { this.opens++; }, openCity(owner) { this.cityOpens++; this.cityOwner = owner; return true; }, start() {},
     getWindow: () => null, getBounds: () => null, getVisibleBounds: () => null,
     getLayoutMetrics() { return this.enabled && this.cardVisible ? {width:128,height:32,inset:2}:null; },
     reposition() { this.repositions++; }, resetExpanded() { this.expanded=false; },setGroupTransitionMode() {},captureGroupTransitionFrames:async()=>[],
@@ -5090,4 +5090,36 @@ test('bootstrap天气窗口回调只服务当前存活pet和原controller，退�
   }
   f.app.emit('before-quit');
  }
+});
+test('website weather diagnostics keep the existing consent policy and full main reporter context', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  assert.equal(typeof f.weather.options.locationBridge.locate, 'function');
+  assert.equal(typeof f.weather.options.locationBridge.cancel, 'function');
+  assert.equal(f.weather.options.requireLocationConsent, undefined, 'website does not adopt the MAS confirmation gate');
+  const main = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
+  const functions = ['writeLocalLogLine', 'writeError'].map(name =>
+    main.match(new RegExp('^function ' + name + '\\([^\\n]*\\) \\{[\\s\\S]*?^\\}', 'm'))[0]).join('\n');
+  const captured = [];
+  vm.runInNewContext(functions + ';(' + f.weather.options.onError.toString() + ')(failure, details)', {
+    failure: { code: 'TIMEOUT' }, details: { stage: 'weather-refresh', httpStatus: 503, latitude: 123 },
+    normalizeDiagnostic: require('../lib/error-diagnostics').normalizeDiagnostic,
+    sourceLocation: require('../lib/error-diagnostics').sourceLocation,
+    isQuitting: false, process: { stderr: { write() {} } }, path,
+    app: { getPath: () => '/synthetic-weather-profile' }, fs: { mkdirSync() {}, appendFileSync() {} },
+    feedbackReporting: { capture(scope, error, context) { captured.push(require('../lib/error-diagnostics').normalizeDiagnostic(scope, error, context)); } }
+  });
+  assert.deepEqual(captured, [{ name: 'Error', code: 'TIMEOUT', context: {
+    process: 'main', severity: 'error', stage: 'weather-refresh', httpStatus: 503
+  } }]);
+});
+
+
+test('website weather settings opens against its visible owner while lock and quit still suppress it', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  f.call('globalSettingsWindow = { isDestroyed: () => false, isVisible: () => true, getBounds: () => ({x:100,y:100,width:700,height:600}) }');
+  f.call('settingsCommandTemplate().find(item => item.id === "weather-open").click()');
+  assert.equal(f.weather.cityOwner, f.call('globalSettingsWindow'));
+  assert.equal(f.weather.options.getCityPickerSuppressed(), false);
+  f.call('screenLocked = true'); assert.equal(f.weather.options.getCityPickerSuppressed(), true);
+  f.call('screenLocked = false; isQuitting = true'); assert.equal(f.weather.options.getCityPickerSuppressed(), true);
 });
