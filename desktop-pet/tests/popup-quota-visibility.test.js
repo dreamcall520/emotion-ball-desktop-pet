@@ -9,6 +9,27 @@ test('opening intent hides cards before first native show, blocks late show and 
  const a=f.win('chat.html');const before=a.show;a.show=()=>{assert.equal(card.visible,false);assert.equal(f.registry.isBlocked(),true);before()};await a.loadFile(path.join(root,'chat.html'));assert.equal(card.visible,false);card.show();assert.equal(card.visible,false);a.show();
  const b=f.win('api-usage.html');await b.loadFile(path.join(root,'api-usage.html'));b.show();a.hide();f.flush();assert.equal(f.registry.isBlocked(),true);b.close();assert.equal(f.registry.isBlocked(),true,'release waits to coalesce handoff');f.flush();assert.equal(f.registry.isBlocked(),false);assert.deepEqual(f.events,[true,false]);
 });
+test('explicit hidden popup preparation loads without hiding cards, then native show restores popup ownership',async()=>{
+ const f=fixture(),card=f.win('quota-label.html');await card.loadFile(path.join(root,'quota-label.html'));card.show();
+ const game=f.win('quota-guard.html');assert.equal(f.registry.preparePopup(game),true);await game.loadFile(path.join(root,'quota-guard.html'));
+ assert.equal(f.registry.isBlocked(),false);assert.equal(card.visible,true);assert.equal(card.hides,0);
+ game.show();assert.equal(f.registry.isBlocked(),true);assert.equal(card.visible,false);assert.equal(f.registry.preparePopup(game),false);
+ game.hide();f.flush();assert.equal(f.registry.isBlocked(),false);
+ await game.loadFile(path.join(root,'quota-guard.html'));assert.equal(f.registry.isBlocked(),true,'after a real presentation, ordinary reloads keep the original pending policy');
+ game.hide();f.flush();const ordinary=f.win('chat.html');await ordinary.loadFile(path.join(root,'chat.html'));assert.equal(f.registry.isBlocked(),true);
+});
+test('prepared popup restore and actual modal still block; preparing it does not release a different popup',async()=>{
+ const f=fixture(),ordinary=f.win('chat.html');await ordinary.loadFile(path.join(root,'chat.html'));
+ const game=f.win('quota-guard.html');f.registry.preparePopup(game);await game.loadFile(path.join(root,'quota-guard.html'));f.flush();assert.equal(f.registry.isBlocked(),true);
+ ordinary.hide();f.flush();assert.equal(f.registry.isBlocked(),false);
+ game.visible=true;game.emit('restore');assert.equal(f.registry.isBlocked(),true);game.hide();f.flush();assert.equal(f.registry.isBlocked(),false);
+});
+test('prepared game cancelled before a delayed native show event cannot strand the popup blocker',async()=>{
+ const f=fixture(),game=f.win('quota-guard.html');f.registry.preparePopup(game);await game.loadFile(path.join(root,'quota-guard.html'));
+ game.show();game.hide();f.flush();assert.equal(f.registry.isBlocked(),false);
+ game.emit('show');f.flush();assert.equal(f.registry.isBlocked(),false,'contradictory old show is not a new game presentation');
+ game.show();assert.equal(f.registry.isBlocked(),true,'a real new show still owns the blocker');
+});
 test('cancelled close, minimized/restored windows and async handoff preserve exact ownership',async()=>{
  const f=fixture(),a=f.win('about.html');await a.loadFile(path.join(root,'about.html'));a.show();a.on('close',e=>e.preventDefault());a.close();f.flush();assert.equal(f.registry.isBlocked(),true);
  a.minimized=true;a.emit('minimize');f.flush();assert.equal(f.registry.isBlocked(),false);a.minimized=false;a.emit('restore');assert.equal(f.registry.isBlocked(),true);

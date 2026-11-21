@@ -42,12 +42,12 @@ function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{}
   function track(win){
     if(windows.has(win)||win.isDestroyed())return;
     const contents=win.webContents,preload=contents.getLastWebPreferences?.()?.preload;
-    const r={win,contents,role:null,url:'',pending:false,visible:win.isVisible?.()===true,minimized:false,modal:false,ended:false,loadToken:0,suppressedOpacity:null,nativeOpacity:win.setOpacity?.bind(win),nativeHide:typeof win.hide==='function'?win.hide.bind(win):null};windows.set(win,r);
+    const r={win,contents,role:null,url:'',pending:false,prepared:false,visible:win.isVisible?.()===true,minimized:false,modal:false,ended:false,loadToken:0,suppressedOpacity:null,nativeOpacity:win.setOpacity?.bind(win),nativeHide:typeof win.hide==='function'?win.hide.bind(win):null};windows.set(win,r);
     const setURL=url=>{r.url=url;r.role=role(url,preload);};
     if(preload){const name=path.basename(preload,'-preload.js');if(CARDS.has(name)&&path.dirname(preload)===root)r.role='card';}
     function wrap(name,handler){if(typeof win[name]!=='function')return;const native=win[name].bind(win);win[name]=(...args)=>handler(native,args);}
     function loading(native,args,url){
-      const token=++r.loadToken;setURL(url);r.pending=r.role==='popup';r.modal=false;update();
+      const token=++r.loadToken;setURL(url);r.pending=r.role==='popup'&&!r.prepared;r.modal=false;update();
       try{const result=native(...args);if(result?.then)result.catch(()=>{if(!r.ended&&r.loadToken===token){r.pending=false;update();}});return result;}
       catch(error){if(r.loadToken===token){r.pending=false;update();}throw error;}
     }
@@ -59,13 +59,13 @@ function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{}
     });
     for(const name of ['show','showInactive','restore'])wrap(name,(native,args)=>{
       if(r.role==='card'&&blocked&&win.getOpacity?.()!==0){r.nativeHide?.();return;}
-      r.visible=true;r.pending=false;r.minimized=false;update();return native(...args);
+      r.prepared=false;r.visible=true;r.pending=false;r.minimized=false;update();return native(...args);
     });
     wrap('hide',(native,args)=>{r.visible=false;r.pending=false;r.loadToken++;update();return native(...args);});
-    win.on('show',()=>{if(r.role==='card'&&blocked&&win.getOpacity?.()!==0){r.nativeHide?.();return;}r.visible=true;r.pending=false;r.minimized=false;update();});
+    win.on('show',()=>{if(r.preparedWindow&&win.isVisible?.()===false)return;if(r.role==='card'&&blocked&&win.getOpacity?.()!==0){r.nativeHide?.();return;}r.prepared=false;r.visible=true;r.pending=false;r.minimized=false;update();});
     win.on('hide',()=>{if(r.ended||win.isDestroyed()||win.isVisible?.()===true)return;r.visible=false;r.pending=false;update();});
     win.on('minimize',()=>{if(r.ended||win.isDestroyed()||win.isMinimized?.()===false)return;r.minimized=true;r.pending=false;update();});
-    win.on('restore',()=>{if(r.role==='card'&&blocked){r.nativeHide?.();return;}r.minimized=false;r.visible=true;update();});
+    win.on('restore',()=>{if(r.role==='card'&&blocked){r.nativeHide?.();return;}r.prepared=false;r.minimized=false;r.visible=true;update();});
     win.once('closed',()=>{r.ended=true;windows.delete(win);update();});
     contents.on('did-fail-load',(_event,code,_description,url,isMainFrame)=>{if(isMainFrame&&code!==-3&&url===r.url){r.pending=false;update();}});
     contents.on('render-process-gone',()=>{r.pending=false;r.visible=false;r.modal=false;update();});
@@ -77,6 +77,7 @@ function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{}
     if(valid){r.modal=value;update();}event.returnValue=valid;
   });
   return{track,acquire,isBlocked:()=>blocked,
+    preparePopup(win){track(win);const r=windows.get(win);if(!r||r.ended||r.visible||win.isVisible?.()===true)return false;r.preparedWindow=true;r.prepared=true;r.pending=false;update();return true;},
     cancelPending(){for(const r of windows.values())if(r.pending&&!r.visible){r.pending=false;r.loadToken++;}update();},
     setShortcutPresenting(value){if(value&&!shortcutRelease)shortcutRelease=acquire();else if(!value&&shortcutRelease){const release=shortcutRelease;shortcutRelease=null;release();}}};
 }

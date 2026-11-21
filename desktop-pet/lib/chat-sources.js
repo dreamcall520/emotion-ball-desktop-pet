@@ -33,7 +33,7 @@ function createChatSources({ codex, createZcode, isZcodeEnabled = () => false,
     if (id === 'zcode') zcode = null; else workbuddy = null;
     if (source === id) {
       source = 'codex';
-      try { onSelect(source); } catch (_) { /* Disable must release the connection even if saving failed. */ }
+      try { onSelect(source, { reason: 'disabled' }); } catch (_) { /* Disable must release the connection even if saving failed. */ }
     }
     switching = true;
     sourceChanged(source);

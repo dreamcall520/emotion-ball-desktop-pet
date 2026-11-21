@@ -310,6 +310,18 @@ test('云形所有待机眼环在普通与放大姿态下完整落入轮廓', ()
   const blueStops = descendants(container).filter(node => node.tag === 'stop')
     .map(node => node.attrs['stop-color']);
   assert.notEqual(blueStops[0], blueStops[1], 'other cloud colors retain their gradient');
+  const channels = hex => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16));
+  for (const color of ['#D1CBE7', '#5B3BC7', '#304864']) {
+    ball.applyPose({ body: { x: 3, y: -2, rotate: 12, scale: 1, color, yaw: 0 },
+      left: darkEyePose(rings.EXPRESSIONS[0][0]), right: darkEyePose(rings.EXPRESSIONS[0][1]) });
+    const stops = descendants(container).filter(node => node.tag === 'stop')
+      .map(node => channels(node.attrs['stop-color']));
+    const selected = channels(color);
+    assert.ok(stops.every(stop => stop.every((channel, index) => channel >= selected[index])),
+      `${color}: ordinary cloud lighting must not paint a dark band inside the selected body color`);
+    assert.ok(stops.some(stop => stop.some((channel, index) => channel > selected[index])),
+      `${color}: retain the soft volume highlight`);
+  }
   ball.destroy();
 
   const auroraShape = custom.createShape({ shape: 'aurora-cloud' });

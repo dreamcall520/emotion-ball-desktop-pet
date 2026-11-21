@@ -105,7 +105,7 @@ test('损坏文件回退且有效设置可回读', t => {
     uiTheme: 'blue',
     chatModel: 'auto',
     chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact',
-    chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto',
+    chatProvider: 'codex', workbuddyEnabled: false, workbuddyNotificationsEnabled: true, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto',
     apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '',
     notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
@@ -132,7 +132,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyNotificationsEnabled: true, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
     quotaCardOrder: DEFAULTS.quotaCardOrder, quotaCardPinned: DEFAULTS.quotaCardPinned,
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,

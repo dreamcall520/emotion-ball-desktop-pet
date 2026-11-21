@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { pathToFileURL } = require('node:url');
 const { setImmediate: flush } = require('node:timers/promises');
-const { createQuotaGuardWindow, guardModel, CHANNEL } = require('../lib/quota-guard-window');
+const { createQuotaGuardWindow, guardModel, guardReadyKey, CHANNEL } = require('../lib/quota-guard-window');
 const { createQuotaLabelWindow } = require('../lib/quota-label-window');
 const { quotaLabelBounds, quotaLabelSize } = require('../lib/quota-label-placement');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
@@ -17,7 +17,7 @@ const model = (remaining = 64, windowMinutes = 300) => ({ state: 'ready', items:
 ], secret: 'PRIVATE', overflow: 0 });
 const intersects = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 
-function fixture({ getObstacles = () => [] } = {}) {
+function fixture({ getObstacles = () => [], renderReady = () => Promise.resolve(true), prepareWindow = () => {}, onPresentation = () => {} } = {}) {
   const windows = [], errors = [], visibility = [], layouts = [];
   let anchor = { x: 600, y: 300, width: 80, height: 80 }, allowed = true, size = 'standard', appearance = 'light';
   class Window extends EventEmitter {
@@ -28,6 +28,7 @@ function fixture({ getObstacles = () => [] } = {}) {
       this.webContents.isDestroyed = () => this.destroyed === true;
       this.sent = [];
       this.webContents.send = (...args) => this.sent.push(args);
+      this.webContents.executeJavaScript = code => renderReady(code);
       this.webContents.setWindowOpenHandler = fn => { this.popup = fn; };
       windows.push(this);
     }
@@ -40,8 +41,8 @@ function fixture({ getObstacles = () => [] } = {}) {
     setVisibleOnAllWorkspaces() {}
     setHiddenInMissionControl() {}
     setIgnoreMouseEvents(...args) { this.ignore = args; }
-    show() { this.visible = true; this.shows = (this.shows || 0) + 1; }
-    showInactive() { this.visible = true; }
+    show() { const wasVisible=this.visible;this.visible = true; this.shows = (this.shows || 0) + 1; if(!wasVisible)this.emit('show'); }
+    showInactive() { const wasVisible=this.visible;this.visible = true;if(!wasVisible)this.emit('show'); }
     focus() { this.focuses = (this.focuses || 0) + 1; }
     hide() { this.visible = false; }
     close() { const event = { prevented: false, preventDefault() { this.prevented = true; } }; this.emit('close', event); if (!event.prevented) this.destroy(); return event; }
@@ -50,7 +51,7 @@ function fixture({ getObstacles = () => [] } = {}) {
   const screen = { getDisplayMatching: bounds => ({ workArea: bounds.x < 0 ? { x: -1280, y: -100, width: 1280, height: 900 } : AREA }), getPrimaryDisplay: () => ({ workArea: AREA }) };
   const guard = createQuotaGuardWindow({ BrowserWindow: Window, screen,
     getAnchor: () => anchor, canShow: () => allowed, getSize: () => size, getAppearance: () => appearance, getObstacles,
-    onError: error => errors.push(error), onVisibilityChange: value => visibility.push(value),
+    prepareWindow, onPresentation, onError: error => errors.push(error), onVisibilityChange: value => visibility.push(value),
     onLayout: () => { const win = guard.getWindow(); layouts.push({ visible: win?.isVisible(), bounds: win?.getBounds() }); } });
   return { guard, windows, errors, visibility, layouts, Window, screen, get anchor() { return anchor; }, set anchor(value) { anchor = value; },
     set allowed(value) { allowed = value; }, set size(value) { size = value; }, set appearance(value) { appearance = value; } };
@@ -115,12 +116,12 @@ test('额度标签 ready 折叠才为角色扩窗，stale/unknown 还原原卡�
   label.destroy();
 });
 
-test('守护战为安全单实例，手动关闭隐藏并发暂停，重复打开聚焦且不重载同局', () => {
+test('守护战为安全单实例，手动关闭隐藏并发暂停，重复打开聚焦且不重载同局', async () => {
   const f = fixture();
   assert.equal(f.guard.open(model()), true);
   const win = f.windows[0];
   assert.equal(win.visible, undefined, '页面载入前不闪现');
-  win.webContents.emit('did-finish-load');
+  win.webContents.emit('did-finish-load'); await flush();
   assert.equal(win.visible, true);
   assert.equal(win.sent.at(-1)[0], CHANNEL); assert.equal(win.sent.at(-1)[1].visible, true);
   assert.equal(JSON.stringify(win.sent).includes('PRIVATE'), false);
@@ -136,7 +137,7 @@ test('守护战为安全单实例，手动关闭隐藏并发暂停，重复打�
   const close = win.close();
   assert.equal(close.prevented, true); assert.equal(win.destroyed, undefined);
   assert.equal(win.visible, false); assert.equal(win.sent.at(-1)[1].visible, false);
-  f.guard.open(model(50, 10080));
+  f.guard.open(model(50, 10080)); await flush();
   assert.equal(f.windows.length, 1); assert.equal(win.loadCalls, 1); assert.equal(win.focuses, 2);
   assert.equal(win.sent.at(-1)[1].visible, true);
   assert.deepEqual(f.visibility, [true, false, true]);
@@ -144,11 +145,11 @@ test('守护战为安全单实例，手动关闭隐藏并发暂停，重复打�
   f.guard.destroy(); assert.equal(win.destroyed, true); assert.equal(f.guard.getWindow(), null);
 });
 
-test('布局通知读取到显示、移动及隐藏完成后的原生窗口状态', () => {
+test('布局通知读取到显示、移动及隐藏完成后的原生窗口状态', async () => {
   const f = fixture();
   f.guard.open(model()); const win = f.windows[0];
   assert.deepEqual(f.layouts, [], '异步载入前没有可见布局');
-  win.webContents.emit('did-finish-load');
+  win.webContents.emit('did-finish-load'); await flush();
   assert.deepEqual(f.layouts.at(-1), { visible: true, bounds: win.getBounds() });
   const previous = f.layouts.at(-1).bounds;
   f.anchor = { x: -600, y: 100, width: 180, height: 180 }; f.guard.reposition();
@@ -160,17 +161,91 @@ test('布局通知读取到显示、移动及隐藏完成后的原生窗口状�
   f.guard.destroy();
 });
 
-test('关闭或全局隐藏发生于载入中时不会复活，隐藏后更新仍保持暂停', () => {
+test('关闭或全局隐藏发生于载入中时不会复活，隐藏后更新仍保持暂停', async () => {
   const f = fixture();
   f.guard.open(model()); const win = f.windows[0];
   f.guard.close(); win.webContents.emit('did-finish-load');
   assert.equal(win.visible, false); assert.equal(win.sent.at(-1)[1].visible, false);
   f.guard.update(model(40)); assert.equal(win.sent.at(-1)[1].visible, false);
-  f.guard.open(model(40)); assert.equal(win.visible, true);
+  f.guard.open(model(40)); await flush(); assert.equal(win.visible, true);
   f.allowed = false; f.guard.update(model(30));
   assert.equal(f.guard.isVisible(), false); assert.equal(win.sent.at(-1)[1].visible, false);
   assert.equal(f.guard.open(model()), false);
   f.guard.destroy();
+});
+
+test('原生游戏首开与复开都等当前模型和精灵就绪，取消后迟到回执不能显示', async () => {
+  const requests = [];
+  const f = fixture({ renderReady: code => new Promise(resolve => requests.push({ code, resolve })) });
+  const practice = { state: 'ready', items: [], practice: true };
+  f.guard.open(practice); const win = f.guard.getWindow(); win.webContents.emit('did-finish-load');
+  await flush(); assert.equal(win.isVisible(), false); assert.equal(requests.length, 1);
+  assert.equal(win.sent.at(-1)[1].practice, true); assert.match(requests[0].code, /quotaGuardView\.whenReady/);
+  f.guard.reposition(); f.guard.update(practice); assert.equal(requests.length, 1, 'same pending model shares a readiness request');
+  requests[0].resolve(true); await flush(); assert.equal(win.isVisible(), true);
+  f.guard.close(); f.guard.open(practice); assert.equal(requests.length, 2); assert.equal(win.isVisible(), false);
+  f.guard.close(); requests[1].resolve(true); await flush(); assert.equal(win.isVisible(), false);
+  f.guard.destroy();
+});
+test('prewarm only loads hidden local graphics and presents the actual chosen game later without resetting a round', async () => {
+  const prepared=[],requests=[],shown=[];
+  const f=fixture({prepareWindow:win=>prepared.push(win),renderReady:code=>{requests.push(code);return Promise.resolve(true);},onPresentation:value=>shown.push(value)});
+  const warming=f.guard.prewarm(),win=f.guard.getWindow();assert.equal(prepared.length,1);assert.equal(prepared[0],win);
+  assert.equal(win.isVisible(),false);assert.equal(f.guard.isVisible(),false);assert.deepEqual(f.visibility,[]);assert.deepEqual(win.sent,[]);
+  win.webContents.emit('did-finish-load');assert.equal(await warming,true);assert.equal(win.isVisible(),false);assert.deepEqual(win.sent,[]);assert.deepEqual(shown,[]);
+  assert.match(requests[0],/whenReady\(null\)/);
+  f.guard.open({state:'ready',items:[],practice:true});await flush();assert.equal(win.isVisible(),true);assert.deepEqual(shown,[{practice:true,ready:true}]);
+  f.guard.reposition();f.guard.update({state:'ready',items:[],practice:true});await f.guard.prewarm();assert.equal(shown.length,1);assert.equal(win.loadCalls,1);
+  f.guard.close();f.guard.open(model());await flush();assert.deepEqual(shown,[{practice:true,ready:true},{practice:false,ready:true}]);assert.equal(win.loadCalls,1);
+  f.guard.destroy();
+});
+test('an actual open during prewarm loading supersedes the decode-only request and still presents its chosen model', async () => {
+  const requests=[];
+  const f=fixture({renderReady:code=>{requests.push(code);return Promise.resolve(true);}});
+  const warming=f.guard.prewarm(),win=f.guard.getWindow();f.guard.open({state:'ready',practice:true,items:[]});
+  win.webContents.emit('did-finish-load');await warming;await flush();
+  assert.equal(win.isVisible(),true);assert.equal(requests.some(code=>code.includes('whenReady(null)')),false);
+  assert.equal(win.sent.at(-1)[1].practice,true);f.guard.destroy();
+});
+test('background quota updates before the first explicit open cannot start a prewarmed game round', async () => {
+  const f=fixture(),warming=f.guard.prewarm(),win=f.guard.getWindow();f.guard.update(model());
+  win.webContents.emit('did-finish-load');await warming;f.guard.update(model(42));await flush();
+  assert.deepEqual(win.sent,[]);assert.equal(win.isVisible(),false);
+  f.guard.open({state:'ready',practice:true,items:[]});await flush();assert.equal(win.sent.at(-1)[1].practice,true);
+  f.guard.close();f.guard.update(model(42));assert.equal(win.sent.at(-1)[1].items[0].remaining,42,'an existing game still receives its original hidden-update contract');
+  f.guard.destroy();
+});
+test('等待首帧时更换模型、销毁或资源失败会使旧回执失效', async () => {
+  const requests = [];
+  const f = fixture({ renderReady: () => new Promise((resolve, reject) => requests.push({ resolve, reject })) });
+  f.guard.open({ state: 'ready', items: [], practice: true }); const win = f.guard.getWindow(); win.webContents.emit('did-finish-load');
+  f.guard.update(model()); assert.equal(requests.length, 2);
+  requests[0].resolve(true); await flush(); assert.equal(win.isVisible(), false);
+  requests[1].resolve(true); await flush(); assert.equal(win.isVisible(), true); assert.equal(win.sent.at(-1)[1].practice, undefined);
+  f.guard.close(); f.guard.open(model()); const pending = requests.at(-1); f.guard.destroy(); pending.resolve(true); await flush();
+  assert.equal(win.destroyed, true); assert.equal(win.isVisible(), false);
+  const failed = fixture({ renderReady: () => Promise.reject(Error('GUARD_SPRITES_UNAVAILABLE')) });
+  failed.guard.open(model()); failed.guard.getWindow().webContents.emit('did-finish-load'); await flush();
+  assert.equal(failed.guard.isVisible(), false); assert.equal(failed.guard.getWindow(), null); assert.equal(failed.errors.length, 1);
+});
+test('等待首帧时数据变为不可用，旧的ready回执不能显示等待占位窗口', async () => {
+  const requests = [];
+  const f = fixture({ renderReady: () => new Promise(resolve => requests.push(resolve)) });
+  f.guard.open({ state: 'ready', items: [], practice: true }); const win = f.guard.getWindow(); win.webContents.emit('did-finish-load');
+  f.guard.update({ state: 'disconnected', items: [] }); requests[0](true); await flush();
+  assert.equal(win.isVisible(), false); assert.equal(f.guard.isVisible(), false, 'failed loading cannot leave an invisible game suppressing other cards');
+  f.guard.update({ state: 'ready', items: [], practice: true }); await flush(); assert.equal(win.isVisible(), false);
+  f.guard.open({ state: 'ready', items: [], practice: true }); requests.at(-1)(true); await flush();
+  assert.equal(win.isVisible(), true); f.guard.destroy();
+});
+test('window与renderer按实际游戏模型确认首帧，Codex非游戏字段不阻塞、ZCode周期保持隔离', () => {
+  const { readyKey } = require('../quota-guard-renderer');
+  for (const value of [model(), { state: 'ready', practice: true, items: [] },
+    { state: 'ready', sourceId: 'zcode', items: [{ label: 'ZCode', remaining: 31.5, windowMinutes: null, bucketId: 'zcode:fixture', periodStart: 1000, resetsAt: 2000 }] }]) {
+    const sanitized = guardModel(value); assert.equal(guardReadyKey(sanitized), readyKey(sanitized));
+  }
+  assert.equal(guardReadyKey(guardModel(model())), guardReadyKey(guardModel(model(64, 300))));
+  assert.notEqual(guardReadyKey(guardModel(model())), guardReadyKey(guardModel({ state: 'ready', practice: true, items: [] })));
 });
 
 test('未知与过期不能新开游戏，已开窗口持续接收新状态、周期、主题且不篡改源模型', () => {

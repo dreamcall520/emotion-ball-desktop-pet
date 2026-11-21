@@ -440,7 +440,7 @@
     const state = snapshot.firstReleaseConnection;
     const section = el('section', '', 'group');
     section.append(el('h3', '启用联动'));
-    const row = el('div', '', 'row');
+    const row = el('div', '', state.connected === true ? 'row store-connected-row' : 'row');
     const info = el('div');
     const identity = el('div', '', 'store-codex-identity');
     const icon = el('img');
@@ -503,7 +503,8 @@
     ['访问范围', '使用所选 WorkBuddy 应用和账号目录。'],
     ['功能用途', '由官方本机登录组件查询积分余额和消耗统计。', '在球球中使用当前 WorkBuddy 账号聊天。'],
     ['发送说明', '聊天内容发送给 WorkBuddy 官方服务。', '聊天消耗当前账号积分，可随时解除连接。'],
-    ['登录信息', '仅在本机使用，不复制到球球资料。', '不展示登录信息，可随时解除授权。']
+    ['登录信息', '仅在本机使用，不复制到球球资料。', '不展示登录信息，可随时解除授权。'],
+    ['动画提醒', '默认开启思考动画和新结果提醒。', '首次需选择 WorkBuddy 目录，安装提醒组件。']
   ];
   function storeWorkbuddySection() {
     const state = snapshot.firstReleaseWorkbuddyConnection;
@@ -512,7 +513,7 @@
     const working = busy || state.status === 'working';
     const section = el('section', '', 'group');
     section.append(el('h3', '启用联动'));
-    const row = el('div', '', 'row'), info = el('div'), identity = el('div', '', 'store-codex-identity');
+    const row = el('div', '', connected ? 'row store-connected-row' : 'row'), info = el('div'), identity = el('div', '', 'store-codex-identity');
     const icon = el('img'); icon.alt = ''; icon.src = 'assets/integrations/workbuddy.png';
     identity.append(icon, el('span', '本机 WorkBuddy', 'row-title'));
     const statusText = needsChatAuthorization ? '积分已连接，聊天待授权' : state.status === 'error' ? '查询异常' : state.status === 'needs-authorization' && state.enabled ? '需重新授权' : state.status === 'connecting' ? '正在查询积分余额…' : connected ? '已连接' : '未连接';
@@ -559,8 +560,8 @@
     const status = el('span', tasks.authorized ? '已授权' : '未授权', 'store-codex-state');
     status.setAttribute('role','status'); if (tasks.authorized) status.dataset.connected = '';
     identity.append(status); info.append(identity);
-    info.append(el('p','在球球中查看 WorkBuddy 任务和待查看提醒。','description'));
-    info.append(el('p','只读任务标题、状态和未读标记，不读取正文。','description'));
+    info.append(el('p','查看 WorkBuddy 任务和未读结果。','description'));
+    info.append(el('p','只看任务名称、状态和是否已读，不读取聊天内容。','description'));
     const message = workbuddyTasksNotice || (tasks.status === 'error' ? tasks.message : '');
     if (message) { const note=el('p',message,'description'); note.setAttribute('role','status'); info.append(note); }
     const button=el('button',tasks.authorized ? '撤销授权' : '授权任务','action'); button.type='button'; button.dataset.action='store-workbuddy-tasks'; button.disabled=busy || tasks.status==='working';
@@ -586,8 +587,9 @@
   function storeWorkbuddyNotificationsSection(notifications) {
     const section=el('section','','group');section.dataset.workbuddyNotifications='';section.append(el('h3','动画提醒'));
     const row=el('div','','row'),info=el('div'),status=el('span',notifications.enabled ? notifications.connected ? '已启用' : '待连接' : '未启用','store-codex-state');
-    status.setAttribute('role','status');if(notifications.enabled && notifications.connected)status.dataset.connected='';info.append(status,el('p','任务处理中显示思考动画，本轮回复结束后提示。','description'));
-    const message=workbuddyNotificationsNotice || notifications.message;
+    status.setAttribute('role','status');if(notifications.enabled && notifications.connected)status.dataset.connected='';info.append(status,el('p','任务处理时显示思考动画，有新结果时提醒你。','description'));
+    const healthy=notifications.enabled === true && notifications.connected === true && notifications.status === 'ready';
+    const message=workbuddyNotificationsNotice || (healthy && notifications.message === '已启用；新任务可触发处理中和本轮回复结束提醒。' ? '' : notifications.message);
     if(message){const note=el('p',message,'description');note.setAttribute('role','status');info.append(note);}
     const button=el('button',notifications.enabled ? '停用提醒' : '启用提醒','action');button.type='button';button.dataset.action='store-workbuddy-notifications';button.disabled=busy || notifications.status==='working';button.onclick=()=>void manageStoreWorkbuddyNotifications(notifications.enabled === true);
     row.append(info,button);section.append(row);return section;
@@ -641,7 +643,7 @@
     if (busy) return;
     busy = true; request++;
     try {
-      if (await confirmStoreCodex('解除 WorkBuddy 连接？', ['停止积分查询、消耗统计和聊天。', '撤销本地授权；再次使用需要重新连接。'], '解除连接') !== 'confirm') return;
+      if (await confirmStoreCodex('解除 WorkBuddy 连接？', ['停止积分查询、消耗统计和聊天。', '解除后会撤销本地授权，再次使用时需要重新连接。'], '解除连接') !== 'confirm') return;
       const result = await api.workbuddyConnection('disconnect');
       if (result?.snapshot) snapshot = result.snapshot;
       workbuddyNotice = result?.status === 'disconnected' ? null : storeWorkbuddyNotice(result);

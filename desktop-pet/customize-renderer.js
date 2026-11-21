@@ -267,10 +267,12 @@
     const orb = state.appearance.shape === 'soft-orb';
     const visible = state.appearance.shape === 'aurora-cloud';
     const sheep = state.appearance.shape === 'new-year-sheep';
-    $('appearance-colors-field').hidden = sheep;
+    const fixedSprite = state.appearance.shape === 'codex-pet';
+    const colorsHidden = sheep || fixedSprite;
+    $('appearance-colors-field').hidden = colorsHidden;
     $('manual-section').hidden = sheep || orb;
-    const codex = state.appearance.shape === 'codex-pet' || sheep || orb;
-    if (sheep && pickerBinding) closeColorPicker(false);
+    const codex = fixedSprite || sheep || orb;
+    if (colorsHidden && pickerBinding) closeColorPicker(false);
     $('manual-toggle').disabled = visible || codex;
     $('manual-hint').textContent = sheep ? '咩咩保留原画配色和比例，可选择主题、调整透明度' : codex ? '选择球球形态后，可调整轮廓与五官' : visible
       ? '为了保持完整的动效体验，暂不支持轮廓与五官微调'
@@ -279,8 +281,8 @@
     showManual(visible || codex ? false : !$('manual-controls').hidden);
     renderSliders();
     for (const id of Object.keys(rangeLimits)) if (id !== 'aurora-transparency') $(id).disabled = !canSave || visible || codex;
-    for (const [id, hex] of colorBindings) { $(id).disabled = !canSave || sheep; $(hex).disabled = !canSave || sheep; }
-    for (const id of ['body-swatches', 'eye-swatches']) for (const button of $(id).children) button.disabled = !canSave || sheep;
+    for (const [id, hex] of colorBindings) { $(id).disabled = !canSave || colorsHidden; $(hex).disabled = !canSave || colorsHidden; }
+    for (const id of ['body-swatches', 'eye-swatches']) for (const button of $(id).children) button.disabled = !canSave || colorsHidden;
     $('aurora-style-field').hidden = !visible;
     for (const style of ['dimensional', 'simple']) {
       $('aurora-style-' + style).setAttribute('aria-pressed', String(state.appearance.auroraStyle === style));
@@ -394,7 +396,7 @@
   function setColorControlsEnabled(enabled) {
     renderSheepTheme(enabled);
     renderOrbOptions(enabled);
-    const colorsEnabled = enabled && state.appearance.shape !== 'new-year-sheep';
+    const colorsEnabled = enabled && !['new-year-sheep', 'codex-pet'].includes(state.appearance.shape);
     for (const [id] of colorBindings) $(id).disabled = !colorsEnabled;
     for (const id of ['color-hue', 'color-picker-hex', 'color-red', 'color-green', 'color-blue']) $(id).disabled = !colorsEnabled;
     $('color-sv').setAttribute('aria-disabled', String(!colorsEnabled));

@@ -110,6 +110,7 @@ body{padding:0;background:var(--surface);overflow:hidden}
 .startup-default{display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;color:var(--muted);font-size:12px}
 .startup-default input{width:14px;height:14px;margin:0}
 .footer-actions{display:flex;align-items:center;gap:14px}
+.footer-actions .secondary{font-size:12px}
 .footer-actions .primary{min-width:98px;font-size:12px}
 .toast{bottom:30px;max-width:calc(100% - 48px);text-align:center;white-space:nowrap}
 @media(max-width:800px),(max-height:620px){.studio-header{padding:44px 18px 12px}.workspace{padding:12px 18px 16px;gap:18px;grid-template-columns:minmax(260px,.82fr) minmax(340px,1.18fr)}.preview-mode{margin-bottom:10px}.stage{min-height:210px}.studio-footer{min-height:60px;padding:12px 18px}.shape-option{min-height:77px}.shape-art{width:44px;height:44px}.shape-art img{width:78px;height:78px;left:-17px;top:-17px}.form-section{margin-top:15px;padding-top:13px}}

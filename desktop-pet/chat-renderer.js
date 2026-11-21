@@ -386,7 +386,7 @@
     const showConnectionNotice = needsAuthorization && !historyOpen;
     byId('source-feedback').hidden = !showConnectionNotice;
     byId('source-hint').textContent = showConnectionNotice
-      ? snapshot.connection === 'connecting' ? '正在检查连接…' : '连接本机应用后即可聊天。'
+      ? snapshot.connection === 'connecting' ? '正在检查连接…' : snapshot.firstRelease === true ? '先连接 Codex 或 WorkBuddy，就能聊天了。' : '连接本机应用后即可聊天。'
       : '';
     if (enableSource) {
       enableSource.hidden = !showConnectionNotice || typeof api.openConnections !== 'function';

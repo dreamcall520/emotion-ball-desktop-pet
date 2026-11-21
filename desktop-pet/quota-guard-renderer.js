@@ -30,6 +30,11 @@
         ? { remaining: item.remaining, windowMinutes: item.windowMinutes } : null;
     } catch (_) { return null; }
   }
+  function readyKey(value) {
+    const item = primary(value); if (!item) return null;
+    return JSON.stringify([value.practice === true, value.sourceId === 'zcode' ? 'zcode' : 'codex',
+      item.windowMinutes, item.remaining, item.bucketId || null, item.periodStart ?? null, item.resetsAt ?? null]);
+  }
   function spring(x, velocity, target, dt, speed) {
     const distance = x - target, c = velocity + speed * distance, e = Math.exp(-speed * dt);
     return [target + (distance + c * dt) * e, (velocity - speed * c * dt) * e];
@@ -127,7 +132,7 @@
     }
     snapshot() { return { ready: this.available, visible: this.visible, paused: this.paused, reduced: this.reduced, round: this.round, quota: this.quota, period: this.period, time: this.time, outcome: this.outcome, endingProgress: this.endingProgress, playerHits: this.playerHits, winHits: WIN_HITS, hits: this.hits, shots: this.shots, autoShots: this.autoShots, clickShots: this.clickShots, lastProjectileSpeed: this.lastProjectileSpeed || 0, progress: this.progress, drive: this.drive, recoil: this.recoil, zombieX: this.zombieX, zombieV: this.zombieV, bite: this.bite, flight: this.flight.length, effects: this.effects.length }; }
   }
-  if (typeof module === 'object' && module.exports) module.exports = { GuardGame, primary, bitePath, spring, WIN_HITS, remainingText };
+  if (typeof module === 'object' && module.exports) module.exports = { GuardGame, primary, readyKey, bitePath, spring, WIN_HITS, remainingText };
   if (!root.document) return;
   const doc = root.document, $ = id => doc.getElementById(id), ns = 'http://www.w3.org/2000/svg';
   const reduced = root.matchMedia('(prefers-reduced-motion: reduce)'), darkMedia = root.matchMedia('(prefers-color-scheme: dark)');
@@ -235,6 +240,19 @@
   if (!$('guard-panel') || !root.petQuotaGuard) return;
   const bridge = root.petQuotaGuard, game = new GuardGame(), pet = createPet($('guard-pet'), 'guard', () => game.time), effectNodes = new Map();
   let raf = 0, last = 0, spriteTime = 0, appearance = 'system', model = null, labelKey = ''; game.reduced = reduced.matches;
+  let pendingReady = null, spriteFailure = null;
+  function resolveReady() {
+    if (!pendingReady) return;
+    if (spriteFailure) { const pending = pendingReady; pendingReady = null; pending.reject(spriteFailure); return; }
+    if (!sprites || pendingReady.key !== null && (model?.visible === false || readyKey(model) !== pendingReady.key)) return;
+    const pending = pendingReady; pendingReady = null; pending.resolve(true);
+  }
+  function whenReady(key) {
+    pendingReady?.resolve(false); pendingReady = null;
+    if (destroyed || key !== null && (typeof key !== 'string' || key.length > 1024)) return Promise.resolve(false);
+    return new Promise((resolve, reject) => { pendingReady = { key, resolve, reject }; resolveReady(); });
+  }
+  cleanup.push(() => { pendingReady?.resolve(false); pendingReady = null; });
   zombieCrown($('guard-zombie-crown'));
   const awake = () => sprites && game.animating && !doc.hidden;
   const text = (id, value) => { if ($(id).textContent !== value) $(id).textContent = value; };
@@ -287,7 +305,7 @@
   function frame(now) { raf = 0; if (!awake()) return; const dt = last ? clamp(now - last, 0, 64) : 16; last = now; game.step(dt); draw(dt); if (awake()) raf = requestAnimationFrame(frame); }
   function wake() { cancelAnimationFrame(raf); raf = 0; last = 0; draw(); labels(); if (awake()) raf = requestAnimationFrame(frame); }
   function theme() { const resolved = appearance === 'system' ? darkMedia.matches ? 'dark' : 'light' : appearance; doc.documentElement.dataset.appearance = resolved; doc.documentElement.dataset.accessibleAppearance = resolved; }
-  cleanup.push(bridge.onModel(value => { model = value; const round = game.round; game.setModel(value); if (game.round !== round) spriteTime = 0; appearance = ['light', 'dark'].includes(value?.appearance) ? value.appearance : 'system'; theme(); wake(); }));
+  cleanup.push(bridge.onModel(value => { model = value; const round = game.round; game.setModel(value); if (game.round !== round) spriteTime = 0; appearance = ['light', 'dark'].includes(value?.appearance) ? value.appearance : 'system'; theme(); wake(); resolveReady(); }));
   if (bridge.onColorMode) cleanup.push(bridge.onColorMode((mode, preference, uiTheme) => { doc.documentElement.dataset.colorMode = mode === 'accessible' ? 'accessible' : 'standard'; doc.documentElement.dataset.uiTheme = ['blue', 'purple'].includes(uiTheme) ? uiTheme : 'green'; appearance = ['light', 'dark'].includes(preference) ? preference : 'system'; theme(); }));
   $('guard-qiuqiu').addEventListener('click', () => { game.shoot(); wake(); }); $('guard-monster').addEventListener('click', () => { game.advance(); wake(); });
   $('guard-restart').addEventListener('click', () => { if (game.available && game.quota > 0) { game.reset(); spriteTime = 0; wake(); } });
@@ -298,6 +316,6 @@
   function fit() { $('guard-theatre').style.setProperty('--scene-zoom', Math.min(2.35, $('guard-theatre').parentElement.clientWidth / 148)); }
   reduced.addEventListener('change', motion); darkMedia.addEventListener('change', theme); doc.addEventListener('visibilitychange', visibility); root.addEventListener('resize', fit);
   cleanup.push(() => { cancelAnimationFrame(raf); reduced.removeEventListener('change', motion); darkMedia.removeEventListener('change', theme); doc.removeEventListener('visibilitychange', visibility); root.removeEventListener('resize', fit); pet.ball.destroy(); });
-  root.quotaGuardView = { get state() { return { ...game.snapshot(), spritesReady: Boolean(sprites), spriteFrames: sprites ? Object.fromEntries(Object.entries(sprites).map(([key, seq]) => [key, seq.frames.length])) : {} }; } };
-  fit(); labels(); loadSprites().then(value => { sprites = value; if (!destroyed) wake(); }).catch(() => { $('guard-status').textContent = '角色暂不可用'; });
+  root.quotaGuardView = { whenReady, get state() { return { ...game.snapshot(), spritesReady: Boolean(sprites), spriteFrames: sprites ? Object.fromEntries(Object.entries(sprites).map(([key, seq]) => [key, seq.frames.length])) : {} }; } };
+  fit(); labels(); loadSprites().then(value => { sprites = value; if (!destroyed) { wake(); resolveReady(); } }).catch(() => { $('guard-status').textContent = '角色暂不可用'; spriteFailure = new Error('GUARD_SPRITES_UNAVAILABLE'); resolveReady(); });
 })(typeof window !== 'undefined' ? window : globalThis);

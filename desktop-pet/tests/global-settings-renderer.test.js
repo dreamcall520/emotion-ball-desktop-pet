@@ -339,6 +339,8 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("findEntry('/weather-visible').checked"),false,'pin weather cannot implicitly enable visibility');
     await run("snapshot.firstReleaseConnection={connected:true,chatReady:true,working:false};navigate('/codex-menu')");
     assert.equal(await run("document.querySelector('.store-codex-identity').textContent"),'本机 Codex已连接');
+    assert.equal(await run("document.querySelector('[data-action=store-codex-connection]').closest('.row').classList.contains('store-connected-row')"),true);
+    assert.equal(await run("parseFloat(getComputedStyle(document.querySelector('.store-connected-row')).borderRadius)"),14);
     assert.deepEqual(await run("[...document.querySelectorAll('.store-codex-identity button')].map(e=>e.textContent)"), ['解除连接']);
     await run("navigate('codex-reconnect')");
     const consent = await run("document.querySelector('dialog[open]').textContent");
@@ -351,6 +353,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('#content').textContent.includes('撤回聊天授权')"),false);
     await run("window.snapshot.firstReleaseConnection={connected:false,chatReady:false,working:false};window.snapshot.version='fresh-link';window.linkActions=[];window.qiuqiuSettings.codexConnection=async action=>{linkActions.push(action);return {status:'app-authorized'}};window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('[data-action=store-codex-connection]').closest('.row').classList.contains('store-connected-row')"),false,'unconnected Codex keeps its original authorization surface');
     await run("document.querySelector('[data-action=store-codex-connection]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
@@ -447,7 +450,8 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("snapshot.firstReleaseWorkbuddyConnection.tasks={status:'needs-authorization',message:'尚未授权任务同步',authorized:false};snapshot.version='wb-task-access';window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-tasks]').textContent"),'授权任务');
-    assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/在球球中查看 WorkBuddy 任务和待查看提醒。/);
+    assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/查看 WorkBuddy 任务和未读结果。/);
+    assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/只看任务名称、状态和是否已读，不读取聊天内容。/);
     assert.equal(await run("[...document.querySelectorAll('[data-workbuddy-tasks] p')].every(p=>p.className==='description'&&parseFloat(getComputedStyle(p).marginLeft)===0)"),true,'task purpose and read scope use the shared left-aligned hint style');
     await run("document.querySelector('[data-action=store-workbuddy-tasks]').click()");
     const taskTerms=await run("document.querySelector('dialog[open]').textContent");assert.match(taskTerms,/标题.*状态.*未读.*不读取正文/s);
@@ -494,7 +498,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
     await run("snapshot.firstReleaseWorkbuddyConnection.notifications={enabled:false,connected:false,status:'disabled',message:'尚未启用动画提醒',generation:0,activeCount:0};snapshot.version='wb-notifications';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-notifications]').textContent"),'启用提醒');
-    assert.match(await run("document.querySelector('[data-workbuddy-notifications]').textContent"),/任务处理中显示思考动画，本轮回复结束后提示。/);
+    assert.match(await run("document.querySelector('[data-workbuddy-notifications]').textContent"),/任务处理时显示思考动画，有新结果时提醒你。/);
     await run("document.querySelector('[data-action=store-workbuddy-notifications]').click()");
     const notificationTerms=await run("document.querySelector('dialog[open]').textContent");assert.match(notificationTerms,/WorkBuddy.*安装.*Hook/s);assert.match(notificationTerms,/本机过滤/);assert.match(notificationTerms,/阶段和标识.*不传正文/s);assert.match(notificationTerms,/取消或失败.*不显示成功/s);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
@@ -502,17 +506,27 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);const notifications=snapshot.firstReleaseWorkbuddyConnection.notifications;if(action==='notifications-enable'){notifications.enabled=true;notifications.connected=true;}if(action==='notifications-disable'){notifications.enabled=false;notifications.connected=false;}return {status:'ready',snapshot}};document.querySelector('[data-action=store-workbuddy-notifications]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-notifications]').textContent"),'停用提醒');
+    await run("snapshot.firstReleaseWorkbuddyConnection.notifications.status='ready';snapshot.firstReleaseWorkbuddyConnection.notifications.message='已启用；新任务可触发处理中和本轮回复结束提醒。';snapshot.version='wb-reminder-healthy';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.doesNotMatch(await run("document.querySelector('[data-workbuddy-notifications]').textContent"),/新任务可触发/);
+    for(const [status,connected,message] of [['ready',true,'本机提醒连接异常，请重新启用。'],['waiting-account',false,'等待确认当前 WorkBuddy 账号。']]) {
+      await run(`Object.assign(snapshot.firstReleaseWorkbuddyConnection.notifications,${JSON.stringify({status,connected,message})});snapshot.version=${JSON.stringify('wb-reminder-'+status)};window.dispatchEvent(new Event('focus'))`);await run('new Promise(resolve=>setTimeout(resolve,30))');
+      assert.equal(await run(`document.querySelector('[data-workbuddy-notifications]').textContent.includes(${JSON.stringify(message)})`),true,'health filtering preserves errors and waiting states');
+    }
+    await run("Object.assign(snapshot.firstReleaseWorkbuddyConnection.notifications,{status:'ready',connected:true,message:'已启用；新任务可触发处理中和本轮回复结束提醒。'});snapshot.version='wb-reminder-restored';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("document.querySelector('[data-action=store-workbuddy-notifications]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.notifications.enabled'),false);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
     await run("snapshot.firstReleaseWorkbuddyConnection.chat={enabled:false,authorized:false,status:'disabled',message:''};snapshot.firstReleaseWorkbuddyConnection.status='ready';snapshot.firstReleaseWorkbuddyConnection.message='';snapshot.version='wb-chat-authorization';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-workbuddy-chat]')"),null,'chat joins the main connection rather than a separate module');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'继续连接');
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').closest('.row').classList.contains('store-connected-row')"),false,'partial quota consent is not a completed chat connection');
     assert.match(await run("document.querySelector('#content > section.group').textContent"),/积分已连接，聊天待授权/);
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-disconnect]').textContent"),'解除连接','existing quota authorization can still be revoked without enabling chat');
     const beforeContinue=await run('wbLinkActions.length');
     await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 联动/);
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/聊天内容发送给 WorkBuddy 官方服务/);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/默认开启思考动画和新结果提醒。/);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/首次需选择 WorkBuddy 目录，安装提醒组件。/);
     for(const width of [720,840,1080]) {
       win.setSize(width,820);
       const paragraphs=await run(`([...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth};}))`);
@@ -526,6 +540,8 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'继续连接');assert.match(await run("document.querySelector('#content > section.group').textContent"),/聊天授权未完成/);
     await run("chatAllowed=true;document.querySelector('[data-action=store-workbuddy-connection]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'解除连接');assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').closest('.row').classList.contains('store-connected-row')"),true);
+    for(const width of [720,840,1080]){win.setSize(width,820);assert.equal(await run("(()=>{const row=document.querySelector('.store-connected-row'),s=getComputedStyle(row);return row.scrollWidth<=row.clientWidth+1&&s.backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(s.borderRadius)===14;})()"),true,'connected row bubble fits '+width+'px');}
     await run("snapshot.entries.push({id:'/quota-fun-enabled',label:'额度趣味互动',enabled:true,actionable:true,type:'checkbox',checked:true});snapshot.version='public-quota-game';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("navigate('/codex-menu')");assert.equal(await run("document.querySelector('[data-action=\"/codex-menu/codex-quota-fun\"]')"),null);
     await run("navigate('workbuddy-settings')");assert.equal(await run("document.querySelector('[data-action=\"/workbuddy-quota-fun\"]')"),null);
@@ -536,6 +552,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("navigate('workbuddy-settings')");
 
     await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='disconnect')snapshot.firstReleaseWorkbuddyConnection={connected:false,enabled:false,status:'disconnected',message:'',tasks:{authorized:false,status:'needs-connection',message:''}};return {status:action==='disconnect'?'disconnected':'ready',snapshot}};document.querySelector('[data-action=store-workbuddy-connection]').click()");
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/解除后会撤销本地授权，再次使用时需要重新连接。/);
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-workbuddy-tasks]')"),null,'task module hides again after disconnect');

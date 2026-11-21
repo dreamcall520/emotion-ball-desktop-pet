@@ -6,15 +6,16 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
 const start = source.indexOf('function openQuotaGuard(source =');
 const end = source.indexOf('\nasync function openCodexDetailThread', start);
-function fixture(openResult = true) {
+function fixture(openResult = true, onAcquire = () => {}) {
   let leases = 0, earlyCards = 0, allowed = true, gameVisible = false;
-  const events = [];
+  const events = [], models = [];
   const context = { quotaGuardSource: 'codex', canShowQuotaGuard: () => allowed,
     zcodeGuardEntryAvailable: () => true, buildZcodeQuotaLabelModel: () => ({ state: 'ready' }),
     zcodeLink: { getSnapshot: () => ({}) }, settings: {}, quotaLabelModel: () => ({ state: 'ready' }),
-    quotaPopups: { acquire() { leases++; events.push('acquire'); let done = false; return () => { assert(!done); done = true; leases--; events.push('release'); }; } },
+    quotaPopups: { acquire() { leases++; events.push('acquire'); onAcquire(context); let done = false; return () => { assert(!done); done = true; leases--; events.push('release'); }; } },
     quotaGuard: { open(model) {
       events.push('open');
+      models.push(model);
       // A reused window invokes synchronous visibility/layout callbacks before its native show.
       if (leases === 0) earlyCards++;
       if (openResult instanceof Error) throw openResult;
@@ -23,9 +24,15 @@ function fixture(openResult = true) {
     } }
   };
   vm.createContext(context); vm.runInContext(source.slice(start, end), context);
-  return { context, events, set allowed(value) { allowed = value; }, get earlyCards() { return earlyCards; },
+  return { context, events, models, set allowed(value) { allowed = value; }, get earlyCards() { return earlyCards; },
     get leases() { return leases; }, get gameVisible() { return gameVisible; } };
 }
+test('opening keeps the clicked WorkBuddy source when hiding sibling windows resets the old presentation', () => {
+  const f = fixture(true, context => { context.quotaGuardSource = 'codex'; });
+  assert.equal(f.context.openQuotaGuard('workbuddy'), true);
+  assert.equal(f.models[0].practice, true);
+  assert.equal(f.context.quotaGuardSource, 'workbuddy');
+});
 test('warm guard entry suppresses cards before synchronous game visibility/layout callbacks', () => {
   for (const source of ['codex', 'workbuddy', 'zcode']) {
     const f = fixture();

@@ -154,11 +154,13 @@ let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let quotaGuard = null;
 let quotaGuardSource = 'codex';
+let quotaGuardOpenAt = 0;
 let codexDetails = null;
 let codexDetailReturn = null;
 let codexThreadOpener = url => shell.openExternal(url);
 let storeRuntime = null, storeConnectionsWindow = null, storeEnableFlow = null;
 let chat = null;
+let storeChatRestorePending = FIRST_RELEASE ? 2 : 0, storeChatDefaultFlight = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
 let workbuddyInstalledAccess = null, workbuddyTaskAccess = null, workbuddyQuotaConnection = null;
@@ -1045,8 +1047,14 @@ async function completeStoreWorkBuddyConnection(signal) {
     if (signal.aborted || workbuddyChatConnection.getAuthorizedAccountKey() !== identity.accountKey) return { status: 'cancelled' };
     storeChatDataConsent().grantWorkBuddyLink(identity.accountKey);
     granted = true;
+    let message;
     try { await chat.connectSource('workbuddy'); }
-    catch { return { ...result, message: '已连接，聊天模型暂未读取成功，可在聊天中重试。' }; }
+    catch { message = '已连接，聊天模型暂未读取成功，可在聊天中重试。'; }
+    if (!signal.aborted && settings.workbuddyNotificationsEnabled !== false) {
+      const reminder = await workbuddyNotifications.enable(signal);
+      if (reminder.status !== 'ready') message = '已连接；动画提醒还需要选择 WorkBuddy 目录。';
+    }
+    if (message) return { ...result, message };
     return result;
   } finally {
     if (!granted || signal.aborted) {
@@ -1058,11 +1066,30 @@ async function completeStoreWorkBuddyConnection(signal) {
 }
 function syncWorkBuddyChatConnection() {
   if (!chat?.getSourceState) return;
-  const authorized = workbuddyChatConnection?.getState().authorized === true;
-  if (authorized && settings.chatSource === 'workbuddy' && chat.getState().source !== 'workbuddy' &&
-    !chat.getState().busy && chat.getState().connection !== 'connecting') void chat.selectSource('workbuddy');
+  void selectDefaultStoreChatSource();
   notifyStoreConnections();
   if (!screenLocked) chatWindow?.update(chatSnapshot());
+}
+function selectDefaultStoreChatSource() {
+  if (!FIRST_RELEASE || !chat || storeChatRestorePending > 0 || isQuitting) return Promise.resolve(false);
+  if (storeChatDefaultFlight) return storeChatDefaultFlight;
+  const state = chat.getState();
+  if (state.busy || state.sourceChanging || state.connection === 'connecting') return Promise.resolve(false);
+  const available = chatSnapshot(state).sources.filter(source => {
+    if (!source.enabled || source.needsAuthorization) return false;
+    const provider = chat.getSourceState(source.id);
+    return !provider?.accountMismatch && provider?.connection !== 'error';
+  }).map(source => source.id);
+  const target = [settings.chatSource, state.source, 'codex', 'workbuddy'].find(source => available.includes(source));
+  if (!target || target === state.source) return Promise.resolve(false);
+  const pending = Promise.resolve().then(() => chat.selectSource(target)).then(result => result?.accepted === true).catch(() => false);
+  storeChatDefaultFlight = pending;
+  void pending.finally(() => { if (storeChatDefaultFlight === pending) storeChatDefaultFlight = null; });
+  return pending;
+}
+function finishStoreChatRestore() {
+  if (storeChatRestorePending > 0) storeChatRestorePending--;
+  void selectDefaultStoreChatSource();
 }
 function chatSnapshot(state = activeChat()?.getState()) {
   const storeInfo=IS_STORE_BUILD ? {
@@ -1076,7 +1103,7 @@ function chatSnapshot(state = activeChat()?.getState()) {
       : FIRST_RELEASE && state?.source === 'workbuddy' ? '使用本机 WorkBuddy 账号积分；聊天内容发送给 WorkBuddy 官方服务。' : state?.sourceNote||null,
     billingLabel:state?.source==='zcode'&&storeRuntime?.getZcodeAccountSource()==='configured-custom'?'使用 ZCode 已有自定义模型 · 按原 API 计费':null
   }:{};
-  return {...state,...storeInfo,provider:state?.source||'codex',appUpdate:availableUpdate?{latestVersion:availableUpdate.latestVersion}:null};
+  return {...state,...storeInfo,...(FIRST_RELEASE?{firstRelease:true}:{}),provider:state?.source||'codex',appUpdate:availableUpdate?{latestVersion:availableUpdate.latestVersion}:null};
 }
 
 async function showUpdateResult(result) {
@@ -1435,7 +1462,8 @@ function openChat() {
   pomodoroWindows?.sync();
   // Opening checks login and shows local history; only send() can create a thread.
   const state = chat.getState();
-  const connection = !settings.codexEnabled && zcodeLink?.isEnabled() && state.source === 'codex' && !state.hasConversation
+  const connection = FIRST_RELEASE ? selectDefaultStoreChatSource().then(() => storeChatRestorePending ? null : chat.connect())
+    : !settings.codexEnabled && zcodeLink?.isEnabled() && state.source === 'codex' && !state.hasConversation
     ? chat.selectSource('zcode') : chat.connect();
   void connection.catch(() => {});
 }
@@ -2510,16 +2538,22 @@ function syncZcodeQuotaGuard() {
 }
 
 function openQuotaGuard(source = 'codex') {
+  quotaGuardOpenAt = Date.now();
   if (source === 'zcode' && !zcodeGuardEntryAvailable()) return false;
   const previous = quotaGuardSource;
   quotaGuardSource = source === true || source === 'workbuddy' ? 'workbuddy' : ['zcode','api','balance'].includes(source) ? source : 'codex';
   if (!canShowQuotaGuard() || !quotaGuard) { quotaGuardSource = previous; return false; }
+  const requestedSource = quotaGuardSource;
+  const model = ['workbuddy','api','balance'].includes(requestedSource) ? { state: 'ready', items: [], practice: true }
+    : requestedSource === 'zcode' ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel();
   // Reused game windows have no loading/pending blocker. Suppress cards before
   // open's synchronous visibility callbacks can restore or rearrange siblings.
   const release = quotaPopups.acquire();
   try {
-    const opened = quotaGuard.open(['workbuddy','api','balance'].includes(quotaGuardSource) ? { state: 'ready', items: [], practice: true } : quotaGuardSource === 'zcode'
-      ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel());
+    // Hiding sibling cards may close an old presentation synchronously.
+    // Keep the source/model of the entry that the user actually clicked.
+    quotaGuardSource = requestedSource;
+    const opened = quotaGuard.open(model);
     if (!opened) quotaGuardSource = previous;
     return opened;
   } finally { release(); }
@@ -4212,8 +4246,14 @@ function registerIpc() {
       }
       else if (action === 'tasks-authorize') result = await workbuddyQuotaConnection.authorizeTasks(controller.signal);
       else if (action === 'tasks-revoke') result = await workbuddyQuotaConnection.revokeTasks();
-      else if (action === 'notifications-enable') result = await workbuddyNotifications.enable(controller.signal);
-      else if (action === 'notifications-disable') result = await workbuddyNotifications.disable();
+      else if (action === 'notifications-enable') {
+        result = await workbuddyNotifications.enable(controller.signal);
+        if (result.status === 'ready') settings = saveSettings(settingsFile, { ...settings, workbuddyNotificationsEnabled: true });
+      }
+      else if (action === 'notifications-disable') {
+        try { settings = saveSettings(settingsFile, { ...settings, workbuddyNotificationsEnabled: false }); }
+        finally { result = await workbuddyNotifications.disable(); }
+      }
       else result = await completeStoreWorkBuddyConnection(controller.signal);
       if (controller.signal.aborted) return { status: 'cancelled' };
       return { ...result, snapshot: globalSettingsSnapshot() };
@@ -5099,7 +5139,7 @@ async function bootstrap() {
       onChange: syncWorkBuddyChatConnection,
       onDisable: () => { if (!isQuitting && chat?.workbuddyDisabled) void chat.workbuddyDisabled().catch(() => {}); }
     });
-    void workbuddyChatConnection.restore().catch(() => writeError('WorkBuddy 聊天恢复', { code: 'CHAT_RESTORE_FAILED' }));
+    const restoreWorkBuddyChat = workbuddyChatConnection.restore().catch(() => writeError('WorkBuddy 聊天恢复', { code: 'CHAT_RESTORE_FAILED' }));
     const eventInstaller = require('./lib/mas-workbuddy-event-installation').createMasWorkBuddyEventInstallation({ app,
       dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed()
         ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
@@ -5107,22 +5147,36 @@ async function bootstrap() {
       assetRoot: path.join(__dirname, 'assets/workbuddy-desktop-hook') });
     workbuddyNotifications = require('./lib/mas-workbuddy-task-notifications').createMasWorkBuddyTaskNotifications({
       installer: eventInstaller, storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-workbuddy-event-pairing')),
-      getAccountKey: () => workbuddyQuotaConnection?.getState().connected === true && workbuddyQuota?.getState().enabled === true
-        ? workbuddyQuota.getState().accountKey : null,
+      getAccountKey: currentWorkBuddyAccountKey,
       verifyAccount: (expectedAccountKey, signal) => workbuddyRun('account-check', { expectedAccountKey }, { signal }),
       onChange: () => { syncWorkBuddyAnimationSettings(); },
       onAlert: enqueueWorkBuddyAlert,
       onClear: () => { syncWorkBuddyAnimationSettings(); }
     });
-    void workbuddyNotifications.restore().catch(() => writeError('WorkBuddy 动画提醒恢复', { code: 'REMINDER_RESTORE_FAILED' }));
+    if (settings.workbuddyNotificationsEnabled !== false) void workbuddyNotifications.restore().catch(() => writeError('WorkBuddy 动画提醒恢复', { code: 'REMINDER_RESTORE_FAILED' }));
     workbuddyNotificationTimer = setInterval(() => {
       void workbuddyNotifications.refreshAccount().catch(() => {});
       void workbuddyChatConnection.refreshAccount().catch(() => {});
       pumpWorkBuddyPresentation();
       syncQuotaFunEntry();
+      void selectDefaultStoreChatSource();
     }, 500);
     workbuddyNotificationTimer.unref?.();
-    void workbuddyQuotaConnection.restore(settings.workbuddyEnabled);
+    void (async () => {
+      try {
+        await restoreWorkBuddyChat;
+        await workbuddyQuotaConnection.restore(settings.workbuddyEnabled);
+        if (workbuddyQuotaConnection.getState().connected) {
+          const identity = await workbuddyRun('account-check', {});
+          if (!isQuitting && workbuddyQuotaConnection.getState().connected) {
+            workbuddyVerifiedAccountKey = identity.accountKey;
+            await workbuddyChatConnection.refreshAccount();
+            await workbuddyNotifications.refreshAccount();
+          }
+        }
+      } catch { writeError('WorkBuddy 连接恢复', { code: 'CONNECTION_RESTORE_FAILED' }); }
+      finally { finishStoreChatRestore(); }
+    })();
   } else workbuddyQuota.setEnabled(settings.workbuddyEnabled);
   }
   chat = createChatSources({ codex: chat, createWorkbuddy: IS_STORE_BUILD && !FIRST_RELEASE ? ()=>require('./lib/workbuddy-cli-chat-companion').createWorkBuddyCliChatCompanion({connection:storeRuntime.workbuddyCli,prepare:options=>storeRuntime.prepareWorkbuddyChat(options),onChange:()=>chat?.sourceChanged('workbuddy')}) : makeWorkbuddyChat,
@@ -5130,7 +5184,10 @@ async function bootstrap() {
       : (IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true),
     initialSource: settings.chatSource,
     isZcodeEnabled: () => !FIRST_RELEASE && (IS_STORE_BUILD?storeRuntime.isChatEnabled('zcode'):(zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true)),
-    onSelect: chatSource => { settings = saveSettings(settingsFile, { ...settings, chatSource, chatProvider: chatSource === 'workbuddy' ? 'workbuddy' : 'codex' }); },
+    onSelect: (chatSource, change) => {
+      if (FIRST_RELEASE && change?.reason === 'disabled') return;
+      settings = saveSettings(settingsFile, { ...settings, chatSource, chatProvider: chatSource === 'workbuddy' ? 'workbuddy' : 'codex' });
+    },
     onChange: state => { notifyStoreConnections(); if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
     createZcode: () => createChatCompanion({
       store: createChatStore(path.join(app.getPath('userData'), 'zcode-chat.json')),
@@ -5192,7 +5249,7 @@ async function bootstrap() {
       }
     });
     // Restore only already-enabled providers. No picker, login or account change.
-    void (async()=>{for(const provider of STORE_PROVIDERS){if((!FIRST_RELEASE || provider==='codex') && storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
+    void (async()=>{for(const provider of STORE_PROVIDERS){if((!FIRST_RELEASE || provider==='codex') && storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{}).finally(() => { if (FIRST_RELEASE) finishStoreChatRestore(); });
   }
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   sheepOfferingWindow = createSheepOfferingWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,
@@ -5248,6 +5305,12 @@ async function bootstrap() {
     onError: error => writeError('额度标签窗口', error)
   });
   quotaGuard = createQuotaGuardWindow({ BrowserWindow, screen,
+    prepareWindow: win => quotaPopups.preparePopup(win),
+    onPresentation: state => {
+      if (process.qiuqiuMasDevelopmentCandidate === true) process.stderr.write('QUOTA_GUARD_PRESENT ' + JSON.stringify({
+        elapsedMs: Date.now() - quotaGuardOpenAt, source: quotaGuardSource,
+        practice: state.practice === true, ready: state.ready === true }) + '\n');
+    },
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     getObstacles: () => { const panel = pomodoroWindows?.getPanelBounds(); return panel ? [panel] : []; },
     getSize: () => quotaGuardSource === 'zcode' ? settings?.zcodeQuotaLabelSize : settings?.codexQuotaLabelSize,
@@ -5263,6 +5326,7 @@ async function bootstrap() {
       pomodoroWindows?.sync();
     },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('守护战窗口', error) });
+  void quotaGuard.prewarm().catch(error => writeError('守护战准备', error));
   if(!FIRST_RELEASE) apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getSuppressed: () => quotaPopups.isBlocked(),
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
@@ -5432,9 +5496,15 @@ async function bootstrap() {
     if (isCurrentWeatherOwner()) weatherPetWindow.webContents.send('pet:weather',
       { ...initialWeatherWindow.getState(), enabled: initialWeatherWindow.isEnabled() });
   });
-  const trackWeatherObstacle = win => { if (win === weatherWindow?.getWindow()) return; for (const event of ['move','resize','show','hide','closed']) win.on(event, () => { if (win === weatherPetWindow && !isCurrentWeatherOwner()) return; if (!isQuitting && win !== weatherWindow?.getWindow()) safelyInvokeWindow('天气避让重排', () => weatherWindow?.reposition()); }); };
-  BrowserWindow.getAllWindows().forEach(trackWeatherObstacle);
-  app.on('browser-window-created', (_event, win) => trackWeatherObstacle(win));
+  const weatherObstacleWatcher = require('./lib/weather-obstacle-events').createWeatherObstacleWatcher({
+    isCurrent: isCurrentWeatherOwner,
+    getRelevantWindows: () => [quotaLabel?.getWindow(), apiUsageLabel?.getWindow(), zcodeLink?.getWindow(),
+      workbuddyLabel?.getWindow(), apiBalanceLabel?.getWindow(), quotaCardGroupWindow?.getWindow(), bubble?.getWindow()].filter(Boolean),
+    reposition: () => safelyInvokeWindow('天气避让重排', () => weatherWindow?.reposition())
+  });
+  BrowserWindow.getAllWindows().forEach(win => weatherObstacleWatcher.track(win));
+  app.on('browser-window-created', (_event, win) => weatherObstacleWatcher.track(win));
+  app.once('before-quit', () => weatherObstacleWatcher.close());
   weatherWindow.start();
   if (ACCEPTANCE_KIND === 'weather' || process.argv.includes('--weather-preview')) weatherWindow.open();
   createTray();

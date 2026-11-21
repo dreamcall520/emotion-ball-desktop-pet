@@ -25,7 +25,7 @@ const files = [
   'desktop-pet/lib/workbuddy-desktop-task-state.js', 'desktop-pet/lib/workbuddy-desktop-event-bridge.js',
   'desktop-pet/lib/workbuddy-guard-entry-window.js', 'desktop-pet/workbuddy-guard-entry.html',
   'desktop-pet/workbuddy-guard-entry.css', 'desktop-pet/workbuddy-guard-entry-preload.js',
-  'desktop-pet/lib/quota-fun-carrier.js', 'desktop-pet/lib/quota-guard-window.js',
+  'desktop-pet/lib/quota-fun-carrier.js', 'desktop-pet/lib/quota-guard-window.js', 'desktop-pet/lib/weather-obstacle-events.js',
   'desktop-pet/quota-guard.html', 'desktop-pet/quota-guard.css', 'desktop-pet/quota-guard-preload.js',
   'desktop-pet/quota-guard-renderer.js', 'desktop-pet/assets/quota-guard/zombie-data.js',
   'desktop-pet/assets/quota-guard/crown.svg', 'desktop-pet/assets/quota-guard/tombstone.svg',

@@ -6,6 +6,15 @@ const { adjacentBounds } = require('./window-placement');
 
 const CHANNEL = 'pet:quota-guard-model';
 
+function guardReadyKey(value) {
+  const item = value?.practice === true ? { remaining: 100, windowMinutes: 300 } : value?.items?.[0];
+  if (value?.state !== 'ready' || !item) return null;
+  const zcode = value.sourceId === 'zcode';
+  return JSON.stringify([value.practice === true, value.sourceId === 'zcode' ? 'zcode' : 'codex',
+    item.windowMinutes, item.remaining, zcode ? item.bucketId || null : null,
+    zcode ? item.periodStart ?? null : null, zcode ? item.resetsAt ?? null : null]);
+}
+
 function guardModel(value, size = 'standard', appearance = 'system', visible = false) {
   const sourceId = value?.sourceId === 'zcode' ? 'zcode' : 'codex';
   const model = safeModel(value, sourceId);
@@ -18,10 +27,12 @@ function guardModel(value, size = 'standard', appearance = 'system', visible = f
 
 function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = () => 'standard',
   getAppearance = () => 'system', getObstacles = () => [], canShow = () => true, alwaysOnTop = true,
-  onError = () => {}, onVisibilityChange = () => {}, onLayout = () => {} }) {
+  prepareWindow = () => {}, onPresentation = () => {}, onError = () => {}, onVisibilityChange = () => {}, onLayout = () => {} }) {
   const file = path.join(__dirname, '../quota-guard.html');
   const url = pathToFileURL(file).href;
   let win = null, ready = false, model = null, visible = false, topmost = Boolean(alwaysOnTop);
+  let presenting = null, presentationEpoch = 0, opened = false;
+  let loaded = null, resolveLoaded = null, prewarmFlight = null, presentationNotice = null;
   const alive = () => Boolean(win && !win.isDestroyed());
   const report = error => { try { onError(error); } catch (_) {} };
   const allowed = () => { try { return canShow() === true; } catch (error) { report(error); return false; } };
@@ -34,7 +45,7 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
     try { onLayout(); } catch (error) { report(error); }
   }
   function send() {
-    if (!alive() || !ready || !model) return;
+    if (!alive() || !ready || !model || !opened) return;
     try { win.webContents.send(CHANNEL, { ...model, visible }); } catch (error) { report(error); }
   }
   function bounds() {
@@ -48,14 +59,17 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
     return { x, y, width, height };
   }
   function close() {
+    presentationEpoch++; presenting = null; presentationNotice = null;
     changed(false);
     send();
     if (alive()) { try { win.hide(); } catch (error) { report(error); } }
     layoutChanged();
   }
   function destroy() {
+    presentationEpoch++; presenting = null; presentationNotice = null;
+    resolveLoaded?.(false); resolveLoaded = null; loaded = null; prewarmFlight = null;
     const target = win;
-    win = null; ready = false; model = null;
+    win = null; ready = false; model = null; opened = false;
     changed(false);
     if (target && !target.isDestroyed()) { try { target.destroy(); } catch (error) { report(error); } }
   }
@@ -66,9 +80,26 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
       win.setBounds(bounds(), false);
       send();
       if (!visible || !allowed()) { close(); return; }
-      if (focus) { win.show(); win.focus(); }
-      else if (!win.isVisible()) win.showInactive();
-      layoutChanged();
+      if (win.isVisible()) {
+        if (focus) { win.show(); win.focus(); }
+        layoutChanged(); return;
+      }
+      const key = guardReadyKey(model);
+      if (!key) { close(); return; }
+      if (presenting?.target === win && presenting.key === key) { presenting.focus ||= focus; return; }
+      const request = { target: win, key, focus, epoch: ++presentationEpoch }; presenting = request;
+      // did-finish-load precedes asynchronous bitmap decoding. Keep the native
+      // window hidden until the renderer has applied this exact model and drawn
+      // its decoded local sprites; no timer or provider request is involved.
+      Promise.resolve(win.webContents.executeJavaScript(`window.quotaGuardView.whenReady(${JSON.stringify(key)})`)).then(applied => {
+        if (presenting !== request || request.epoch !== presentationEpoch || win !== request.target || !alive() || !visible || guardReadyKey(model) !== request.key) return;
+        presenting = null;
+        if (applied !== true) return;
+        if (!allowed()) { close(); return; }
+        presentationNotice = { epoch: request.epoch, key: request.key, practice: model.practice === true };
+        if (request.focus) { win.show(); win.focus(); } else win.showInactive();
+        layoutChanged();
+      }).catch(error => { if (presenting === request) { report(error); destroy(); } });
     } catch (error) { report(error); destroy(); }
   }
   function ensure() {
@@ -80,31 +111,51 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
         contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
         spellcheck: false } });
     const target = win;
+    loaded = new Promise(resolve => { resolveLoaded = resolve; });
+    prepareWindow(target);
     target.setAlwaysOnTop(topmost, 'floating');
     target.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     target.setHiddenInMissionControl(true);
     target.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     target.webContents.on('will-navigate', event => event.preventDefault());
     target.webContents.on('render-process-gone', () => { if (win === target) destroy(); });
+    target.on('show', () => {
+      const notice = presentationNotice; presentationNotice = null;
+      if (win !== target || !visible || !notice || notice.epoch !== presentationEpoch || notice.key !== guardReadyKey(model) || !target.isVisible()) return;
+      try { onPresentation({ practice: notice.practice, ready: true }); } catch (error) { report(error); }
+    });
     target.on('close', event => { if (win === target) { event.preventDefault(); close(); } });
-    target.on('closed', () => { if (win === target) { win = null; ready = false; changed(false); } });
+    target.on('closed', () => { if (win === target) { resolveLoaded?.(false); resolveLoaded = null; loaded = null; prewarmFlight = null; win = null; ready = false; opened = false; changed(false); } });
     target.webContents.once('did-finish-load', () => {
       if (win !== target) return;
-      ready = true; send(); present(true);
+      ready = true; resolveLoaded?.(true); resolveLoaded = null; if (!visible) send(); present(true);
     });
     Promise.resolve(target.loadFile(file)).catch(error => { report(error); if (win === target) destroy(); });
   }
   return {
+    prewarm() {
+      if (visible) return Promise.resolve(ready);
+      if (prewarmFlight && alive()) return prewarmFlight;
+      try {
+        ensure(); const target = win, loading = loaded;
+        prewarmFlight = Promise.resolve(loading).then(ok => ok && win === target && !target.isDestroyed() && !visible
+          ? target.webContents.executeJavaScript('window.quotaGuardView.whenReady(null)') : false)
+          .then(ok => ok === true && win === target && !target.isDestroyed())
+          .catch(error => { if (win === target && !visible) { report(error); destroy(); } return false; });
+        return prewarmFlight;
+      } catch (error) { report(error); destroy(); return Promise.resolve(false); }
+    },
     open(value) {
       const next = guardModel(value, getSize(), getAppearance(), true);
       if (!allowed() || next.state !== 'ready' || (!next.items.length && next.practice !== true)) return false;
-      model = next;
+      model = next; opened = true;
       try { ensure(); changed(true); present(true); return true; }
       catch (error) { report(error); destroy(); return false; }
     },
     update(value) {
       model = guardModel(value, getSize(), getAppearance(), visible);
       if (visible && !allowed()) close();
+      else if (visible && alive() && !win.isVisible()) present();
       else send();
     },
     reposition() { if (visible) present(); },
@@ -118,4 +169,4 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
   };
 }
 
-module.exports = { createQuotaGuardWindow, guardModel, CHANNEL };
+module.exports = { createQuotaGuardWindow, guardModel, guardReadyKey, CHANNEL };

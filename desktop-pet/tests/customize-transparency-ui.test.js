@@ -807,11 +807,24 @@ test('浏览 Codex 页签保留当前球球草稿，只有点选卡片才替换�
   await f.get('save').dispatch('click'); assert.equal(f.saves.at(-1).appearance.bodyColor, '#123456');
   f.get('pet-grid').children[0].dispatch('click');
   assert.equal(f.get('preview-name').textContent, '测试宠物');
+  assert.equal(f.get('appearance-colors-field').hidden, true, '固定 sprite 不展示无效配色');
+  assert.equal(f.get('body-color').disabled, true);
+  assert.equal(f.get('eye-hex').disabled, true);
   f.get('source-ball').dispatch('click');
   await f.get('save').dispatch('click');
   assert.equal(f.saves.at(-1).appearance.codexPetId, pet.id, 'switching tabs preserves the selected candidate');
   f.card('cloud').dispatch('click');
+  assert.equal(f.get('appearance-colors-field').hidden, false);
+  assert.equal(f.get('body-color').disabled, false);
+  assert.equal(f.get('eye-hex').disabled, false);
   await f.get('save').dispatch('click'); assert.equal(f.saves.at(-1).appearance.shape, 'cloud');
+  f.card('soft-orb').dispatch('click');
+  assert.equal(f.get('appearance-colors-field').hidden, false, '小宇继续提供实时配色');
+  assert.equal(f.get('body-color').disabled, false);
+  f.get('body-hex').value = '#2A8B6F'; f.get('body-hex').dispatch('change');
+  await f.get('save').dispatch('click');
+  assert.equal(f.saves.at(-1).appearance.shape, 'soft-orb');
+  assert.equal(f.saves.at(-1).appearance.bodyColor, '#2A8B6F');
   f.close();
 });
 

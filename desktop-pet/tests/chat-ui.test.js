@@ -1004,7 +1004,7 @@ test('WorkBuddy积分连接不代替聊天授权，授权后保留独立模型�
   f.receive({...withModels(),source:'codex',sources});f.get('chat-source').dispatch('click');
   const wb=f.get('source-menu').children.find(option=>option.value==='workbuddy');assert.equal(wb.children[1].textContent,'连接 WorkBuddy…');await wb.dispatch('click');
   assert.deepEqual(opened,['workbuddy']);assert.deepEqual(changed,[]);assert.equal(f.get('chat-source').textContent,'Codex');
-  f.receive({...withModels(),source:'workbuddy',sources});assert.equal(f.get('source-hint').textContent,'连接本机应用后即可聊天。');f.get('message-input').value='保留待授权消息';f.get('message-input').dispatch('input');await f.get('composer').dispatch('submit');assert.deepEqual(f.sent,[]);
+  f.receive({...withModels(),firstRelease:true,source:'workbuddy',sources});assert.equal(f.get('source-hint').textContent,'先连接 Codex 或 WorkBuddy，就能聊天了。');f.get('message-input').value='保留待授权消息';f.get('message-input').dispatch('input');await f.get('composer').dispatch('submit');assert.deepEqual(f.sent,[]);
   const authorized={...withModels(),source:'workbuddy',sources:sources.map(item=>({...item,needsAuthorization:false})),connection:'ready',models:[{id:'workbuddy-model',displayName:'WorkBuddy Model'}]};
   f.receive(authorized);assert.equal(f.get('model-bar').hidden,false);assert(f.options().some(option=>option.value==='workbuddy-model'));assert.match(f.get('privacy-note').textContent,/WorkBuddy 积分/);
   f.receive({...authorized,modelsStatus:'error',modelsError:'暂时无法读取 WorkBuddy 模型。'});assert.equal(f.get('refresh-models').hidden,false);await f.get('refresh-models').dispatch('click');assert.equal(refreshed,1);assert.deepEqual(f.sent,[]);

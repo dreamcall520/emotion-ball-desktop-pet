@@ -45,7 +45,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/assets/partner-confirmed-reference.png',
     'desktop-pet/assets/pets/xiaobai/pet.json',
     ...Object.values(JSON.parse(fs.readFileSync(path.join(root, 'desktop-pet/assets/pets/xiaobai/pet.json'), 'utf8')).sheets).map(sheet => 'desktop-pet/assets/pets/xiaobai/' + sheet.path),
-    ...['weather.html','weather.css','weather-preload.js','weather-renderer.js','lib/weather-service.js','lib/weather-window.js','lib/weather-pet-effects.js','lib/weather-context.js','lib/weather-location.js'].map(file => `desktop-pet/${file}`),
+    ...['weather.html','weather.css','weather-preload.js','weather-renderer.js','lib/weather-service.js','lib/weather-window.js','lib/weather-obstacle-events.js','lib/weather-pet-effects.js','lib/weather-context.js','lib/weather-location.js'].map(file => `desktop-pet/${file}`),
     'desktop-pet/scripts/verify-workbuddy-integration.js',
     'desktop-pet/lib/workbuddy-helper.cjs',
     'desktop-pet/lib/workbuddy-consent-window.js',

@@ -360,6 +360,7 @@ body { padding-top:38px; }
 #report-history-warning:empty { display:none; }
 
 /* Native settings surface for the App Store Codex connection. */
+.row.store-connected-row { margin:7px 0 9px; padding:12px 14px; border:1px solid var(--module-edge); border-radius:14px; background:var(--nav-active); }
 .store-codex-identity { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
 .store-codex-identity img { width:20px; height:20px; object-fit:contain; }
 .store-codex-summary { margin-inline-start:27px; }

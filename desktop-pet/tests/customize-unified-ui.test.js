@@ -5,16 +5,17 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 
-test('定制页唯一保存位于固定底栏，恢复位于顶部，沿用全部实际资源', () => {
+test('定制页恢复与唯一保存并排位于固定底栏，沿用全部实际资源', () => {
   const html = fs.readFileSync(path.join(__dirname, '../customize.html'), 'utf8');
   assert.equal((html.match(/id="save"/g) || []).length, 1);
   assert.doesNotMatch(html, /save-bottom|runtime\/|(?<!sheep-)theme\.js|foundation\.css|设计稿/);
   const header=html.match(/<header class="[^"]*\bstudio-header\b[^"]*">([\s\S]*?)<\/header>/);
   assert.ok(header, '顶部标题区保留studio-header语义，不限制其他局部组件类');
-  assert.match(header[1], /id="reset-appearance"[^>]*type="button"[^>]*title="恢复当前所选形态的默认外观"/);
-  assert.equal((html.match(/id="reset-appearance"/g)||[]).length,1,'恢复默认入口唯一且仍位于顶部');
-  assert.match(header[1], /id="skin-promo-banner"/,'宣传横幅与原恢复入口同在标题区，不挤占表单内容区');
+  assert.doesNotMatch(header[1], /id="reset-appearance"/);
+  assert.equal((html.match(/id="reset-appearance"/g)||[]).length,1,'恢复默认入口唯一');
+  assert.match(header[1], /id="skin-promo-banner"/,'宣传横幅保留在标题区');
   assert.match(html, /<footer class="studio-footer">[\s\S]*?id="startup-default"[\s\S]*?id="save"[\s\S]*?<\/footer>/);
+  assert.match(html, /<div class="footer-actions"><button id="reset-appearance"[^>]*type="button"[^>]*title="恢复当前所选形态的默认外观"[^>]*>恢复默认<\/button><button id="save"/);
   assert.match(html, /id="manual-toggle"[^>]*type="button"[^>]*aria-controls="manual-controls"[^>]*aria-expanded="false"/);
   assert.match(html, /<section class="controls"/);
   assert.match(html, /<section class="preview-pane"/);
