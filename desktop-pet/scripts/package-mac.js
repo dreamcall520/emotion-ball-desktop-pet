@@ -211,6 +211,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-installed-workbuddy-access.js',
     'desktop-pet/lib/mas-installed-workbuddy.js',
     'desktop-pet/lib/mas-workbuddy-quota-connection.js',
+    'desktop-pet/lib/mas-workbuddy-task-access.js',
     'desktop-pet/lib/mas-first-release.js',
     'desktop-pet/lib/mas-enable-flow.js',
     'desktop-pet/lib/mas-workbuddy-details.js',

@@ -5,6 +5,7 @@ const { spawn } = require('node:child_process');
 const { createWorkBuddyRunner, workBuddyError } = require('./workbuddy-client');
 const { safeEnterpriseReport } = require('./workbuddy-quota');
 const { validUsage } = require('./workbuddy-usage');
+const { cleanTitle } = require('./workbuddy-tasks-reader');
 const AUTH_SUFFIX = path.join('CodeBuddyExtension', 'Data', 'Public', 'auth');
 const fail = code => code === 'DIRECTORY_ACCESS_REQUIRED' || code === 'PROCESS_EXIT_UNCONFIRMED'
   ? Object.assign(new Error(code === 'DIRECTORY_ACCESS_REQUIRED' ? '请重新授权 WorkBuddy 应用和账号目录。' : 'WorkBuddy 查询进程尚未确认退出。'), { code })
@@ -23,17 +24,41 @@ function safeReport(value) {
     nextRefreshAt: value.nextRefreshAt, expires: value.expires.map(row => ({ amount: row.amount, at: row.at })), updatedAt: value.updatedAt };
 }
 
-// Run only the user's explicitly selected WorkBuddy component. No CLI bundle,
-// shell, account copy, task operation or model operation is exposed by this port.
-function createMasInstalledWorkBuddyRunner({ access, fs: fileSystem = fs, spawnProcess = spawn,
+function safeTasks(value) {
+  const count = value => Number.isSafeInteger(value) && value >= 0;
+  if (value?.source !== 'local-session-cache' || value.scope !== 'current-account' ||
+    !count(value.observedAt) || !count(value.total) || !count(value.pendingReview) || value.pendingReview > value.total ||
+    !Array.isArray(value.items) || value.items.length > 100 || value.items.length > value.total) return null;
+  const ids = new Set(), items = [];
+  for (const row of value.items) {
+    if (!row || typeof row.id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(row.id) || ids.has(row.id) ||
+      !count(row.updatedAt) || typeof row.unread !== 'boolean') return null;
+    ids.add(row.id);
+    items.push({ id: row.id, title: cleanTitle(row.title),
+      status: typeof row.status === 'string' && /^[a-z_-]{1,40}$/.test(row.status) ? row.status : 'unknown',
+      unread: row.unread, updatedAt: row.updatedAt,
+      transport: ['local', 'remote', 'cloud'].includes(row.transport) ? row.transport : 'unknown' });
+  }
+  return { source: 'local-session-cache', scope: 'current-account', observedAt: value.observedAt, running: null,
+    pendingReview: value.pendingReview, pendingReviewSource: 'cached-unread', total: value.total,
+    truncated: value.total > items.length, items };
+}
+
+// Run only the explicitly selected WorkBuddy component. Task metadata requires a
+// separate directory grant; no CLI bundle, shell, account copy or model request.
+function createMasInstalledWorkBuddyRunner({ access, taskAccess, fs: fileSystem = fs, spawnProcess = spawn,
   env = process.env, closeTimeoutMs = 6000 } = {}) {
   if (!access?.installedAppAccess?.acquire || !access?.directoryAccess?.acquire ||
     !Number.isFinite(closeTimeoutMs) || closeTimeoutMs <= 0) throw new TypeError('WorkBuddy App/account access is required');
   return async function run(operation, payload = {}, { signal } = {}) {
-    if (!['quota', 'usage'].includes(operation) || !payload || typeof payload !== 'object' || Array.isArray(payload) ||
-      Object.keys(payload).some(key => key !== 'expectedAccountKey') ||
+    const taskOperation = ['tasks', 'task-open'].includes(operation);
+    if (!['quota', 'usage', 'tasks', 'task-open'].includes(operation) || !payload || typeof payload !== 'object' || Array.isArray(payload) ||
+      Object.keys(payload).some(key => key !== 'expectedAccountKey' && !(operation === 'task-open' && key === 'id')) ||
+      taskOperation && !/^[0-9a-f]{64}$/.test(payload.expectedAccountKey || '') ||
+      operation === 'task-open' && (typeof payload.id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(payload.id)) ||
       payload.expectedAccountKey !== undefined && !/^[0-9a-f]{64}$/.test(payload.expectedAccountKey)) throw fail('INVALID_REQUEST');
     if (signal?.aborted) throw fail('CANCELLED');
+    if (taskOperation && typeof taskAccess?.acquire !== 'function') throw fail('DIRECTORY_ACCESS_REQUIRED');
     const leases = [];
     let child = null, exited = false, released = false, resolveExit;
     const childExit = new Promise(resolve => { resolveExit = resolve; });
@@ -50,14 +75,16 @@ function createMasInstalledWorkBuddyRunner({ access, fs: fileSystem = fs, spawnP
       leases.push(lease); check();
       const value = lease.directory;
       if (typeof value !== 'string' || !path.isAbsolute(value) || value.includes('\0') ||
-        (kind === 'app' ? path.basename(value) !== 'WorkBuddy.app' : !path.resolve(value).endsWith(path.sep + AUTH_SUFFIX))) throw fail('DIRECTORY_ACCESS_REQUIRED');
+        (kind === 'app' ? path.basename(value) !== 'WorkBuddy.app' : kind === 'tasks' ? path.basename(value) !== '.workbuddy' :
+          !path.resolve(value).endsWith(path.sep + AUTH_SUFFIX))) throw fail('DIRECTORY_ACCESS_REQUIRED');
       const normalized = path.resolve(value), stat = await fileSystem.promises.lstat(normalized);
       if (!stat.isDirectory() || stat.isSymbolicLink() || await fileSystem.promises.realpath(normalized) !== normalized) throw fail('DIRECTORY_ACCESS_REQUIRED');
       return normalized;
     }
     try {
       const appDirectory = await directory(access.installedAppAccess, 'app');
-      const authDirectory = await directory(access.directoryAccess, 'account'); check();
+      const authDirectory = await directory(access.directoryAccess, 'account');
+      const taskDirectory = taskOperation ? await directory(taskAccess, 'tasks') : null; check();
       const binary = path.join(appDirectory, 'Contents/MacOS/Electron');
       try {
         const stat = await fileSystem.promises.lstat(binary);
@@ -69,6 +96,7 @@ function createMasInstalledWorkBuddyRunner({ access, fs: fileSystem = fs, spawnP
       const childEnv = Object.fromEntries(Object.entries(env).filter(([key, value]) =>
         /^(?:HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|LANG|LC_ALL|TMPDIR)$/.test(key) && typeof value === 'string'));
       Object.assign(childEnv, { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', QIUQIU_WORKBUDDY_AUTH_DIRECTORY: authDirectory });
+      if (taskDirectory) childEnv.QIUQIU_WORKBUDDY_TASK_DIRECTORY = taskDirectory;
       const runner = createWorkBuddyRunner({ binary, env: childEnv, spawnProcess(...args) {
         check(); child = spawnProcess(...args);
         child.once('exit', confirmExit); child.once('close', confirmExit);
@@ -77,6 +105,15 @@ function createMasInstalledWorkBuddyRunner({ access, fs: fileSystem = fs, spawnP
       } });
       const result = await runner(operation, payload, { signal }); check();
       if (!/^[0-9a-f]{64}$/.test(result?.accountKey || '')) throw fail('INVALID_RESPONSE');
+      if (payload.expectedAccountKey !== undefined && result.accountKey !== payload.expectedAccountKey) throw fail('ACCOUNT_CHANGED');
+      if (operation === 'tasks') {
+        const report = safeTasks(result); if (!report) throw fail('INVALID_RESPONSE');
+        return { accountKey: result.accountKey, ...report };
+      }
+      if (operation === 'task-open') {
+        if (result.id !== payload.id || result.url !== 'workbuddy://chat/' + encodeURIComponent(payload.id)) throw fail('INVALID_RESPONSE');
+        return { accountKey: result.accountKey, id: payload.id, url: result.url };
+      }
       if (operation === 'quota') {
         const report = safeReport(result.report); if (!report) throw fail('INVALID_RESPONSE');
         return { accountKey: result.accountKey, report };

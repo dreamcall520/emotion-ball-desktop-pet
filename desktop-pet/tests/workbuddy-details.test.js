@@ -4,7 +4,7 @@ const { EventEmitter } = require('node:events');
 const { pathToFileURL } = require('node:url');
 const path = require('node:path');
 const { createWorkBuddyDetailsWindow } = require('../lib/workbuddy-details-window');
-function fixture(onVisibilityChange = () => {}) {
+function fixture(onVisibilityChange = () => {}, options = {}) {
   const windows = [];
   class Window extends EventEmitter {
     constructor(options) { super(); this.options = options; this.messages = []; this.visible = false;
@@ -14,7 +14,7 @@ function fixture(onVisibilityChange = () => {}) {
     hide() { this.visible = false; } show() { this.visible = true; } destroy() { this.destroyed = true; }
   }
   const area = { x: 0, y: 0, width: 1200, height: 800 }, anchor = { x: 400, y: 200, width: 100, height: 100 };
-  const details = createWorkBuddyDetailsWindow({ BrowserWindow: Window, screen: { getDisplayMatching: () => ({ workArea: area }), getPrimaryDisplay: () => ({ workArea: area }) }, getAnchor: () => anchor, onVisibilityChange });
+  const details = createWorkBuddyDetailsWindow({ BrowserWindow: Window, screen: { getDisplayMatching: () => ({ workArea: area }), getPrimaryDisplay: () => ({ workArea: area }) }, getAnchor: () => anchor, onVisibilityChange, ...options });
   return { details, windows };
 }
 test('trend window reuses placement, isolates state and only accepts owned main-frame close', () => {
@@ -83,6 +83,7 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   });
   receive({quotaOnly:true,action:'tasks',report:{total:5}});
   assert.equal(taskRenders,0);assert.equal(get('task-view').hidden,true);assert.equal(get('quota-view').hidden,false);
+  receive({quotaOnly:true,tasksEnabled:true,action:'tasks',report:{total:5}});assert.equal(taskRenders,1);
   receive({ report: { total: 7399.91, updatedAt: now, nextRefreshAt: now + 7 * 86400000, expires: [{ at: now + 2 * 86400000, amount: 99.91 }] }, history: [{ at: now - 300000, total: 7500 }, { at: now, total: 7399.91 }] });
   assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '—');
   assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('unavailable-note').textContent, '暂未取得 WorkBuddy 官方消耗记录');
@@ -213,4 +214,19 @@ test('quota-only details cannot retain or open task data even with a task action
   assert.doesNotMatch(JSON.stringify(value),/private/);
   assert.equal(details.getAction(),'trend');
   details.destroy();
+});
+
+
+test('independently enabled tasks survive quota-only details and retain owned IPC checks', () => {
+  const calls=[];
+  const {details,windows}=fixture(()=>{},{onOpenTask:id=>calls.push(id),onRefreshTasks:()=>calls.push('refresh'),onClearTasks:()=>calls.push('clear')});
+  details.open({quotaOnly:true,tasksEnabled:true,action:'results',tasks:{report:{source:'local-session-cache',scope:'current-account',pendingReview:1,total:1,items:[{id:'task_1',title:'最近任务',status:'completed',unread:true,body:'PRIVATE_BODY'}]}}});
+  const win=windows[0];win.webContents.emit('did-finish-load');
+  const value=win.messages.at(-1).value;
+  assert.equal(value.quotaOnly,true);assert.equal(value.tasksEnabled,true);assert.equal(value.action,'results');assert.equal(value.tasks.report.items[0].title,'最近任务');assert.doesNotMatch(JSON.stringify(value),/PRIVATE_BODY/);
+  const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
+  win.webContents.emit('ipc-message',{...event,senderFrame:{}},'pet:workbuddy-details-open-task','task_1');assert.deepEqual(calls,[]);
+  win.webContents.emit('ipc-message',event,'pet:workbuddy-details-open-task','task_1');
+  win.webContents.emit('ipc-message',event,'pet:workbuddy-details-refresh-tasks');win.webContents.emit('ipc-message',event,'pet:workbuddy-details-clear-tasks');
+  assert.deepEqual(calls,['task_1','refresh','clear']);details.destroy();
 });

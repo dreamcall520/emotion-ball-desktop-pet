@@ -69,11 +69,11 @@ function safeState(state) {
     })).values()].sort((a, b) => a.at - b.at).slice(-6000) : [];
   // Only fixed status text crosses IPC; upstream errors can contain credentials.
   const code = state?.error ? errorCode(state.errorCode) : null;
-  return { quotaOnly: state?.quotaOnly === true, enabled: state?.enabled === true, busy: state?.busy === true,
+  return { quotaOnly: state?.quotaOnly === true, tasksEnabled: state?.tasksEnabled === true, enabled: state?.enabled === true, busy: state?.busy === true,
     error: code ? errorMessage(code) : null, errorCode: code, nextRetryAt: code ? date(state.nextRetryAt) : null,
     stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null,
-    activity: { runningCount: state?.quotaOnly !== true && Number.isSafeInteger(state?.activity?.runningCount) && state.activity.runningCount >= 0 ? state.activity.runningCount : null,
-      unreadCount: state?.quotaOnly !== true && Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
+    activity: { runningCount: (state?.quotaOnly !== true || state?.tasksEnabled === true) && Number.isSafeInteger(state?.activity?.runningCount) && state.activity.runningCount >= 0 ? state.activity.runningCount : null,
+      unreadCount: (state?.quotaOnly !== true || state?.tasksEnabled === true) && Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
 }
 function createWorkBuddyLabelWindow({ BrowserWindow, screen, quotaOnly = false, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getBubbleBounds = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {}, onLayout = () => {} }) {
   let groupTransitionMode=null,groupTransitionEpoch=0,groupResumeImmediate=false;
@@ -134,7 +134,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, quotaOnly = false, 
         if (channel === `${CHANNEL}-toggle`) { toggleResizePending = true; expanded = !expanded; notifyLayout(); reposition(); }
         if (channel === `${CHANNEL}-refresh` && !current.busy) onRefresh();
         if (channel === `${CHANNEL}-trend`) onTrend();
-        if (!current.quotaOnly && channel === `${CHANNEL}-tasks` && ['tasks', 'results'].includes(kind)) onTasks(kind);
+        if ((!current.quotaOnly || current.tasksEnabled) && channel === `${CHANNEL}-tasks` && ['tasks', 'results'].includes(kind)) onTasks(kind);
       } catch (err) { error(err); }
     });
     target.on('closed', () => { resize.forget(target); if (win === target) { guard.hide(); win = null; ready = false; } });

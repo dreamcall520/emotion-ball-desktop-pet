@@ -395,7 +395,7 @@ async function execute(operation, payload, onDelta = () => {}, { authReader = re
   let auth;
   try { auth = authReader(operation === 'usage'); }
   catch (error) { error.stage = 'quota-auth'; if (!error.code) error.code = 'UNSUPPORTED_AUTH'; throw error; }
-  if (auth.scope === 'enterprise' || ['quota', 'usage'].includes(operation)) auth.verifyCurrent = () => {
+  if (auth.scope === 'enterprise' || ['quota', 'usage', 'tasks', 'task-open'].includes(operation)) auth.verifyCurrent = () => {
     try {
       const current = authReader(false);
       check(current.accountKey === auth.accountKey, 'ACCOUNT_CHANGED');
@@ -404,10 +404,16 @@ async function execute(operation, payload, onDelta = () => {}, { authReader = re
   try {
   if (payload.expectedAccountKey !== undefined) check(payload.expectedAccountKey === auth.accountKey, 'ACCOUNT_CHANGED');
   if (auth.scope === 'enterprise' && ['tasks', 'task-open'].includes(operation)) fail('TASK_CACHE_UNSUPPORTED');
-  if (operation === 'tasks') return require('./workbuddy-tasks-reader').readWorkBuddyTasks({ uid: auth.uid, accountKey: auth.accountKey });
+  if (operation === 'tasks') {
+    const result = require('./workbuddy-tasks-reader').readWorkBuddyTasks({ uid: auth.uid, accountKey: auth.accountKey });
+    auth.verifyCurrent();
+    return result;
+  }
   if (operation === 'task-open') {
     check(typeof payload.expectedAccountKey === 'string', 'ACCOUNT_CHANGED');
-    return require('./workbuddy-tasks-reader').workBuddyTaskLink({ uid: auth.uid, accountKey: auth.accountKey, id: payload.id });
+    const result = require('./workbuddy-tasks-reader').workBuddyTaskLink({ uid: auth.uid, accountKey: auth.accountKey, id: payload.id });
+    auth.verifyCurrent();
+    return result;
   }
   const signal = AbortSignal.timeout(operation === 'chat' ? 180000 : 55000);
   if (operation === 'quota') return await quota(auth, signal);

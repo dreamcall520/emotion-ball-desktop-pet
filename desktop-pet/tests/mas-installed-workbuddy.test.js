@@ -137,3 +137,90 @@ test('a partial balance or malformed usage cannot cross the main process adapter
   result(f.children[0], { report: { ...report, total: 99 } }); f.children[0].finish(0);
   await assert.rejects(pending, { code: 'INVALID_RESPONSE' });
 });
+
+async function taskFixture(t) {
+  const f = await fixture(t), taskDirectory = path.join(f.root, '.workbuddy'); await fs.mkdir(taskDirectory);
+  let taskCurrent = true, taskAcquires = 0, taskReleases = 0;
+  const taskAccess = { async acquire(provider) {
+    assert.equal(provider, 'workbuddy'); taskAcquires++; let released = false;
+    return { directory: taskDirectory, isCurrent: () => taskCurrent, release() { if (!released) { released = true; taskReleases++; } } };
+  } };
+  const run = createMasInstalledWorkBuddyRunner({ access: f.access, taskAccess, spawnProcess(...args) {
+    f.spawnCalls.push(args); const value = child(); f.children.push(value); return value;
+  } });
+  return { ...f, run, taskDirectory, taskAccess, get taskAcquires() { return taskAcquires; }, get taskReleases() { return taskReleases; }, revokeTasks() { taskCurrent = false; } };
+}
+const taskReport = { source: 'local-session-cache', scope: 'current-account', observedAt: 2000, running: null,
+  pendingReview: 1, pendingReviewSource: 'cached-unread', total: 1, truncated: false,
+  items: [{ id: 'task-a', title: '合成任务', status: 'completed', unread: true, updatedAt: 1000, transport: 'local' }] };
+
+test('tasks require a separate task lease and publish only current-account title/status metadata', async t => {
+  const f = await taskFixture(t), pending = f.run('tasks', { expectedAccountKey: key }); await spawned(f);
+  assert.equal(f.taskAcquires, 1); assert.equal(f.taskReleases, 0);
+  assert.equal(f.spawnCalls[0][2].env.QIUQIU_WORKBUDDY_TASK_DIRECTORY, f.taskDirectory);
+  result(f.children[0], { ...taskReport, uid: 'private', body: 'private', items: [{ ...taskReport.items[0], body: 'private', token: 'private' }] });
+  f.children[0].finish(0); assert.deepEqual(await pending, { accountKey: key, ...taskReport });
+  assert.equal(f.releases.length, 2); assert.equal(f.taskReleases, 1);
+});
+
+test('quota never acquires task permission while missing task authority cannot spawn a task reader', async t => {
+  const f = await taskFixture(t), pending = f.run('quota'); await spawned(f);
+  assert.equal(f.taskAcquires, 0); assert.equal(f.spawnCalls[0][2].env.QIUQIU_WORKBUDDY_TASK_DIRECTORY, undefined);
+  result(f.children[0]); f.children[0].finish(0); await pending;
+  const ordinary = await fixture(t);
+  await assert.rejects(ordinary.run('tasks', { expectedAccountKey: key }), { code: 'DIRECTORY_ACCESS_REQUIRED' });
+  assert.equal(ordinary.acquired.length, 0); assert.equal(ordinary.spawnCalls.length, 0);
+});
+
+test('task-open accepts only the validated exact local deep link and does not open it', async t => {
+  const f = await taskFixture(t), pending = f.run('task-open', { expectedAccountKey: key, id: 'task-a' }); await spawned(f);
+  result(f.children[0], { id: 'task-a', url: 'workbuddy://chat/task-a', token: 'private' }); f.children[0].finish(0);
+  assert.deepEqual(await pending, { accountKey: key, id: 'task-a', url: 'workbuddy://chat/task-a' });
+  const invalid = await taskFixture(t), bad = invalid.run('task-open', { expectedAccountKey: key, id: 'task-a' }); await spawned(invalid);
+  result(invalid.children[0], { id: 'task-b', url: 'https://untrusted.invalid/' }); invalid.children[0].finish(0);
+  await assert.rejects(bad, { code: 'INVALID_RESPONSE' });
+});
+
+test('revoking task authority or cancelling retains scopes until exit and suppresses late task metadata', async t => {
+  const f = await taskFixture(t), pending = f.run('tasks', { expectedAccountKey: key }); await spawned(f);
+  f.revokeTasks(); result(f.children[0], taskReport); assert.equal(f.taskReleases, 0); f.children[0].finish(0);
+  await assert.rejects(pending, { code: 'CANCELLED' }); assert.equal(f.taskReleases, 1); assert.equal(f.releases.length, 2);
+});
+
+test('task payloads cannot select arbitrary databases or pass a different account through', async t => {
+  const f = await taskFixture(t);
+  await assert.rejects(f.run('tasks', { expectedAccountKey: key, file: '/outside.db' }), { code: 'INVALID_REQUEST' });
+  await assert.rejects(f.run('task-open', { expectedAccountKey: key, id: '../escape' }), { code: 'INVALID_REQUEST' });
+  const pending = f.run('tasks', { expectedAccountKey: key }); await spawned(f);
+  result(f.children[0], { ...taskReport, accountKey: 'b'.repeat(64) }); f.children[0].finish(0);
+  await assert.rejects(pending, { code: 'ACCOUNT_CHANGED' });
+});
+
+test('task request cancellation terminates only its helper and retains all three leases through exit', async t => {
+  const f = await taskFixture(t), abort = new AbortController();
+  const pending = f.run('tasks', { expectedAccountKey: key }, { signal: abort.signal }); await spawned(f);
+  abort.abort(); await tick(); assert.equal(f.children[0].killed, true);
+  assert.equal(f.releases.length, 0); assert.equal(f.taskReleases, 0);
+  result(f.children[0], taskReport); f.children[0].finish(0);
+  await assert.rejects(pending, { code: 'CANCELLED' }); assert.equal(f.taskReleases, 1); assert.equal(f.releases.length, 2);
+});
+
+test('a wrong or symbolic task directory cannot borrow the account grants to read a cache', async t => {
+  const f = await taskFixture(t); let released = 0;
+  f.taskAccess.acquire = async () => ({ directory: f.auth, release: () => released++ });
+  await assert.rejects(f.run('tasks', { expectedAccountKey: key }), { code: 'DIRECTORY_ACCESS_REQUIRED' });
+  assert.equal(released, 1); assert.equal(f.releases.length, 2); assert.equal(f.spawnCalls.length, 0);
+  const moved = path.join(f.root, 'outside'); await fs.rename(f.taskDirectory, moved); await fs.symlink(moved, f.taskDirectory);
+  f.taskAccess.acquire = async () => ({ directory: f.taskDirectory, release: () => released++ });
+  await assert.rejects(f.run('tasks', { expectedAccountKey: key }), { code: 'DIRECTORY_ACCESS_REQUIRED' });
+  assert.equal(released, 2); assert.equal(f.spawnCalls.length, 0);
+});
+
+test('task metadata cannot supply arbitrary running counts, secrets in titles or duplicate IDs', async t => {
+  const f = await taskFixture(t), pending = f.run('tasks', { expectedAccountKey: key }); await spawned(f);
+  result(f.children[0], { ...taskReport, running: 99, items: [{ ...taskReport.items[0], title: 'Bearer synthetic-private-token' }] }); f.children[0].finish(0);
+  const value = await pending; assert.equal(value.running, null); assert.ok(!value.items[0].title.includes('synthetic-private-token'));
+  const invalid = await taskFixture(t), bad = invalid.run('tasks', { expectedAccountKey: key }); await spawned(invalid);
+  result(invalid.children[0], { ...taskReport, total: 2, items: [taskReport.items[0], taskReport.items[0]] }); invalid.children[0].finish(0);
+  await assert.rejects(bad, { code: 'INVALID_RESPONSE' });
+});

@@ -64,3 +64,25 @@ test('reauthorization clears the old permission failure and actually retries a r
   granted = true; await flow.connect(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls, 2); assert.equal(flow.getState().status, 'ready'); flow.close();
 });
+test('task access is optional on restore and a separate consent never changes quota connection', async () => {
+ const calls=[];let taskGranted=false,taskEnabled=false;
+ const flow=createMasWorkBuddyQuotaConnection({
+  access:{ensure:async()=>({status:'stored'}),clearPendingApp(){},revoke:async()=>{}},
+  quota:{setEnabled(){},getState:()=>({report:{total:8351}})},usage:{setEnabled(){}},saveEnabled(){},
+  taskAccess:{ensure:async({interactive})=>{calls.push(interactive);if(interactive)taskGranted=true;return{status:taskGranted?'stored':'needs-authorization'};},revoke:async()=>{taskGranted=false;}},
+  tasks:{getState:()=>({}),setEnabled:v=>{taskEnabled=v;},refresh:async()=>{calls.push('read-tasks');}}
+ });
+ await flow.restore(true);await new Promise(r=>setImmediate(r));
+ assert.equal(flow.getState().connected,true);assert.equal(flow.getState().tasks.authorized,false);assert.deepEqual(calls,[false]);
+ await flow.authorizeTasks();assert.equal(flow.getState().tasks.authorized,true);assert.equal(taskEnabled,true);assert.ok(calls.includes('read-tasks'));
+ await flow.revokeTasks();assert.equal(taskEnabled,false);assert.equal(flow.getState().tasks.authorized,false);assert.equal(flow.getState().connected,true);
+});
+test('cancelled task selection retains the connected quota and never enables metadata reads',async()=>{
+ let taskEnabled=false;
+ const flow=createMasWorkBuddyQuotaConnection({access:{ensure:async()=>({status:'stored'}),clearPendingApp(){}},
+ quota:{setEnabled(){},getState:()=>({report:{total:9}})},usage:{setEnabled(){}},saveEnabled(){},
+ taskAccess:{ensure:async({interactive})=>({status:interactive?'cancelled':'needs-authorization'})},
+ tasks:{getState:()=>({}),setEnabled:v=>{taskEnabled=v;},refresh:async()=>{throw Error('unapproved read');}}});
+ await flow.connect();await new Promise(r=>setImmediate(r));
+ assert.equal((await flow.authorizeTasks()).status,'cancelled');assert.equal(flow.getState().connected,true);assert.equal(taskEnabled,false);
+});

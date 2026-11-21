@@ -101,7 +101,7 @@
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !event.isComposing) { event.preventDefault(); api.close(); } });
   api.onModel(value => {
     state = value; preference = ['light', 'dark'].includes(value.appearance) ? value.appearance : 'system'; theme();
-    if (value.quotaOnly === true) { el('task-view').hidden = true; el('quota-view').hidden = false; }
+    if (value.quotaOnly === true && value.tasksEnabled !== true) { el('task-view').hidden = true; el('quota-view').hidden = false; }
     else if (window.workBuddyTasksView?.render(value, resize)) return;
     render();
   });

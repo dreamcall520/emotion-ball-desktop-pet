@@ -153,7 +153,7 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  const zip=path.join(config.zipDir,`electron-v${config.electronVersion}-mas-${config.arch}.zip`);
  try{const s=io.lstatSync(zip);if(!s.isFile()||s.isSymbolicLink()||s.size<1)throw Error();}catch{throw fail('MAS_DEV_CACHED_MAS_RUNTIME_REQUIRED');}
  if(!release.isFirstRelease(config))await (deps.validateResources||(async()=>{const resourcesPath=path.join(root,'desktop-pet/build');await require('../lib/mas-bundled-codex').resolveBundledCodex({resourcesPath,arch:config.arch});if(!release.isFirstRelease(config))await require('../lib/mas-bundled-workbuddy').resolveBundledWorkBuddy({resourcesPath});}))();
- run('xcodebuild',['-version']);
+ (deps.validateBuildTools||require('./mas-development-tools').validateMasDevelopmentTools)({run,io});
  const mac=deps.mac||require('./package-mac'),makeIcon=deps.makeIcon||require('./make-icon').makeIcon;
  (deps.buildWeatherLocation||require('./build-weather-location').buildWeatherLocation)(root);
  (deps.buildPluginHost||require('./build-plugin-host').buildPluginHost)(root);

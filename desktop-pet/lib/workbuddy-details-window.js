@@ -11,7 +11,7 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
   const alive = () => win && !win.isDestroyed();
   const report = error => { try { onError(error); } catch (_) {} };
   function clean(value) {
-    if (value?.quotaOnly === true) { action = 'trend'; value = {...value,tasks:null}; }
+    if (value?.quotaOnly === true && value?.tasksEnabled !== true) { action = 'trend'; value = {...value,tasks:null}; }
     const t = value?.tasks, r = t?.report;
     let tasks = { busy: t?.busy === true, error: t?.error ? '本机任务记录暂时无法读取，请重试。' : null,
       report: r?.source === 'local-session-cache' && r.scope === 'current-account' && Array.isArray(r.items) ? {
@@ -24,7 +24,7 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
           transport:['local','remote','cloud'].includes(i.transport)?i.transport:'unknown' })) } : null };
     if (t?.deviceHistory || t?.liveObservations || r?.scope === 'authorized-device-cache') tasks = safeDeviceTasks(t);
     const website = value?.report?.scope === 'website-summary' || value?.usage?.report?.source === 'website-usage';
-    return { action, quotaOnly: value?.quotaOnly === true, tasks, usage: website ? safeWebsiteUsage(value?.usage) : safeUsageState(value?.usage), report: website ? safeWebsiteSummaryReport(value.report) : value?.report?.scope === 'enterprise' ? safeEnterpriseReport(value.report) : Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
+    return { action, quotaOnly: value?.quotaOnly === true, tasksEnabled: value?.tasksEnabled === true, tasks, usage: website ? safeWebsiteUsage(value?.usage) : safeUsageState(value?.usage), report: website ? safeWebsiteSummaryReport(value.report) : value?.report?.scope === 'enterprise' ? safeEnterpriseReport(value.report) : Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
       history: !website && Array.isArray(value?.history) ? value.history.filter(p => p && Number.isSafeInteger(p.at) && Number.isFinite(p.total) && p.total >= 0).map(p => ({ at: p.at, total: p.total, basic: p.basic, reward: p.reward, purchased: p.purchased, nextRefreshAt: p.nextRefreshAt, expires: Array.isArray(p.expires) ? p.expires.map(e => ({ at: e.at, amount: e.amount })) : undefined })) : [],
       historyError: value?.historyError ? '积分趋势暂时无法保存。' : null,
       stale: value?.stale === true || Boolean(value?.error) };

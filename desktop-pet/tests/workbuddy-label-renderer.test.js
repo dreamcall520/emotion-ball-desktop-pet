@@ -275,3 +275,14 @@ test('quota-only card hides and blocks task links while retaining quota controls
   assert.equal(e.get('tasks').hidden,false);
   assert.equal(e.get('results').hidden,false);
 });
+
+
+test('explicit task capability restores official task footer without the extra refresh action', () => {
+  const {elements:e,render,calls}=fixture();
+  render({quotaOnly:true,tasksEnabled:true,report,expanded:true,activity:{runningCount:null,unreadCount:4}});
+  for(const id of ['tasks','results']){assert.equal(e.get(id).hidden,false);assert.equal(e.get(id).disabled,false);e.get(id).events.click();}
+  assert.equal(e.get('refresh').hidden,true);assert.equal(e.get('unread-count').textContent,'4');assert.equal(e.get('running-count').textContent,'—');
+  assert.deepEqual(calls,['tasks','results']);
+  render({quotaOnly:true,tasksEnabled:false,report,expanded:true});
+  assert.equal(e.get('tasks').hidden,true);
+});

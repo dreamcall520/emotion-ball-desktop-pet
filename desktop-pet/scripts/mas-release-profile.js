@@ -17,10 +17,10 @@ function ownSigningTargets(appPath,io=fs){
  for(const child of ['Frameworks','Library/LoginItems','Resources/app.asar.unpacked'])walk(path.join(appPath,'Contents',child));
  return targets;
 }
-// Keep the installed-client quota capability separate from legacy website,
-// bundled CLI, chat, task and game capabilities. Supporting report projections
+// Keep installed-client quota and explicitly authorized task metadata separate
+// from legacy website, bundled CLI, chat, plugin and game capabilities. Report projections
 // below contain no provider I/O and are shared with the website channel.
-const WORKBUDDY_QUOTA_FILES = new Set([
+const WORKBUDDY_FILES = new Set([
   'desktop-pet/workbuddy-label.html', 'desktop-pet/workbuddy-label.css',
   'desktop-pet/workbuddy-label-preload.js', 'desktop-pet/workbuddy-label-renderer.js',
   'desktop-pet/workbuddy-details.html', 'desktop-pet/workbuddy-details.css',
@@ -32,6 +32,8 @@ const WORKBUDDY_QUOTA_FILES = new Set([
   'desktop-pet/lib/workbuddy-usage-reader.js', 'desktop-pet/lib/workbuddy-label-window.js',
   'desktop-pet/lib/workbuddy-details-window.js', 'desktop-pet/lib/workbuddy-website-summary.js',
   'desktop-pet/lib/mas-workbuddy-details.js', 'desktop-pet/lib/mas-workbuddy-quota-connection.js',
+  'desktop-pet/lib/mas-workbuddy-task-access.js', 'desktop-pet/lib/workbuddy-tasks-reader.js',
+  'desktop-pet/lib/workbuddy-tasks.js', 'desktop-pet/workbuddy-tasks-renderer.js',
   'desktop-pet/assets/integrations/workbuddy.png'
 ]);
 function trimStaging(staging, config, io = fs) {
@@ -53,17 +55,12 @@ function trimStaging(staging, config, io = fs) {
     for (const name of io.readdirSync(full)) {
       const relative = path.posix.join(directory, name);
       if (/^(?:mas-(?:(?:bundled|installed)-)?)?workbuddy(?:[-.]|$)|^(?:verify|prepare-mas)-workbuddy-/i.test(name) &&
-          !WORKBUDDY_QUOTA_FILES.has(relative)) {
+          !WORKBUDDY_FILES.has(relative)) {
         removed.push(relative);
       }
     }
   }
   for (const name of removed) io.rmSync(path.join(staging, name), { recursive: true, force: true });
-  const details = path.join(staging, 'desktop-pet/workbuddy-details.html');
-  if (io.existsSync(details)) {
-    const contents = io.readFileSync(details, 'utf8');
-    io.writeFileSync(details, contents.replace(/<script\s+src=["']workbuddy-tasks-renderer\.js["']\s*><\/script>/g, ''));
-  }
   return removed;
 }
 // @electron/packager 20.3.0 has no electronLanguages option. Prune complete

@@ -161,7 +161,7 @@ let storeRuntime = null, storeConnectionsWindow = null, storeEnableFlow = null;
 let chat = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
-let workbuddyInstalledAccess = null, workbuddyQuotaConnection = null;
+let workbuddyInstalledAccess = null, workbuddyTaskAccess = null, workbuddyQuotaConnection = null;
 let workbuddyDiagnosticKey = '';
 let workbuddyLabel = null;
 let apiBalance = null;
@@ -595,7 +595,7 @@ function fromGlobalSettings(event, requireVisible = true) {
 }
 
 function openGlobalSettings(view) {
-  const target = ['/codex-menu', 'workbuddy-settings', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
+  const target = ['/codex-menu', 'workbuddy-settings', 'workbuddy-tasks-authorization', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     positionFunctionWindow(globalSettingsWindow);
@@ -1791,7 +1791,7 @@ function syncApiUsageLabel() {
 
 function workBuddyCardState() {
   const state = workbuddyQuota?.getState(), tasks = workbuddyTasks?.getState();
-  return { ...state, ...(FIRST_RELEASE ? { quotaOnly: true } : {}), activity: { runningCount: null, unreadCount: tasks?.report?.pendingReview ?? null } };
+  return { ...state, ...(FIRST_RELEASE ? { quotaOnly: true, tasksEnabled: true } : {}), activity: { runningCount: null, unreadCount: tasks?.report?.pendingReview ?? null } };
 }
 function workBuddyDetailsState(action = workbuddyDetails?.getAction?.() || 'trend') {
   if(IS_STORE_BUILD&&!FIRST_RELEASE&&storeRuntime)return storeRuntime.getWorkbuddyDetailsState(action);
@@ -1811,8 +1811,9 @@ async function openWorkBuddyTask(id) {
   } catch (_) { return false; }
 }
 function openWorkBuddyTasks(action = 'tasks') {
-  if (FIRST_RELEASE || !['tasks', 'results'].includes(action) || !settings?.workbuddyEnabled || screenLocked || isQuitting) return false;
+  if (!['tasks', 'results'].includes(action) || !settings?.workbuddyEnabled || screenLocked || isQuitting) return false;
   codexDetails?.close(); apiBalanceDetails?.close(); quotaGuard?.close();
+  if (FIRST_RELEASE && workbuddyQuotaConnection?.getState().tasks.authorized !== true) { openGlobalSettings('workbuddy-tasks-authorization'); return false; }
   const opened = workbuddyDetails?.open(workBuddyDetailsState(action));
   void workbuddyTasks?.refresh();
   return opened === true;
@@ -3951,7 +3952,7 @@ function registerIpc() {
   ipcMain.handle('pet:global-workbuddy-connection', async (event, action) => {
     if (!FIRST_RELEASE || !workbuddyQuotaConnection || !fromGlobalSettings(event) ||
       event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'global-settings.html')).href ||
-      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel'].includes(action)) return { status: 'busy' };
+      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel', 'tasks-authorize', 'tasks-revoke'].includes(action)) return { status: 'busy' };
     globalSettingsBusy = true;
     const owner = globalSettingsWindow, controller = new AbortController();
     const abort = () => controller.abort();
@@ -3962,6 +3963,8 @@ function registerIpc() {
       if (action === 'app' || action === 'account') result = await workbuddyQuotaConnection.authorize(action, controller.signal);
       else if (action === 'cancel') result = workbuddyQuotaConnection.cancel();
       else if (action === 'disconnect') result = await workbuddyQuotaConnection.disconnect();
+      else if (action === 'tasks-authorize') result = await workbuddyQuotaConnection.authorizeTasks(controller.signal);
+      else if (action === 'tasks-revoke') result = await workbuddyQuotaConnection.revokeTasks();
       else result = await workbuddyQuotaConnection.connect(controller.signal);
       if (controller.signal.aborted) return { status: 'cancelled' };
       return { ...result, snapshot: globalSettingsSnapshot() };
@@ -4767,7 +4770,7 @@ async function bootstrap() {
     onAction: performChatAction });
   let makeWorkbuddyChat;
   {
-  const createWorkBuddyTasks = !FIRST_RELEASE ? require('./lib/workbuddy-tasks').createWorkBuddyTasks : null;
+  const { createWorkBuddyTasks } = require('./lib/workbuddy-tasks');
   const { createWorkBuddyUsage } = require('./lib/workbuddy-usage');
   const createWorkBuddyConsent = !FIRST_RELEASE ? require('./lib/workbuddy-consent-window').createWorkBuddyConsent : null;
   const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
@@ -4779,7 +4782,10 @@ async function bootstrap() {
     workbuddyInstalledAccess = require('./lib/mas-installed-workbuddy-access').createMasInstalledWorkBuddyAccess({ app,
       dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed() ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
       storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-installed-workbuddy-grants')) });
-    workbuddyRun = require('./lib/mas-installed-workbuddy').createMasInstalledWorkBuddyRunner({ access: workbuddyInstalledAccess });
+    workbuddyTaskAccess = require('./lib/mas-workbuddy-task-access').createMasWorkBuddyTaskAccess({ app,
+      dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed() ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
+      storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-workbuddy-task-grants')) });
+    workbuddyRun = require('./lib/mas-installed-workbuddy').createMasInstalledWorkBuddyRunner({ access: workbuddyInstalledAccess, taskAccess: workbuddyTaskAccess });
   } else {
   workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
     ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
@@ -4794,7 +4800,7 @@ async function bootstrap() {
   }
   workbuddyUsage = (IS_STORE_BUILD && !FIRST_RELEASE ? storeRuntime.createWorkBuddyUsagePort : createWorkBuddyUsage)({ run: workbuddyRun, getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => workbuddyDetails?.update(workBuddyDetailsState()) });
-  if (!FIRST_RELEASE) workbuddyTasks = (IS_STORE_BUILD ? storeRuntime.createWorkBuddyTasksPort : createWorkBuddyTasks)({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
+  workbuddyTasks = (IS_STORE_BUILD && !FIRST_RELEASE ? storeRuntime.createWorkBuddyTasksPort : createWorkBuddyTasks)({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = (IS_STORE_BUILD && !FIRST_RELEASE ? storeRuntime.createWorkBuddyQuotaPort : createWorkBuddyQuota)({ run: workbuddyRun, ...(FIRST_RELEASE ? { watchAuth: () => () => {} } : {}), historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
     const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';
@@ -4802,8 +4808,9 @@ async function bootstrap() {
       {stage:'quota-query', ...state.diagnostic, severity: ['LOGIN_REQUIRED','ACCOUNT_CHANGED','UNSUPPORTED_PLATFORM','RATE_LIMITED'].includes(state.errorCode) ? 'warning' : 'error',
         expected: ['LOGIN_REQUIRED','ACCOUNT_CHANGED','UNSUPPORTED_PLATFORM','RATE_LIMITED'].includes(state.errorCode)});
     workbuddyDiagnosticKey = diagnostic;
-    workbuddyTasks?.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
-    if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks?.refresh(false); void workbuddyUsage.refresh(false); }
+    const tasksAllowed = !FIRST_RELEASE || workbuddyQuotaConnection?.getState().tasks.authorized === true;
+    workbuddyTasks?.setEnabled(state.enabled && tasksAllowed); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
+    if (state.enabled && !state.busy && !state.error && state.report) { if (tasksAllowed) void workbuddyTasks?.refresh(false); void workbuddyUsage.refresh(false); }
   } });
   workbuddyLabel = require('./lib/workbuddy-label-window').createWorkBuddyLabelWindow({ BrowserWindow, screen, quotaOnly: FIRST_RELEASE, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
     getStackAnchor: () => {
@@ -4841,9 +4848,9 @@ async function bootstrap() {
   });
   if (FIRST_RELEASE) {
     workbuddyQuotaConnection = require('./lib/mas-workbuddy-quota-connection').createMasWorkBuddyQuotaConnection({
-      access: workbuddyInstalledAccess, quota: workbuddyQuota, usage: workbuddyUsage,
+      access: workbuddyInstalledAccess, quota: workbuddyQuota, usage: workbuddyUsage, taskAccess: workbuddyTaskAccess, tasks: workbuddyTasks,
       saveEnabled: value => { settings = saveSettings(settingsFile, { ...settings, workbuddyEnabled: value }); },
-      onChange: () => { syncWorkBuddyLabel(); syncQuotaCardGroup(); } });
+      onChange: () => { syncWorkBuddyLabel(); syncQuotaCardGroup(); workbuddyDetails?.update(workBuddyDetailsState()); } });
     void workbuddyQuotaConnection.restore(settings.workbuddyEnabled);
   } else workbuddyQuota.setEnabled(settings.workbuddyEnabled);
   }

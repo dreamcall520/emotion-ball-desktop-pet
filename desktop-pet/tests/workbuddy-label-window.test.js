@@ -282,7 +282,7 @@ test('quota-only card snapshots preserve capability and remove task metadata', (
 });
 
 
-test('quota-only native card never loads the game module or accepts task IPC', async () => {
+test('quota-only native card never loads the game module and task IPC remains opt-in', async () => {
   const Module = require('node:module'), load = Module._load, windows = [];
   let taskCalls = 0, guardLoads = 0;
   class Window extends EventEmitter {
@@ -298,5 +298,19 @@ test('quota-only native card never loads the game module or accepts task IPC', a
     const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
     for(const action of ['tasks','results'])win.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks',action);
     assert.equal(taskCalls,0);assert.equal(guardLoads,0);assert.equal(card.getGuardWindow(),null);
+    card.show({enabled:true,tasksEnabled:true});
+    assert.equal(win.sent.at(-1).tasksEnabled,true);
+    win.webContents.emit('ipc-message',{...event,senderFrame:{}},'pet:workbuddy-label-tasks','tasks');
+    assert.equal(taskCalls,0);
+    for(const action of ['tasks','results'])win.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks',action);
+    assert.equal(taskCalls,2);assert.equal(guardLoads,0);
   } finally { Module._load=load;card?.destroy(); }
+});
+
+
+test('task capability is independent from quota-only and keeps authorized task counts', () => {
+  const state=safeState({quotaOnly:true,tasksEnabled:true,activity:{runningCount:0,unreadCount:3}});
+  assert.equal(state.quotaOnly,true);assert.equal(state.tasksEnabled,true);
+  assert.equal(state.activity.runningCount,0);assert.equal(state.activity.unreadCount,3);
+  assert.equal(safeState({quotaOnly:true,tasksEnabled:'true',activity:{unreadCount:3}}).activity.unreadCount,null);
 });

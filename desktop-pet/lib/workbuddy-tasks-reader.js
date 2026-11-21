@@ -9,10 +9,24 @@ function cleanTitle(value) {
     .replace(/\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{12,}/g, '[已隐藏]')
     .replace(/\s+/g, ' ').trim().slice(0, 160) || '未命名任务';
 }
-function readWorkBuddyTasks({ uid, accountKey, file = path.join(os.homedir(), '.workbuddy/workbuddy.db'),
+function taskDatabaseFile(directory = process.env.QIUQIU_WORKBUDDY_TASK_DIRECTORY) {
+  if (directory === undefined) return path.join(os.homedir(), '.workbuddy/workbuddy.db');
+  if (typeof directory !== 'string' || !path.isAbsolute(directory) || directory.includes('\0') || path.basename(directory) !== '.workbuddy') fail('TASK_CACHE_UNAVAILABLE');
+  return path.join(directory, 'workbuddy.db');
+}
+function checkDatabaseFile(file) {
+  try {
+    for (const suffix of ['', '-wal', '-shm']) {
+      let stat;
+      try { stat = fs.lstatSync(file + suffix); } catch (error) { if (suffix && error.code === 'ENOENT') continue; throw error; }
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('TASK_CACHE_UNAVAILABLE');
+    }
+  } catch { fail('TASK_CACHE_UNAVAILABLE'); }
+}
+function readWorkBuddyTasks({ uid, accountKey, file = taskDatabaseFile(),
   Database = require('node:sqlite').DatabaseSync, now = Date.now } = {}) {
   if (typeof uid !== 'string' || !uid || !/^[0-9a-f]{64}$/.test(accountKey || '')) fail('LOGIN_REQUIRED');
-  if (!fs.existsSync(file)) fail('TASK_CACHE_UNAVAILABLE');
+  checkDatabaseFile(file);
   let db;
   try {
     db = new Database(file, { readOnly: true });
@@ -39,11 +53,11 @@ function readWorkBuddyTasks({ uid, accountKey, file = path.join(os.homedir(), '.
     fail('TASK_CACHE_UNAVAILABLE');
   } finally { try { db?.close(); } catch (_) {} }
 }
-function workBuddyTaskLink({ uid, accountKey, id, file = path.join(os.homedir(), '.workbuddy/workbuddy.db'),
+function workBuddyTaskLink({ uid, accountKey, id, file = taskDatabaseFile(),
   Database = require('node:sqlite').DatabaseSync } = {}) {
   if (typeof uid !== 'string' || !uid || !/^[0-9a-f]{64}$/.test(accountKey || '')) fail('LOGIN_REQUIRED');
   if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) fail('INVALID_REQUEST');
-  if (!fs.existsSync(file)) fail('TASK_CACHE_UNAVAILABLE');
+  checkDatabaseFile(file);
   let db;
   try {
     db = new Database(file, { readOnly: true });

@@ -74,6 +74,16 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     }
     assert(Object.values(palettes).every(p=>p.bodyFilter==='none'&&p.petFilter===palettes['standard-light-blue'].petFilter),'theme never recolors the pet with a filter');
     await run(`Object.assign(document.documentElement.dataset,${JSON.stringify(originalPalette)});void 0`);
+    await run(`window.measureIcon = img => {
+      const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+      const context=canvas.getContext('2d');context.drawImage(img,0,0);const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+      let left=canvas.width,top=canvas.height,right=-1,bottom=-1;
+      for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++)if(pixels[(y*canvas.width+x)*4+3]>=16){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
+      const rect=img.getBoundingClientRect(),scale=Math.min(rect.width/canvas.width,rect.height/canvas.height);
+      return {file:img.getAttribute('src'),frame:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},art:{left,top,right,bottom,width:(right-left+1)*scale,height:(bottom-top+1)*scale}};
+    };void 0`);
+    if(process.env.PET_SETTINGS_MEASUREMENTS)process.stdout.write('NAV_ART_BASELINE '+JSON.stringify(await run(`[...document.querySelectorAll('#navigation img.nav-icon')].filter(img=>getComputedStyle(img).display!=='none').map(measureIcon)`))+'\n');
+
     const nav = await run("[...document.querySelectorAll('#navigation button')].map(n=>n.textContent)");
     for (const name of ['Codex','WorkBuddy','API 余额','快捷键','常规设置']) assert(nav.includes(name), name);
     assert(!nav.includes('OpenAI API')); assert(!nav.includes('API 费用与用量')); assert(!nav.includes('Codex 与 API'));
@@ -366,14 +376,44 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("snapshot.firstReleaseWorkbuddyConnection={connected:false,enabled:false,status:'needs-authorization',message:''};snapshot.version='wb-link';window.wbLinkActions=[];window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);return {status:action==='app'?'app-authorized':action==='account'?'stored':'ready'}};window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("navigate('workbuddy-settings')");
+    await run("snapshot.codexIconPreference='app-default';snapshot.version='wb-art';window.dispatchEvent(new Event('focus'))");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await run(`Promise.all([...document.querySelectorAll('#navigation img.nav-icon')].map(img=>img.complete?Promise.resolve():new Promise(resolve=>img.onload=resolve)))`);
+    for(const width of [720,840,1080]) {
+      win.setSize(width,820);
+      const icons=await run(`([...document.querySelectorAll('#navigation img.nav-icon')].filter(img=>getComputedStyle(img).display!=='none').map(measureIcon))`);
+      const wb=icons.find(i=>i.file.endsWith('/workbuddy.png')),cx=icons.find(i=>i.file.endsWith('/codex-default.png'));
+      assert.equal(wb.frame.width,cx.frame.width);assert.equal(wb.frame.height,cx.frame.height);assert.equal(wb.frame.x,cx.frame.x);
+      assert(Math.abs(wb.art.width-cx.art.width)<.6&&Math.abs(wb.art.height-cx.art.height)<.6,'WorkBuddy and store Codex artwork have equal visual size at '+width+'px: '+JSON.stringify(icons));
+      if(process.env.PET_SETTINGS_MEASUREMENTS)process.stdout.write('NAV_ART_STORE_'+width+' '+JSON.stringify(icons)+'\n');
+    }
+
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'连接');
     assert.doesNotMatch(await run("document.querySelector('#content').textContent"),/趣味|游戏|发送消息|聊天/);
     await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/WorkBuddy/);
+    const wbAppCopy = await run(`(()=>{const p=document.querySelector('dialog[open] #store-codex-dialog-copy p'),s=getComputedStyle(p);return {text:p.textContent,lines:p.getBoundingClientRect().height/parseFloat(s.lineHeight),overflow:p.scrollWidth>p.clientWidth,whiteSpace:s.whiteSpace};})()`);
+    assert.equal(Math.round(wbAppCopy.lines),1,'WorkBuddy app authorization explanation stays on one natural line');
+    assert.equal(wbAppCopy.overflow,false);assert.notEqual(wbAppCopy.whiteSpace,'nowrap');
+    if(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS){await run('new Promise(resolve=>setTimeout(resolve,100))');fs.mkdirSync(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS,{recursive:true});const rect=await run("(()=>{const r=document.querySelector('dialog[open]').getBoundingClientRect();return {x:Math.floor(r.x)-12,y:Math.floor(r.y)-12,width:Math.ceil(r.width)+24,height:Math.ceil(r.height)+24}})()");fs.writeFileSync(path.join(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS,'workbuddy-app-authorization.png'),(await win.webContents.capturePage(rect)).toPNG());}
+    for (const width of [720,840,1080]) {
+      win.setSize(width,820);
+      const lines=await run(`(()=>{const p=document.querySelector('dialog[open] #store-codex-dialog-copy p'),r=document.createRange();r.selectNodeContents(p);return [...r.getClientRects()].filter(rect=>rect.width>0).length;})()`);
+      assert.equal(lines,1,'authorization app copy stays on a single line at '+width+'px');
+    }
+
+
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     const wbTerms=await run("document.querySelector('dialog[open]').textContent");
     assert.match(wbTerms,/额度.*消耗统计/s);assert.match(wbTerms,/官方.*本机.*登录/s);assert.match(wbTerms,/不发送模型消息/);
+    for(const width of [720,840,1080]) {
+      win.setSize(width,820);
+      const paragraphs=await run(`([...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);const style=getComputedStyle(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth,whiteSpace:style.whiteSpace};}))`);
+      assert(paragraphs.every(p=>p.lines===1&&!p.overflow&&p.whiteSpace!=='nowrap'),'each concise WorkBuddy authorization item fits naturally at '+width+'px: '+JSON.stringify(paragraphs));
+    }
+
+    if(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS){await run('new Promise(resolve=>setTimeout(resolve,100))');const rect=await run("(()=>{const r=document.querySelector('dialog[open]').getBoundingClientRect();return {x:Math.floor(r.x)-12,y:Math.floor(r.y)-12,width:Math.ceil(r.width)+24,height:Math.ceil(r.height)+24}})()");fs.writeFileSync(path.join(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS,'workbuddy-account-authorization.png'),(await win.webContents.capturePage(rect)).toPNG());}
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.deepEqual(await run('wbLinkActions'),['app','cancel']);
@@ -402,15 +442,44 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'解除连接');
     assert.equal(await run("document.querySelector('[data-action=\"/workbuddy-quota-visible\"]')!==null"),true);
     assert.doesNotMatch(await run("document.querySelector('#content').textContent"),/趣味|游戏/);
+    await run("snapshot.firstReleaseWorkbuddyConnection.tasks={status:'needs-authorization',message:'尚未授权任务同步',authorized:false};snapshot.version='wb-task-access';window.dispatchEvent(new Event('focus'))");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-tasks]').textContent"),'授权任务');
+    await run("document.querySelector('[data-action=store-workbuddy-tasks]').click()");
+    const taskTerms=await run("document.querySelector('dialog[open]').textContent");assert.match(taskTerms,/标题.*状态.*未读.*不读取正文/s);
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("wbLinkActions.includes('tasks-authorize')"),false);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
+    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='tasks-authorize')snapshot.firstReleaseWorkbuddyConnection.tasks={status:'authorized',message:'已授权任务同步',authorized:true};if(action==='tasks-revoke')snapshot.firstReleaseWorkbuddyConnection.tasks={status:'needs-authorization',message:'尚未授权任务同步',authorized:false};return {status:'ready',snapshot}};document.querySelector('[data-action=store-workbuddy-tasks]').click()");
+    await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-tasks]').textContent"),'撤销授权');
+    assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/已授权/);
+    await run("document.querySelector('[data-action=store-workbuddy-tasks]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
+    await run("navigate('workbuddy-tasks-authorization')");
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'WorkBuddy');
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 任务/);
+    const taskDialogParagraph=await run(`(()=>{const p=document.querySelector('dialog[open] #store-codex-dialog-copy p'),range=document.createRange();range.selectNodeContents(p);return [...range.getClientRects()].length;})()`);
+    assert.equal(taskDialogParagraph,1,'task authorization explanation stays on one natural line');
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
+
     await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
-    assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect','disconnect']);
+    assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect','tasks-authorize','tasks-revoke','disconnect']);
+    await run("snapshot.initialView='workbuddy-tasks-authorization';snapshot.version='wb-task-initial-view'");
+    await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 任务/);
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
+
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {
   require('node:test')('settings renderer splits providers and preserves summary actions in real Chromium DOM', { timeout: 30000 }, () => {
     const result = require('node:child_process').spawnSync(require('electron'), [__filename, '--settings-dom-child'], { encoding: 'utf8', timeout: 25000 });
+    if(process.env.PET_SETTINGS_MEASUREMENTS)process.stdout.write(result.stdout);
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.match(result.stdout, /SETTINGS_DOM_OK/);
   });
 }

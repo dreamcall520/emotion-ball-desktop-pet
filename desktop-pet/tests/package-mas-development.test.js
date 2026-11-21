@@ -47,7 +47,7 @@ test('nested签名后的摘要刷新且不允许manifest路径穿越或软链接
 });
 function buildFixture(t,overrides={}){
  const root=temp(t),events=[];fs.writeFileSync(path.join(root,'package.json'),JSON.stringify(pkg));const own={...env,MAS_DEV_PROFILE:path.join(root,'dev.provisionprofile'),MAS_DEV_ELECTRON_ZIP_DIR:path.join(root,'cache')};fs.writeFileSync(own.MAS_DEV_PROFILE,'fixture profile');fs.mkdirSync(own.MAS_DEV_ELECTRON_ZIP_DIR);fs.writeFileSync(path.join(own.MAS_DEV_ELECTRON_ZIP_DIR,'electron-v43.4.1-mas-arm64.zip'),'fixture zip, not a real runtime');let options,app;
- const deps={hostPlatform:'darwin',hostArch:'arm64',now:()=>Date.parse('2026-10-31'),readDeviceId:()=>device,validateResources:async()=>events.push('validate-resources'),
+ const deps={hostPlatform:'darwin',hostArch:'arm64',now:()=>Date.parse('2026-10-31'),readDeviceId:()=>device,validateResources:async()=>events.push('validate-resources'),validateBuildTools:()=>events.push('validate-build-tools'),
   command(name,args){events.push([name,args]);if(name==='security'&&args[0]==='find-identity')return` 1) ${fingerprint} "${own.MAS_DEV_SIGN_IDENTITY}"\n 1 valid identities found`;if(name==='security'&&args[0]==='cms')return plist.build(profile());if(name==='codesign'&&args[0]==='--display')return plist.build(args.at(-1)===app?api.entitlementsFor(cfg).main:api.entitlementsFor(cfg).child);if(name.endsWith('/Contents/MacOS/球球桌宠-商店沙盒开发候选'))return args.includes('--qiuqiu-mas-helper-probe')?JSON.stringify({mas:true,ownContainer:true,helper:{passed:true,metadataTransport:{passed:true},modelRequestsSent:false,originalCredentialsRead:false,workbuddy:{vendorAccountVerified:false}}}):JSON.stringify({mas:true,ownContainer:true,capabilities:{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:true,appScopeBookmarks:true}});return'';},
   mac:{prepareStaging(_root,directory){events.push('staging');fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'package.json'),JSON.stringify(pkg));return directory;},buildPackagerOptions:()=>({platform:'darwin'})},makeIcon:()=>'/fixture/icon',buildWeatherLocation:()=>events.push('build-native'),buildPluginHost:()=>events.push('build-plugin-host'),
   async packager(value){options=value;events.push('packager');const output=path.join(root,'out');app=path.join(output,value.name+'.app');fs.mkdirSync(app,{recursive:true});if(value.extraResource.length)resourceFixture(app);else{fs.mkdirSync(path.join(app,'Contents/Resources'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Frameworks/Fixture Helper.app'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Library/LoginItems/Fixture Login Helper.app'),{recursive:true});const native=path.join(app,'Contents/Resources/app.asar.unpacked/desktop-pet/native');fs.mkdirSync(native,{recursive:true});fs.writeFileSync(path.join(native,'weather-location.node'),'native');}return[output];},
@@ -133,4 +133,17 @@ test('首发helper flag只查询自有容器与原生沙盒能力，不require�
 test('首发打包若意外带入空helper目录也在签名前拒绝，不伪造缺省组件',async t=>{
  const f=buildFixture(t);fs.writeFileSync(path.join(f.root,'package.json'),JSON.stringify({...pkg,qiuqiuReleaseProfile:'mas-first'}));const packager=f.deps.packager;f.deps.packager=async options=>{const results=await packager(options);fs.mkdirSync(path.join(f.app(),'Contents/Resources/qiuqiu-codex'));return results;};
  await assert.rejects(api.buildMasDevelopment({root:f.root,env:f.env},f.deps),{code:'MAS_FIRST_BUNDLED_RUNTIME_PRESENT'});assert.equal(f.events.includes('sign-nested-and-app'),false);
+});
+test('开发MAS使用真实必需工具预检，不因仅安装CLT而强求Xcode版本',async t=>{
+ const f=buildFixture(t),run=f.deps.command;let checked=false;
+ f.deps.command=(name,args,options)=>{if(name==='xcodebuild')throw Error('Xcode unavailable');return run(name,args,options);};
+ f.deps.validateBuildTools=()=>{checked=true;f.events.push('validate-build-tools');};
+ const result=await api.buildMasDevelopment({root:f.root,env:f.env},f.deps);
+ assert.equal(checked,true);assert.equal(result.signedDevelopmentApp,true);
+ assert.ok(f.events.indexOf('validate-build-tools')<f.events.indexOf('build-native'));
+});
+test('必需CLT工具缺失仍在任何编译或打包前明确停止',async t=>{
+ const f=buildFixture(t);f.deps.validateBuildTools=()=>{throw Object.assign(Error(),{code:'MAS_DEV_BUILD_TOOLS_UNAVAILABLE'});};
+ await assert.rejects(api.buildMasDevelopment({root:f.root,env:f.env},f.deps),{code:'MAS_DEV_BUILD_TOOLS_UNAVAILABLE'});
+ assert.equal(f.events.includes('build-native'),false);assert.equal(f.events.includes('packager'),false);
 });
