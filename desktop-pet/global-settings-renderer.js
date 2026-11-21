@@ -327,8 +327,9 @@
       sections.push(storeCodexSection());
       count++;
     }
-    if (snapshot.firstReleaseWorkbuddyConnection && (query ? '启用联动 本机连接 workbuddy 授权 额度 消耗统计 解除连接'.includes(query) : selected === 'workbuddy-settings')) {
+    if (snapshot.firstReleaseWorkbuddyConnection && (query ? '启用联动 本机连接 workbuddy 授权 额度 消耗统计 解除连接 任务同步 任务授权'.includes(query) : selected === 'workbuddy-settings')) {
       sections.push(storeWorkbuddySection());
+      if (snapshot.firstReleaseWorkbuddyConnection.tasks) sections.push(storeWorkbuddyTasksSection(snapshot.firstReleaseWorkbuddyConnection.tasks));
       count++;
     }
     for (const category of displayed) {
@@ -530,13 +531,13 @@
       for (const [label,description] of [['访问范围','访问你选择的 WorkBuddy 应用和账号目录。'],['查询用途','查询额度和消耗统计，不发送模型消息。'],['解除连接','停止查询并撤销球球保存的本地授权。']]) scope.append(el('dt',label),el('dd',description));
       disclosure.append(scope); section.append(disclosure);
     }
-    if (state.tasks) section.append(storeWorkbuddyTasksSection(state.tasks));
     return section;
   }
   function storeWorkbuddyTasksSection(tasks) {
-    const row = el('div', '', 'row'); row.dataset.workbuddyTasks = '';
+    const section = el('section', '', 'group'); section.dataset.workbuddyTasks = '';
+    section.append(el('h3', '任务同步'));
+    const row = el('div', '', 'row');
     const info = el('div'), identity = el('div', '', 'store-codex-identity');
-    identity.append(el('span', '任务同步', 'row-title'));
     const status = el('span', tasks.authorized ? '已授权' : '未授权', 'store-codex-state');
     status.setAttribute('role','status'); if (tasks.authorized) status.dataset.connected = '';
     identity.append(status); info.append(identity);
@@ -545,7 +546,7 @@
     if (message) { const note=el('p',message,'description'); note.setAttribute('role','status'); info.append(note); }
     const button=el('button',tasks.authorized ? '撤销授权' : '授权任务','action'); button.type='button'; button.dataset.action='store-workbuddy-tasks'; button.disabled=busy || tasks.status==='working';
     button.onclick=()=>void manageStoreWorkbuddyTasks(tasks.authorized === true);
-    row.append(info,button); return row;
+    row.append(info,button); section.append(row); return section;
   }
   async function manageStoreWorkbuddyTasks(revoke = false) {
     if (busy) return;

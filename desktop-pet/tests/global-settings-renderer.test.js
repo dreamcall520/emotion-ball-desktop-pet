@@ -453,6 +453,26 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-tasks]').textContent"),'撤销授权');
     assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/已授权/);
+    assert.deepEqual(await run("[...document.querySelectorAll('#content > section.group')].map(section=>section.querySelector('h3').textContent)"),['启用联动','任务同步','积分卡显示']);
+    assert.equal(await run("document.querySelector('[data-workbuddy-tasks]').parentElement.id"),'content');
+    assert.equal(await run("document.querySelector('[data-workbuddy-tasks]').tagName"),'SECTION');
+    assert.equal(await run("document.querySelector('[data-workbuddy-tasks]').textContent.split('任务同步').length-1"),1,'task module has one heading without a duplicate row title');
+    assert.doesNotMatch(await run("document.querySelector('#content > section.group').textContent"),/任务同步|未读标记|撤销授权/);
+    for(const width of [720,840,1080]) {
+      win.setSize(width,820);
+      const layout=await run(`([...document.querySelectorAll('#content > section.group')].map(section=>{const r=section.getBoundingClientRect(),style=getComputedStyle(section);return {title:section.querySelector('h3').textContent,left:r.left,right:r.right,top:r.top,bottom:r.bottom,borderRadius:style.borderRadius,background:style.backgroundImage,overflow:section.scrollWidth>section.clientWidth};}))`);
+      assert(layout.every(row=>!row.overflow&&Math.abs(row.left-layout[0].left)<.1&&Math.abs(row.right-layout[0].right)<.1&&row.borderRadius===layout[0].borderRadius&&row.background===layout[0].background),'separate task module shares the existing surface frame at '+width+'px');
+      assert(layout[0].bottom<layout[1].top&&layout[1].bottom<layout[2].top,'task module sits between connection and card visibility at '+width+'px');
+      if(process.env.PET_SETTINGS_TASK_MODULE_PREVIEWS){
+        await run("snapshot.firstReleaseWorkbuddyConnection.status='ready';snapshot.firstReleaseWorkbuddyConnection.message='';snapshot.version='wb-task-module-preview';window.dispatchEvent(new Event('focus'))");
+        await run('new Promise(resolve=>setTimeout(resolve,100))');
+        fs.mkdirSync(process.env.PET_SETTINGS_TASK_MODULE_PREVIEWS,{recursive:true});
+        const rect=await run("(()=>{const rows=[...document.querySelectorAll('#content > section.group')].map(row=>row.getBoundingClientRect());return {x:Math.floor(rows[0].left)-8,y:Math.floor(rows[0].top)-8,width:Math.ceil(rows[0].width)+16,height:Math.ceil(rows.at(-1).bottom-rows[0].top)+16}})()");
+        fs.writeFileSync(path.join(process.env.PET_SETTINGS_TASK_MODULE_PREVIEWS,'workbuddy-modules-'+width+'.png'),(await win.webContents.capturePage(rect)).toPNG());
+      }
+
+    }
+
     await run("document.querySelector('[data-action=store-workbuddy-tasks]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
     await run("navigate('workbuddy-tasks-authorization')");
