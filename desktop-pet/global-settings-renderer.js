@@ -438,7 +438,7 @@
   ];
   function storeCodexSection() {
     const state = snapshot.firstReleaseConnection;
-    const section = el('section', '', 'group');
+    const section = el('section', '', state.connected === true ? 'group store-connected-group' : 'group');
     section.append(el('h3', '启用联动'));
     const row = el('div', '', state.connected === true ? 'row store-connected-row' : 'row');
     const info = el('div');
@@ -511,7 +511,7 @@
     const connected = state.connected === true && state.chat?.authorized === true;
     const needsChatAuthorization = state.connected === true && !connected;
     const working = busy || state.status === 'working';
-    const section = el('section', '', 'group');
+    const section = el('section', '', connected ? 'group store-connected-group' : 'group');
     section.append(el('h3', '启用联动'));
     const row = el('div', '', connected ? 'row store-connected-row' : 'row'), info = el('div'), identity = el('div', '', 'store-codex-identity');
     const icon = el('img'); icon.alt = ''; icon.src = 'assets/integrations/workbuddy.png';

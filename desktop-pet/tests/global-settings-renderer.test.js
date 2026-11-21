@@ -54,12 +54,26 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
         await run(`document.documentElement.dataset.appearance=${JSON.stringify(mode)};new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
         const value = await run(`(()=>{const button=document.querySelector('[data-action=store-${provider}-connection]');
           const references=${provider === 'workbuddy' ? "['store-workbuddy-tasks','store-workbuddy-notifications'].map(id=>document.querySelector('[data-action='+id+']'))" : "[...document.querySelectorAll('#content > section.group:not(:first-child) .row > button, #content > section.group:not(:first-child) .row > select')]"};
-          const box=button.getBoundingClientRect(),row=button.closest('.row');
-          return {right:box.right,referenceRights:references.filter(Boolean).map(node=>node.getBoundingClientRect().right),bubble:row.classList.contains('store-connected-row'),overflow:row.scrollWidth>row.clientWidth+1};})()`);
+          const box=button.getBoundingClientRect(),row=button.closest('.row'),group=row.closest('.group'),tail=getComputedStyle(group,'::after'),next=group.nextElementSibling;
+          return {right:box.right,referenceRights:references.filter(Boolean).map(node=>node.getBoundingClientRect().right),bubble:group.classList.contains('store-connected-group'),rowBackground:getComputedStyle(row).backgroundColor,
+            tail:{content:tail.content,width:parseFloat(tail.width),height:parseFloat(tail.height),left:parseFloat(tail.left),clip:tail.clipPath,pointerEvents:tail.pointerEvents},gap:next?next.getBoundingClientRect().top-group.getBoundingClientRect().bottom:null,overflow:row.scrollWidth>row.clientWidth+1};})()`);
         const result = { provider, appearance: mode, width, ...value }; connectedAlignments.push(result); writeAlignmentReport(false);
         assert(value.referenceRights.length > 0, provider + ' needs a real following-module control');
         assert(value.referenceRights.every(right=>Math.abs(right-value.right)<=.5), JSON.stringify(result));
-        assert(value.bubble && !value.overflow, 'the connected bubble remains intact');
+        assert(value.bubble && !value.overflow, 'the whole connected group is the parent bubble');
+        assert.equal(value.rowBackground,'rgba(0, 0, 0, 0)','no nested row surface');
+        assert(value.tail.content!=='none'&&value.tail.clip!=='none'&&value.tail.width>0&&value.tail.width<=14&&value.tail.height<=14&&value.tail.left>=24&&value.tail.left<=40,'small left tail exists');
+        assert.equal(value.tail.pointerEvents,'none');assert(value.gap>=value.tail.height+4,'tail leaves room before the next module');
+        win.webContents.debugger.attach('1.3');
+        try {
+          await win.webContents.debugger.sendCommand('DOM.enable');
+          await win.webContents.debugger.sendCommand('CSS.enable');
+          const {root}=await win.webContents.debugger.sendCommand('DOM.getDocument');
+          const {nodeId}=await win.webContents.debugger.sendCommand('DOM.querySelector',{nodeId:root.nodeId,selector:'.store-connected-row'});
+          await win.webContents.debugger.sendCommand('CSS.forcePseudoState',{nodeId,forcedPseudoClasses:['hover']});
+          assert.equal(await run("getComputedStyle(document.querySelector('.store-connected-row')).backgroundColor"),'rgba(0, 0, 0, 0)','hover does not restore a nested card');
+          await win.webContents.debugger.sendCommand('CSS.forcePseudoState',{nodeId,forcedPseudoClasses:[]});
+        } finally { win.webContents.debugger.detach(); }
         if (process.env.PET_SETTINGS_ALIGNMENT_SCREENSHOT_DIR && width === 1080) {
           const directory=process.env.PET_SETTINGS_ALIGNMENT_SCREENSHOT_DIR;fs.mkdirSync(directory,{recursive:true});
           const bounds=await run("(()=>{const r=document.querySelector('#content').getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.floor(r.width),height:Math.floor(Math.min(r.height,innerHeight-r.y))};})()");
@@ -366,7 +380,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("snapshot.firstReleaseConnection={connected:true,chatReady:true,working:false};navigate('/codex-menu')");
     assert.equal(await run("document.querySelector('.store-codex-identity').textContent"),'本机 Codex已连接');
     assert.equal(await run("document.querySelector('[data-action=store-codex-connection]').closest('.row').classList.contains('store-connected-row')"),true);
-    assert.equal(await run("parseFloat(getComputedStyle(document.querySelector('.store-connected-row')).borderRadius)"),14);
+    assert.equal(await run("document.querySelector('.store-connected-row').closest('.group').classList.contains('store-connected-group')"),true);
     await verifyConnectedButtonAlignment('codex');
     assert.deepEqual(await run("[...document.querySelectorAll('.store-codex-identity button')].map(e=>e.textContent)"), ['解除连接']);
     await run("navigate('codex-reconnect')");
@@ -381,6 +395,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("window.snapshot.firstReleaseConnection={connected:false,chatReady:false,working:false};window.snapshot.version='fresh-link';window.linkActions=[];window.qiuqiuSettings.codexConnection=async action=>{linkActions.push(action);return {status:'app-authorized'}};window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-codex-connection]').closest('.row').classList.contains('store-connected-row')"),false,'unconnected Codex keeps its original authorization surface');
+    assert.equal(await run("document.querySelector('.store-connected-group')"),null);
     await run("document.querySelector('[data-action=store-codex-connection]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
@@ -546,6 +561,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[data-workbuddy-chat]')"),null,'chat joins the main connection rather than a separate module');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'继续连接');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').closest('.row').classList.contains('store-connected-row')"),false,'partial quota consent is not a completed chat connection');
+    assert.equal(await run("document.querySelector('.store-connected-group')"),null,'partial connection does not show a parent-bubble tail');
     assert.match(await run("document.querySelector('#content > section.group').textContent"),/积分已连接，聊天待授权/);
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-disconnect]').textContent"),'解除连接','existing quota authorization can still be revoked without enabling chat');
     const beforeContinue=await run('wbLinkActions.length');
@@ -569,7 +585,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("chatAllowed=true;document.querySelector('[data-action=store-workbuddy-connection]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'解除连接');assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').closest('.row').classList.contains('store-connected-row')"),true);
     await verifyConnectedButtonAlignment('workbuddy');
-    for(const width of [720,840,1080]){win.setSize(width,820);assert.equal(await run("(()=>{const row=document.querySelector('.store-connected-row'),s=getComputedStyle(row);return row.scrollWidth<=row.clientWidth+1&&s.backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(s.borderRadius)===14;})()"),true,'connected row bubble fits '+width+'px');}
+    for(const width of [720,840,1080]){win.setSize(width,820);assert.equal(await run("(()=>{const row=document.querySelector('.store-connected-row'),group=row.closest('.group'),s=getComputedStyle(group);return row.scrollWidth<=row.clientWidth+1&&s.backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(s.borderRadius)>=15;})()"),true,'connected parent bubble fits '+width+'px');}
     await run("snapshot.entries.push({id:'/quota-fun-enabled',label:'额度趣味互动',enabled:true,actionable:true,type:'checkbox',checked:true});snapshot.version='public-quota-game';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("navigate('/codex-menu')");assert.equal(await run("document.querySelector('[data-action=\"/codex-menu/codex-quota-fun\"]')"),null);
     await run("navigate('workbuddy-settings')");assert.equal(await run("document.querySelector('[data-action=\"/workbuddy-quota-fun\"]')"),null);
