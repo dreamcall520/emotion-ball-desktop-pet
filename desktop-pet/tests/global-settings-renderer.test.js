@@ -42,6 +42,32 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     const sourceRoot = process.env.PET_SETTINGS_SOURCE_ROOT || path.resolve(__dirname, '../..');
     await win.loadFile(path.join(sourceRoot, 'desktop-pet/global-settings.html'));
     const run = async code => { try { return await win.webContents.executeJavaScript(code); } catch (error) { throw new Error('Renderer test step failed: '+code.slice(0,160), {cause:error}); } };
+    const connectedAlignments = [];
+    const writeAlignmentReport = passed => {
+      if (process.env.PET_SETTINGS_ALIGNMENT_REPORT) fs.writeFileSync(process.env.PET_SETTINGS_ALIGNMENT_REPORT, JSON.stringify({ passed,
+        scope: 'Isolated hidden Chromium DOM; no actual MAS profile, account or model.', checks: connectedAlignments }, null, 2) + '\n');
+    };
+    async function verifyConnectedButtonAlignment(provider) {
+      const appearance = await run('document.documentElement.dataset.appearance');
+      for (const mode of ['light','dark']) for (const width of [720,840,1080]) {
+        win.setSize(width,820);
+        await run(`document.documentElement.dataset.appearance=${JSON.stringify(mode)};new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+        const value = await run(`(()=>{const button=document.querySelector('[data-action=store-${provider}-connection]');
+          const references=${provider === 'workbuddy' ? "['store-workbuddy-tasks','store-workbuddy-notifications'].map(id=>document.querySelector('[data-action='+id+']'))" : "[...document.querySelectorAll('#content > section.group:not(:first-child) .row > button, #content > section.group:not(:first-child) .row > select')]"};
+          const box=button.getBoundingClientRect(),row=button.closest('.row');
+          return {right:box.right,referenceRights:references.filter(Boolean).map(node=>node.getBoundingClientRect().right),bubble:row.classList.contains('store-connected-row'),overflow:row.scrollWidth>row.clientWidth+1};})()`);
+        const result = { provider, appearance: mode, width, ...value }; connectedAlignments.push(result); writeAlignmentReport(false);
+        assert(value.referenceRights.length > 0, provider + ' needs a real following-module control');
+        assert(value.referenceRights.every(right=>Math.abs(right-value.right)<=.5), JSON.stringify(result));
+        assert(value.bubble && !value.overflow, 'the connected bubble remains intact');
+        if (process.env.PET_SETTINGS_ALIGNMENT_SCREENSHOT_DIR && width === 1080) {
+          const directory=process.env.PET_SETTINGS_ALIGNMENT_SCREENSHOT_DIR;fs.mkdirSync(directory,{recursive:true});
+          const bounds=await run("(()=>{const r=document.querySelector('#content').getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.floor(r.width),height:Math.floor(Math.min(r.height,innerHeight-r.y))};})()");
+          fs.writeFileSync(path.join(directory,provider+'-'+mode+'.png'),(await win.webContents.capturePage(bounds)).toPNG());
+        }
+      }
+      await run(`document.documentElement.dataset.appearance=${JSON.stringify(appearance)}`);
+    }
     await run(`window.calls=[];window.snapshot=${JSON.stringify(snapshot)};window.EmotionBall ||= {config:{get:()=>({raw:{}}),register(){}},create:()=>({destroy(){}})};window.qiuqiuSettings={saveQuotaCards:async config=>{window.cardCalls||=[];cardCalls.push(config);if(window.cardFail)return {ok:false,config:window.snapshot.quotaCards,error:'保存失败'};window.snapshot.quotaCards=config;return {ok:true,config,snapshot:window.snapshot}},get:async()=>window.snapshot,act:async(id,checked)=>{calls.push({id,checked});if(window.actMode==='defer')return new Promise(resolve=>window.resolveAction=resolve);if(window.actMode==='throw')throw Error('保存失败');if(window.actMode==='reject')return {snapshot:window.snapshot,error:'授权已取消'};if(window.actMode==='apply')window.findEntry(id).checked=checked;return {snapshot:window.snapshot}},onNavigate:callback=>window.navigate=callback,onPetSleepState:callback=>{window.sleepStateChanged=callback;return()=>{}}};true;`);
     await run("document.getElementById('brand-pet').replaceChildren();window.findEntry=id=>{const walk=items=>items.flatMap(item=>[item,...(item.children?walk(item.children):[])]);return walk(snapshot.entries).find(item=>item.id===id)};true");
     await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
@@ -341,6 +367,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('.store-codex-identity').textContent"),'本机 Codex已连接');
     assert.equal(await run("document.querySelector('[data-action=store-codex-connection]').closest('.row').classList.contains('store-connected-row')"),true);
     assert.equal(await run("parseFloat(getComputedStyle(document.querySelector('.store-connected-row')).borderRadius)"),14);
+    await verifyConnectedButtonAlignment('codex');
     assert.deepEqual(await run("[...document.querySelectorAll('.store-codex-identity button')].map(e=>e.textContent)"), ['解除连接']);
     await run("navigate('codex-reconnect')");
     const consent = await run("document.querySelector('dialog[open]').textContent");
@@ -503,7 +530,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     const notificationTerms=await run("document.querySelector('dialog[open]').textContent");assert.match(notificationTerms,/WorkBuddy.*安装.*Hook/s);assert.match(notificationTerms,/本机过滤/);assert.match(notificationTerms,/阶段和标识.*不传正文/s);assert.match(notificationTerms,/取消或失败.*不显示成功/s);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("wbLinkActions.includes('notifications-enable')"),false);
-    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);const notifications=snapshot.firstReleaseWorkbuddyConnection.notifications;if(action==='notifications-enable'){notifications.enabled=true;notifications.connected=true;}if(action==='notifications-disable'){notifications.enabled=false;notifications.connected=false;}return {status:'ready',snapshot}};document.querySelector('[data-action=store-workbuddy-notifications]').click()");
+    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);const notifications=snapshot.firstReleaseWorkbuddyConnection.notifications;if(action==='notifications-enable'){notifications.enabled=true;notifications.connected=true;}if(action==='notifications-disable'){notifications.enabled=false;notifications.connected=false;notifications.status='disabled';notifications.message='动画提醒尚未启用。';}return {status:'ready',snapshot}};document.querySelector('[data-action=store-workbuddy-notifications]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-notifications]').textContent"),'停用提醒');
     await run("snapshot.firstReleaseWorkbuddyConnection.notifications.status='ready';snapshot.firstReleaseWorkbuddyConnection.notifications.message='已启用；新任务可触发处理中和本轮回复结束提醒。';snapshot.version='wb-reminder-healthy';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
@@ -541,6 +568,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'继续连接');assert.match(await run("document.querySelector('#content > section.group').textContent"),/聊天授权未完成/);
     await run("chatAllowed=true;document.querySelector('[data-action=store-workbuddy-connection]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'解除连接');assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').closest('.row').classList.contains('store-connected-row')"),true);
+    await verifyConnectedButtonAlignment('workbuddy');
     for(const width of [720,840,1080]){win.setSize(width,820);assert.equal(await run("(()=>{const row=document.querySelector('.store-connected-row'),s=getComputedStyle(row);return row.scrollWidth<=row.clientWidth+1&&s.backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(s.borderRadius)===14;})()"),true,'connected row bubble fits '+width+'px');}
     await run("snapshot.entries.push({id:'/quota-fun-enabled',label:'额度趣味互动',enabled:true,actionable:true,type:'checkbox',checked:true});snapshot.version='public-quota-game';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("navigate('/codex-menu')");assert.equal(await run("document.querySelector('[data-action=\"/codex-menu/codex-quota-fun\"]')"),null);
@@ -571,7 +599,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/使用本机 WorkBuddy 连接当前账号/);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run('wbLinkActions.length'),beforeInitialChat);
 
-    win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
+    writeAlignmentReport(true);win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {
   require('node:test')('settings renderer splits providers and preserves summary actions in real Chromium DOM', { timeout: 30000 }, () => {
