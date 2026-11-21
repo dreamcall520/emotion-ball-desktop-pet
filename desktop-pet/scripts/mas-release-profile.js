@@ -17,8 +17,23 @@ function ownSigningTargets(appPath,io=fs){
  for(const child of ['Frameworks','Library/LoginItems','Resources/app.asar.unpacked'])walk(path.join(appPath,'Contents',child));
  return targets;
 }
-// Build-time filtering only. Runtime modules still statically imported by main
-// remain until their call sites are removed; first-release startup disables them.
+// Keep the installed-client quota capability separate from legacy website,
+// bundled CLI, chat, task and game capabilities. Supporting report projections
+// below contain no provider I/O and are shared with the website channel.
+const WORKBUDDY_QUOTA_FILES = new Set([
+  'desktop-pet/workbuddy-label.html', 'desktop-pet/workbuddy-label.css',
+  'desktop-pet/workbuddy-label-preload.js', 'desktop-pet/workbuddy-label-renderer.js',
+  'desktop-pet/workbuddy-details.html', 'desktop-pet/workbuddy-details.css',
+  'desktop-pet/workbuddy-details-preload.js', 'desktop-pet/workbuddy-details-renderer.js',
+  'desktop-pet/lib/mas-installed-workbuddy-access.js', 'desktop-pet/lib/mas-installed-workbuddy.js',
+  'desktop-pet/lib/workbuddy-client.js', 'desktop-pet/lib/workbuddy-helper.cjs',
+  'desktop-pet/lib/workbuddy-quota.js', 'desktop-pet/lib/workbuddy-quota-status.js',
+  'desktop-pet/lib/workbuddy-auth-watch.js', 'desktop-pet/lib/workbuddy-usage.js',
+  'desktop-pet/lib/workbuddy-usage-reader.js', 'desktop-pet/lib/workbuddy-label-window.js',
+  'desktop-pet/lib/workbuddy-details-window.js', 'desktop-pet/lib/workbuddy-website-summary.js',
+  'desktop-pet/lib/mas-workbuddy-details.js', 'desktop-pet/lib/mas-workbuddy-quota-connection.js',
+  'desktop-pet/assets/integrations/workbuddy.png'
+]);
 function trimStaging(staging, config, io = fs) {
   if (!isFirstRelease(config)) return [];
   const removed = [
@@ -28,6 +43,7 @@ function trimStaging(staging, config, io = fs) {
     'desktop-pet/store-connections-preload.js',
     'desktop-pet/assets/workbuddy-desktop-hook',
     'desktop-pet/assets/zcode-desktop-hook',
+    'desktop-pet/vendor/workbuddy-cli',
     'desktop-pet/lib/mas-plugin-install-probe.js',
     'desktop-pet/lib/mas-helper-probe.js'
   ];
@@ -35,16 +51,18 @@ function trimStaging(staging, config, io = fs) {
     const full = path.join(staging, directory);
     if (!io.existsSync(full)) continue;
     for (const name of io.readdirSync(full)) {
-      if (/^(?:mas-(?:bundled-)?)?workbuddy(?:[-.]|$)|^verify-workbuddy-/i.test(name)) {
-        removed.push(path.join(directory, name));
+      const relative = path.posix.join(directory, name);
+      if (/^(?:mas-(?:(?:bundled|installed)-)?)?workbuddy(?:[-.]|$)|^(?:verify|prepare-mas)-workbuddy-/i.test(name) &&
+          !WORKBUDDY_QUOTA_FILES.has(relative)) {
+        removed.push(relative);
       }
     }
   }
   for (const name of removed) io.rmSync(path.join(staging, name), { recursive: true, force: true });
-  const notice = path.join(staging, 'NOTICE.md');
-  if (io.existsSync(notice)) {
-    const contents = io.readFileSync(notice, 'utf8');
-    io.writeFileSync(notice, contents.replace(/\n## WorkBuddy integration reference\n[\s\S]*?(?=\n## |$)/, ''));
+  const details = path.join(staging, 'desktop-pet/workbuddy-details.html');
+  if (io.existsSync(details)) {
+    const contents = io.readFileSync(details, 'utf8');
+    io.writeFileSync(details, contents.replace(/<script\s+src=["']workbuddy-tasks-renderer\.js["']\s*><\/script>/g, ''));
   }
   return removed;
 }

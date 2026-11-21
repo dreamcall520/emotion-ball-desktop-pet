@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('qiuqiuSettings', {
   saveShortcuts: config => ipcRenderer.invoke('pet:global-shortcuts-save', config),
   recordShortcuts: value => ipcRenderer.send('pet:global-shortcuts-record', value),
   get: () => ipcRenderer.invoke('pet:global-settings-get'),
+  workbuddyConnection: action => ipcRenderer.invoke('pet:global-workbuddy-connection', action),
   codexConnection: action => ipcRenderer.invoke('pet:global-codex-connection', action),
   act: (id, checked) => ipcRenderer.invoke('pet:global-settings-action', id, checked),
   onPetSleepState(callback) {

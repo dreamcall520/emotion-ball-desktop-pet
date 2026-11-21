@@ -72,14 +72,17 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
     replaceChildren(...nodes) { this.children = nodes; }
   }
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
-  let receive, receiveColor, close = 0;
+  let receive, receiveColor, close = 0, taskRenders = 0;
   const now = new Date(2026, 9, 25, 12).getTime();
   const document = { documentElement: new Element(), getElementById: get, createElementNS: (_, tag) => new Element(tag), addEventListener() {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8'), {
     document, window: { TrendCurve: require('../quota-trend-curve'), getComputedStyle: () => ({ paddingBottom: '13px', borderBottomWidth: '1px' }), requestAnimationFrame: fn => fn(), matchMedia: () => ({ matches: false, addEventListener() {} }),
+      workBuddyTasksView:{render:()=>{taskRenders++;return false;}},
       petWorkBuddyDetails: { resize: height => sizes.push(height), onModel: fn => { receive = fn; }, onColorMode: fn => { receiveColor = fn; }, close: () => close++ } },
     Date: class extends Date { static now() { return now; } }
   });
+  receive({quotaOnly:true,action:'tasks',report:{total:5}});
+  assert.equal(taskRenders,0);assert.equal(get('task-view').hidden,true);assert.equal(get('quota-view').hidden,false);
   receive({ report: { total: 7399.91, updatedAt: now, nextRefreshAt: now + 7 * 86400000, expires: [{ at: now + 2 * 86400000, amount: 99.91 }] }, history: [{ at: now - 300000, total: 7500 }, { at: now, total: 7399.91 }] });
   assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '—');
   assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('unavailable-note').textContent, '暂未取得 WorkBuddy 官方消耗记录');
@@ -196,4 +199,18 @@ test('MAS device reports survive details IPC without becoming current-account ta
   assert.equal(value.tasks.deviceHistory.accountAttributionVerified, false);
   assert.equal(value.tasks.liveObservations.observations[0].terminalConfirmed, false);
   assert.ok(!JSON.stringify(value).includes('SECRET'));
+});
+
+
+test('quota-only details cannot retain or open task data even with a task action', () => {
+  const {details,windows}=fixture();
+  details.open({quotaOnly:true,action:'tasks',tasks:{report:{source:'local-session-cache',scope:'current-account',items:[{id:'private',title:'private'}]}},report:{total:5}});
+  const win=windows[0];win.webContents.emit('did-finish-load');
+  const value=win.messages.at(-1).value;
+  assert.equal(value.quotaOnly,true);
+  assert.equal(value.action,'trend');
+  assert.equal(value.tasks.report,null);
+  assert.doesNotMatch(JSON.stringify(value),/private/);
+  assert.equal(details.getAction(),'trend');
+  details.destroy();
 });

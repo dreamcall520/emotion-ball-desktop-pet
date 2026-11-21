@@ -4,7 +4,6 @@ const { createNativeWindowFade } = require('./native-window-fade');
 const { createQuotaCardResize } = require('./quota-card-resize');
 const path = require('node:path');
 const { quotaLabelSize } = require('./quota-label-placement');
-const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-window');
 const { errorCode, errorMessage } = require('./workbuddy-quota-status');
 const { safeEnterpriseReport } = require('./workbuddy-quota');
 const { safeWebsiteSummaryReport } = require('./workbuddy-website-summary');
@@ -70,17 +69,18 @@ function safeState(state) {
     })).values()].sort((a, b) => a.at - b.at).slice(-6000) : [];
   // Only fixed status text crosses IPC; upstream errors can contain credentials.
   const code = state?.error ? errorCode(state.errorCode) : null;
-  return { enabled: state?.enabled === true, busy: state?.busy === true,
+  return { quotaOnly: state?.quotaOnly === true, enabled: state?.enabled === true, busy: state?.busy === true,
     error: code ? errorMessage(code) : null, errorCode: code, nextRetryAt: code ? date(state.nextRetryAt) : null,
     stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null,
-    activity: { runningCount: Number.isSafeInteger(state?.activity?.runningCount) && state.activity.runningCount >= 0 ? state.activity.runningCount : null,
-      unreadCount: Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
+    activity: { runningCount: state?.quotaOnly !== true && Number.isSafeInteger(state?.activity?.runningCount) && state.activity.runningCount >= 0 ? state.activity.runningCount : null,
+      unreadCount: state?.quotaOnly !== true && Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
 }
-function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getBubbleBounds = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {}, onLayout = () => {} }) {
+function createWorkBuddyLabelWindow({ BrowserWindow, screen, quotaOnly = false, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getBubbleBounds = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {}, onLayout = () => {} }) {
   let groupTransitionMode=null,groupTransitionEpoch=0,groupResumeImmediate=false;
   let win = null, ready = false, visible = false, expanded = false, current = null, resetExpandedPending = false, top = Boolean(alwaysOnTop);
   const error = e => { try { onError(e); } catch (_) {} };
-  const guard = createWorkBuddyGuardEntryWindow({ BrowserWindow, alwaysOnTop, onGuard, onError });
+  const guard = quotaOnly ? { hide() {}, destroy() {}, setGroupTransitionMode() {}, setAlwaysOnTop() {}, getWindow:()=>null, getCaptureWindow:()=>null, isCaptureReady:()=>true }
+    : require('./workbuddy-guard-entry-window').createWorkBuddyGuardEntryWindow({ BrowserWindow, alwaysOnTop, onGuard, onError });
   const live = w => w && !w.isDestroyed() && !w.webContents.isDestroyed?.();
   const fade = createNativeWindowFade({ onError: error });
   const resize = createQuotaCardResize({ onError, onSettled: notifyLayout });
@@ -113,7 +113,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       win.setIgnoreMouseEvents?.(groupTransitionMode==='stage',{forward:true});
       if(groupTransitionMode==='stage'){fade.cancel(win);sendQuotaCardMotion(win,true,{...presentation,quotaGroupAnimate:false},false);win.hide();}
       else fade.show(win, sendQuotaCardMotion(win, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))));
-      if (!expanded && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
+      if (!current?.quotaOnly && !expanded && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
       else guard.hide();
     } catch (e) { guard.hide(); if (live(win)) fade.hide(win); error(e); }
   }
@@ -134,7 +134,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
         if (channel === `${CHANNEL}-toggle`) { toggleResizePending = true; expanded = !expanded; notifyLayout(); reposition(); }
         if (channel === `${CHANNEL}-refresh` && !current.busy) onRefresh();
         if (channel === `${CHANNEL}-trend`) onTrend();
-        if (channel === `${CHANNEL}-tasks` && ['tasks', 'results'].includes(kind)) onTasks(kind);
+        if (!current.quotaOnly && channel === `${CHANNEL}-tasks` && ['tasks', 'results'].includes(kind)) onTasks(kind);
       } catch (err) { error(err); }
     });
     target.on('closed', () => { resize.forget(target); if (win === target) { guard.hide(); win = null; ready = false; } });
@@ -143,7 +143,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
     target.webContents.on('did-finish-load', loaded);
     Promise.resolve(target.loadFile(path.join(__dirname, '../workbuddy-label.html'))).then(loaded).catch(e => { if (win === target) destroy(); error(e); });
   }
-  return { show(state) { current = safeState(state); if (!current.enabled) { hide(); return; } const changed = !visible; visible = true; try { ensure(); if (changed) notifyLayout(); reposition(); } catch (e) { destroy(); error(e); } }, hide, destroy, reposition, resetExpanded() { resetExpandedPending=true; },
+  return { show(state) { current = safeState(quotaOnly ? {...state,quotaOnly:true} : state); if (!current.enabled) { hide(); return; } const changed = !visible; visible = true; try { ensure(); if (changed) notifyLayout(); reposition(); } catch (e) { destroy(); error(e); } }, hide, destroy, reposition, resetExpanded() { resetExpandedPending=true; },
     setGroupTransitionMode(mode) {
       if(![null,'hold','stage','masked'].includes(mode)||mode===groupTransitionMode)return;
       groupTransitionMode=mode;groupTransitionEpoch++;guard.setGroupTransitionMode(mode);

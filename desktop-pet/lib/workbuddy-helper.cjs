@@ -71,13 +71,23 @@ function sessionIdentity(session) {
   return { uid: account.uid, domain, scope: 'enterprise', enterpriseId, departmentId,
     accountKey: crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex') };
 }
-function readAuth(includeRefresh = false) {
-  check(process.platform === 'darwin', 'UNSUPPORTED_PLATFORM');
-  const file = path.join(os.homedir(), 'Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info');
+function readAuth(includeRefresh = false, { directory = process.env.QIUQIU_WORKBUDDY_AUTH_DIRECTORY,
+  platform = process.platform, readStorage = () => process._linkedBinding('electron_browser_workbuddy_storage').loggerGet() } = {}) {
+  check(platform === 'darwin', 'UNSUPPORTED_PLATFORM');
+  if (directory !== undefined) check(typeof directory === 'string' && path.isAbsolute(directory) &&
+    !directory.includes('\0') && path.resolve(directory).endsWith(path.sep + path.join('CodeBuddyExtension', 'Data', 'Public', 'auth')), 'UNSUPPORTED_AUTH');
+  const file = path.join(directory === undefined ? path.join(os.homedir(), 'Library/Application Support/CodeBuddyExtension/Data/Public/auth') : directory, 'workbuddy-desktop.info');
   check(fs.existsSync(file) && !fs.existsSync(file + '.logged-out'), 'LOGIN_REQUIRED');
-  const session = JSON.parse(fs.readFileSync(file, 'utf8'));
+  let session, descriptor;
+  try {
+    descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    const stat = fs.fstatSync(descriptor);
+    check(stat.isFile() && stat.size <= 1024 * 1024, 'UNSUPPORTED_AUTH');
+    session = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
+  } catch (error) { if (error.code === 'LOGIN_REQUIRED') throw error; fail('UNSUPPORTED_AUTH'); }
+  finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
   const identity = sessionIdentity(session);
-  const payload = JSON.parse(process._linkedBinding('electron_browser_workbuddy_storage').loggerGet());
+  const payload = JSON.parse(readStorage());
   check(payload.version === 1, 'UNSUPPORTED_AUTH');
   base64(payload.atRestSecretKey, 32);
   const key = crypto.createHash('sha256').update(payload.atRestSecretKey, 'utf8').digest();
@@ -385,7 +395,7 @@ async function execute(operation, payload, onDelta = () => {}, { authReader = re
   let auth;
   try { auth = authReader(operation === 'usage'); }
   catch (error) { error.stage = 'quota-auth'; if (!error.code) error.code = 'UNSUPPORTED_AUTH'; throw error; }
-  if (auth.scope === 'enterprise' || operation === 'quota') auth.verifyCurrent = () => {
+  if (auth.scope === 'enterprise' || ['quota', 'usage'].includes(operation)) auth.verifyCurrent = () => {
     try {
       const current = authReader(false);
       check(current.accountKey === auth.accountKey, 'ACCOUNT_CHANGED');
@@ -402,7 +412,11 @@ async function execute(operation, payload, onDelta = () => {}, { authReader = re
   const signal = AbortSignal.timeout(operation === 'chat' ? 180000 : 55000);
   if (operation === 'quota') return await quota(auth, signal);
   if (operation === 'models') return await models(auth, signal);
-  if (operation === 'usage') return await require('./workbuddy-usage-reader').readWorkBuddyUsage({ auth, authHeaders: headers(auth), signal });
+  if (operation === 'usage') {
+    const result = await require('./workbuddy-usage-reader').readWorkBuddyUsage({ auth, authHeaders: headers(auth), signal });
+    auth.verifyCurrent();
+    return result;
+  }
   check(typeof payload.expectedAccountKey === 'string', 'ACCOUNT_CHANGED');
   check(typeof payload.model === 'string' && /^[a-zA-Z0-9._-]{1,100}$/.test(payload.model), 'INVALID_REQUEST');
   check(typeof payload.conversationId === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(payload.conversationId), 'INVALID_REQUEST');
@@ -442,4 +456,4 @@ if (require.main === module) {
     }
   });
 }
-module.exports = { aad, decryptToken, quotaReport, enterpriseQuotaReport, sessionIdentity, readSse, execute };
+module.exports = { aad, decryptToken, quotaReport, enterpriseQuotaReport, sessionIdentity, readAuth, readSse, execute };

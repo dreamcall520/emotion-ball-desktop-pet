@@ -1,15 +1,16 @@
 'use strict';
 const path=require('node:path');
 const {automaticReportingEnabled}=require('./feedback-reporting');
-const CARD_IDS = new Set(['codex', 'weather']);
+const CARD_IDS = new Set(['codex', 'workbuddy', 'weather']);
+const WORKBUDDY_MENU_IDS = new Set(['workbuddy-enabled', 'workbuddy-quota-visible']);
 function settingsForFirstRelease(settings) {
-  return {...settings, autoReportErrors:automaticReportingEnabled(settings,true), chatSource:'codex', chatProvider:'codex', zcodeEnabled:false, workbuddyEnabled:false,
+  return {...settings, autoReportErrors:automaticReportingEnabled(settings,true), chatSource:'codex', chatProvider:'codex', zcodeEnabled:false, workbuddyEnabled:settings.workbuddyEnabled === true,
     apiBalanceEnabled:false, openaiApiAlwaysVisible:false,
     quotaCardOrder:settings.quotaCardOrder?.filter(id=>CARD_IDS.has(id)),
     quotaCardPinned:settings.quotaCardPinned?.filter(id=>CARD_IDS.has(id))};
 }
 function filterMenu(items) {
-  return items.filter(item=>!item.id || !/^(workbuddy-|zcode-|api-balance-|openai-api-)/.test(item.id)).map(item=>item.submenu?{...item,submenu:filterMenu(item.submenu)}:item);
+  return items.filter(item=>!item.id || WORKBUDDY_MENU_IDS.has(item.id) || !/^(workbuddy-|zcode-|api-balance-|openai-api-)/.test(item.id)).map(item=>item.submenu?{...item,submenu:filterMenu(item.submenu)}:item);
 }
 function acceptanceDirectory(base,name,requested) {
   const fallback=path.join(base,name);

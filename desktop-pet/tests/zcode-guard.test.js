@@ -58,7 +58,7 @@ test('main binds the shared guard to its source: Codex sync cannot close or over
   const source = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
   const functions = source.slice(source.indexOf('function canShowQuotaGuard()'), source.indexOf('\nasync function openCodexDetailThread'));
   let visible = false, available = true, codexEntry = false, leases = 0; const calls = [];
-  const context = vm.createContext({ quotaGuardSource: 'codex', isQuitting: false, screenLocked: false,
+  const context = vm.createContext({ FIRST_RELEASE: false, quotaGuardSource: 'codex', isQuitting: false, screenLocked: false,
     shortcutWindow: null, chatWindow: null, codexDetails: null, workbuddyDetails: null, apiBalanceDetails: null, presentationSuppressed: () => false,
     petWindow: { isDestroyed: () => false, isVisible: () => true },
     settings: { codexEnabled: false, zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, codexQuotaAlwaysVisible: true },

@@ -64,8 +64,9 @@
   el('toggle').addEventListener('click', () => api.toggle());
   el('refresh').addEventListener('click', () => api.refresh());
   el('expanded-header').addEventListener('click', () => api.toggle());
-  el('tasks').addEventListener('click', () => api.tasks('tasks'));
-  el('results').addEventListener('click', () => api.tasks('results'));
+  let quotaOnly = false;
+  el('tasks').addEventListener('click', () => { if (!quotaOnly) api.tasks('tasks'); });
+  el('results').addEventListener('click', () => { if (!quotaOnly) api.tasks('results'); });
   el('expanded-header').addEventListener('contextmenu', event => { event.preventDefault(); api.refresh(); });
   el('trend').addEventListener('click', () => api.trend());
   api.onState(state => {
@@ -80,6 +81,11 @@
     el('details').hidden = !state.expanded;
     const r = state.report, invalid = Boolean(r && (state.error || state.stale));
     const website = r?.scope === 'website-summary';
+    quotaOnly = state.quotaOnly === true;
+    el('tasks').hidden = quotaOnly; el('results').hidden = quotaOnly;
+    el('tasks').style.display = quotaOnly ? 'none' : ''; el('results').style.display = quotaOnly ? 'none' : '';
+    if (el('tasks').parentElement) el('tasks').parentElement.style.display = quotaOnly ? 'none' : '';
+    el('refresh').hidden = !quotaOnly;
     const enterprise = r?.scope === 'enterprise', unlimited = enterprise && r.unlimited === true;
     const unit = enterprise ? '额度' : '积分', balance = r ? amount(unlimited ? r.used : r.total) : '—';
     const metric = unlimited ? '本期已用' : '剩余额度';
@@ -138,7 +144,7 @@
     const running = count(activity.runningCount), unread = count(activity.unreadCount);
     el('running-count').textContent = running === null ? '—' : String(running);
     el('unread-count').textContent = unread === null ? '—' : String(unread);
-    el('tasks').disabled = website; el('results').disabled = website;
+    el('tasks').disabled = website || quotaOnly; el('results').disabled = website || quotaOnly;
     el('tasks').title = website ? '网站积分汇总未提供任务状态' : `查看球球内任务；${running === null ? '实时进行中数量暂未提供' : `进行中 ${running} 项`}；范围：本机已同步任务`;
     el('results').title = website ? '网站积分汇总未提供待查看任务' : `查看球球内待查看任务；${unread === null ? '待查看数量暂未提供' : `本机已同步记录中待查看 ${unread} 项`}；不是全局任务统计`;
     el('tasks').setAttribute('aria-label', el('tasks').title);

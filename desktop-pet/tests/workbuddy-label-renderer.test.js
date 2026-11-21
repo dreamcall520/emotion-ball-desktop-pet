@@ -260,3 +260,18 @@ test('网站汇总卡明确来源/未分类，不显示假基础奖励、刷新�
   assert.equal(e.get('basic').textContent, '500'); assert.equal(e.get('reward').textContent, '6,899.91');
   assert.match(e.get('expiry').title, /120 积分/);
 });
+
+
+test('quota-only card hides and blocks task links while retaining quota controls', () => {
+  const {elements:e,render,calls}=fixture();
+  render({quotaOnly:true,report,expanded:true});
+  assert.equal(e.get('tasks').hidden,true);
+  assert.equal(e.get('tasks').style.display,'none');
+  assert.equal(e.get('results').hidden,true);
+  assert.equal(e.get('refresh').hidden,false);
+  for(const id of ['tasks','results','trend','refresh'])e.get(id).events.click();
+  assert.deepEqual(calls,['trend','refresh']);
+  render({report,expanded:true});
+  assert.equal(e.get('tasks').hidden,false);
+  assert.equal(e.get('results').hidden,false);
+});

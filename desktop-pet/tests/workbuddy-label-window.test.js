@@ -272,3 +272,31 @@ test('website-summary卡IPC保留剩余积分，未知分类不变0且剔除假�
   assert.equal(safeState({ report: { ...input, total: 0 } }).report.total, 0);
   for (const total of [null, -1, Infinity, '450']) assert.equal(safeState({ report: { ...input, total } }).report, null);
 });
+
+
+test('quota-only card snapshots preserve capability and remove task metadata', () => {
+  const state = safeState({ enabled:true, quotaOnly:true, activity:{runningCount:3,unreadCount:7}, report:{total:0,basic:0,reward:0,purchased:0} });
+  assert.equal(state.quotaOnly,true);
+  assert.deepEqual(state.activity,{runningCount:null,unreadCount:null,scope:'本机已同步任务'});
+  assert.equal(safeState({quotaOnly:'true'}).quotaOnly,false);
+});
+
+
+test('quota-only native card never loads the game module or accepts task IPC', async () => {
+  const Module = require('node:module'), load = Module._load, windows = [];
+  let taskCalls = 0, guardLoads = 0;
+  class Window extends EventEmitter {
+    constructor() { super(); this.visible=false; this.sent=[]; this.webContents=Object.assign(new EventEmitter(),{mainFrame:{},isDestroyed:()=>false,setWindowOpenHandler(){},send:(_channel,value)=>this.sent.push(value)}); windows.push(this); }
+    isDestroyed(){return false;} isVisible(){return this.visible;} setAlwaysOnTop(){} setVisibleOnAllWorkspaces(){} setHiddenInMissionControl(){} setBounds(){} showInactive(){this.visible=true;} hide(){this.visible=false;} loadFile(){return Promise.resolve();} destroy(){}
+  }
+  Module._load=function(request,...args){if(request==='./workbuddy-guard-entry-window'){guardLoads++;throw Error('game module is absent from the store package');}return load.call(this,request,...args);};
+  let card;
+  try {
+    card=createWorkBuddyLabelWindow({quotaOnly:true,BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:1000,height:900}})},getPetWindow:()=>({isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>({x:200,y:200,width:80,height:80})}),getGuardEntry:()=>true,onTasks:()=>taskCalls++});
+    card.show({enabled:true,activity:{runningCount:5}});await Promise.resolve();
+    const win=windows[0];assert.equal(windows.length,1);assert.equal(win.sent.at(-1).quotaOnly,true);
+    const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
+    for(const action of ['tasks','results'])win.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks',action);
+    assert.equal(taskCalls,0);assert.equal(guardLoads,0);assert.equal(card.getGuardWindow(),null);
+  } finally { Module._load=load;card?.destroy(); }
+});

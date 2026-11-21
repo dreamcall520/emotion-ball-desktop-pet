@@ -15,7 +15,7 @@
     if (message) feedbackTimer = setTimeout(() => { $('feedback').textContent = ''; }, 3200);
   }
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false, codexTab = 'codex';
-  let latestSleepState, quotaSectionRequested = false;
+  let latestSleepState, quotaSectionRequested = false, workbuddyNotice = null;
   const quotaCardsView = () => 'quota-cards';
   const isApiView = view => ['api', 'openai-api', '/codex-menu/openai-api-menu'].includes(view);
   const descriptions = {
@@ -306,14 +306,15 @@
       const enable = category.children.find(child => /\/(?:codex|zcode|workbuddy)-enabled$/.test(child.id));
       if (!enable) return apiSections;
       const storeCodex = category.id === '/codex-menu' && snapshot.firstReleaseConnection;
-      if (storeCodex && !storeCodex.connected) return [];
-      const sections = storeCodex ? [] : [{ ...category, heading: '启用联动', children: [enable] }];
-      if (!storeCodex && enable.checked !== true) return sections.concat(apiSections);
+      const storeWorkbuddy = category.id === 'workbuddy-settings' && snapshot.firstReleaseWorkbuddyConnection;
+      if (storeCodex && !storeCodex.connected || storeWorkbuddy && !storeWorkbuddy.connected) return [];
+      const sections = storeCodex || storeWorkbuddy ? [] : [{ ...category, heading: '启用联动', children: [enable] }];
+      if (!storeCodex && !storeWorkbuddy && enable.checked !== true) return sections.concat(apiSections);
       const children = category.children.filter(child => child !== enable && child !== apiGroup &&
         (!storeCodex || !/\/codex-(?:status|tasks-open|trend-open)$/.test(child.id)));
       if (category.id === 'workbuddy-settings') return sections.concat([
         { ...category, heading: '积分卡显示', children: children.filter(child => child.id === '/workbuddy-quota-visible') },
-        { ...category, heading: '积分趣味互动', children: children.filter(child => child.id === '/workbuddy-quota-fun') }
+        ...(!storeWorkbuddy ? [{ ...category, heading: '积分趣味互动', children: children.filter(child => child.id === '/workbuddy-quota-fun') }] : [])
       ]);
       const module = child => /\/codex-task-names$/.test(child.id) ? '任务提醒'
         : /\/(?:codex|zcode)-quota-fun$/.test(child.id) ? '额度趣味互动'
@@ -324,6 +325,10 @@
     });
     if (snapshot.firstReleaseConnection && (query ? '启用联动 本机连接 codex 授权 解除连接'.includes(query) : selected === '/codex-menu')) {
       sections.push(storeCodexSection());
+      count++;
+    }
+    if (snapshot.firstReleaseWorkbuddyConnection && (query ? '启用联动 本机连接 workbuddy 授权 额度 消耗统计 解除连接'.includes(query) : selected === 'workbuddy-settings')) {
+      sections.push(storeWorkbuddySection());
       count++;
     }
     for (const category of displayed) {
@@ -483,6 +488,88 @@
     return section;
   }
 
+  const workbuddyLinkTerms = [
+    ['访问范围', '使用你选择的 WorkBuddy 官方本机登录组件和账号目录，查询额度和消耗统计。'],
+    ['数据用途', '只向 WorkBuddy 官方服务查询，不发送模型消息，不消耗模型额度。', '登录信息仅用于本机查询，不复制到球球资料或展示。可随时解除连接。']
+  ];
+  function storeWorkbuddySection() {
+    const state = snapshot.firstReleaseWorkbuddyConnection;
+    const working = busy || state.status === 'working';
+    const section = el('section', '', 'group');
+    section.append(el('h3', '启用联动'));
+    const row = el('div', '', 'row'), info = el('div'), identity = el('div', '', 'store-codex-identity');
+    const icon = el('img'); icon.alt = ''; icon.src = 'assets/integrations/workbuddy.png';
+    identity.append(icon, el('span', '本机 WorkBuddy', 'row-title'));
+    const statusText = state.status === 'error' ? '查询异常' : state.status === 'needs-authorization' && state.enabled ? '需重新授权' : state.status === 'connecting' ? '正在查询额度…' : state.connected ? '已连接' : '未连接';
+    const status = el('span', working ? '正在处理连接…' : statusText, working ? 'store-codex-progress' : 'store-codex-state');
+    status.setAttribute('role', 'status'); if (state.connected) status.dataset.connected = '';
+    identity.append(status); info.append(identity);
+    if (!state.connected) info.append(el('p', '连接后可查看 WorkBuddy 额度和消耗统计。', 'description store-codex-summary'));
+    row.append(info);
+    const actions = el('div', '', 'store-codex-identity');
+    const retry = workbuddyNotice?.status === 'retry-connect';
+    const button = el('button', state.connected ? '解除连接' : retry ? '重试连接' : '连接', state.connected ? 'action' : 'action store-codex-primary');
+    button.type = 'button'; button.dataset.action = 'store-workbuddy-connection'; button.disabled = working;
+    button.onclick = () => void (state.connected ? disconnectStoreWorkbuddy() : connectStoreWorkbuddy(retry ? 'confirm' : 'app'));
+    actions.append(button); row.append(actions); section.append(row);
+    const notice = workbuddyNotice || (state.message && (!state.connected || state.status === 'error') ? {status:state.status,message:state.message} : null);
+    if (notice) {
+      const box = el('div', '', 'store-codex-error'), message = el('p', notice.message, 'description'); message.setAttribute('role', 'status'); box.append(message);
+      if (notice.status === 'invalid-directory' && !working) { const retryButton = el('button', '重新选择', 'action'); retryButton.type = 'button'; retryButton.onclick = () => void connectStoreWorkbuddy('account'); box.append(retryButton); }
+      if (['error','needs-authorization'].includes(notice.status) && state.enabled && !working) {
+        const repair = el('button', notice.status === 'needs-authorization' ? '更新授权' : '重试连接', 'action');
+        repair.type = 'button'; repair.dataset.action = 'store-workbuddy-retry';
+        repair.onclick = () => void connectStoreWorkbuddy(notice.status === 'needs-authorization' ? 'app' : 'confirm'); box.append(repair);
+      }
+      section.append(box);
+    }
+    if (!state.connected) {
+      const disclosure = el('div', '', 'store-codex-disclosure'); disclosure.append(el('h4', '授权说明'));
+      const scope = el('dl');
+      for (const [label,description] of [['访问范围','访问你选择的 WorkBuddy 应用和账号目录。'],['查询用途','通过官方本机登录组件查询额度和消耗统计，不发送模型消息。'],['解除连接','停止查询并撤销球球保存的本地授权。']]) scope.append(el('dt',label),el('dd',description));
+      disclosure.append(scope); section.append(disclosure);
+    }
+    return section;
+  }
+  function storeWorkbuddyNotice(result) {
+    if (result?.status === 'cancelled') return null;
+    const messages = {'invalid-app':'请选择已安装的 WorkBuddy.app。','invalid-directory':'请选择 WorkBuddy 账号目录，并保留系统预选的位置。','needs-app':'应用授权已失效，请重新连接。','busy':'球球正在处理连接，请稍后重试。'};
+    return {status:result?.status,message:messages[result?.status] || result?.message || '连接未完成，请稍后重试。'};
+  }
+  async function connectStoreWorkbuddy(step) {
+    if (busy) return;
+    busy = true; request++;
+    try {
+      if (step === 'app') {
+        if (await confirmStoreCodex('连接本机应用', ['确认使用这台 Mac 上已安装的 WorkBuddy，仅查询额度和消耗统计。'], '允许使用此应用', {target:'WorkBuddy',path:'本机应用'}) !== 'confirm') return;
+        const app = await api.workbuddyConnection('app');
+        if (app?.status !== 'app-authorized') { workbuddyNotice = storeWorkbuddyNotice(app); return; }
+      }
+      if (step === 'confirm' && await confirmStoreCodex('授权 WorkBuddy 额度', [], '同意并连接', {terms:workbuddyLinkTerms}) !== 'confirm') return;
+      if (step === 'app' || step === 'account') {
+        if (await confirmStoreCodex('授权 WorkBuddy 额度', [], '同意并选择目录', {terms:workbuddyLinkTerms}) !== 'confirm') { await api.workbuddyConnection('cancel'); workbuddyNotice = null; return; }
+        const directory = await api.workbuddyConnection('account');
+        if (directory?.status !== 'stored') { if (directory?.status === 'cancelled') await api.workbuddyConnection('cancel'); workbuddyNotice = storeWorkbuddyNotice(directory); return; }
+      }
+      workbuddyNotice = null; render();
+      const result = await api.workbuddyConnection('connect');
+      if (result?.snapshot) snapshot = result.snapshot;
+      workbuddyNotice = result?.connected === true || ['ready','connecting'].includes(result?.status) ? null : storeWorkbuddyNotice(result);
+    } catch (_) { workbuddyNotice = storeWorkbuddyNotice(); }
+    finally { busy = false; render(); void refresh(); }
+  }
+  async function disconnectStoreWorkbuddy() {
+    if (busy) return;
+    busy = true; request++;
+    try {
+      if (await confirmStoreCodex('解除 WorkBuddy 连接？', ['停止额度和消耗查询，并撤销球球保存的本地授权。再次使用时需要重新连接。'], '解除连接') !== 'confirm') return;
+      const result = await api.workbuddyConnection('disconnect');
+      if (result?.snapshot) snapshot = result.snapshot;
+      workbuddyNotice = result?.status === 'disconnected' ? null : storeWorkbuddyNotice(result);
+    } catch (_) { workbuddyNotice = storeWorkbuddyNotice(); }
+    finally { busy = false; render(); void refresh(); }
+  }
+
   function confirmStoreCodex(title, paragraphs, label, { target, path, terms } = {}) {
     const dialog = el('dialog', '', 'store-codex-dialog');
     dialog.setAttribute('aria-labelledby', 'store-codex-dialog-title');
@@ -608,6 +695,7 @@
       const serialized = JSON.stringify(value);
       if (last !== serialized) { const reconnect = !snapshot && value.initialView === 'codex-reconnect'; if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
         else if (!snapshot && ['/codex-menu', 'codex-reconnect'].includes(value.initialView)) selected = '/codex-menu';
+        else if (!snapshot && ['workbuddy-settings','/workbuddy-enabled'].includes(value.initialView)) selected = 'workbuddy-settings';
         else if (!snapshot && value.initialView === 'feedback') selected = 'feedback';
         else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
         else if (!snapshot && value.initialView === '/api-balance-menu') selected = '/api-balance-menu';
@@ -627,6 +715,7 @@
     if (event.key === 'Escape' && !$('search-panel').hidden) { event.preventDefault(); setSearchOpen(false); }
   });
   api.onNavigate(view => {
+    if (['workbuddy-settings','/workbuddy-enabled'].includes(view)) { selected = 'workbuddy-settings'; setSearchOpen(false); document.querySelector('main').scrollTop = 0; return; }
     if (view === 'codex-reconnect') {
       selected = '/codex-menu'; setSearchOpen(false); void connectStoreCodex('confirm'); return;
     }

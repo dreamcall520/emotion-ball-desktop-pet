@@ -22,7 +22,7 @@ function workBuddyError(code) {
   return Object.assign(new Error(MESSAGES[code]), { code, publicMessage: MESSAGES[code] });
 }
 function createWorkBuddyRunner({ spawnProcess = spawn, binary = '/Applications/WorkBuddy.app/Contents/MacOS/Electron',
-  helper = path.join(__dirname, 'workbuddy-helper.cjs'), schedule = setTimeout, cancel = clearTimeout } = {}) {
+  helper = path.join(__dirname, 'workbuddy-helper.cjs'), schedule = setTimeout, cancel = clearTimeout, env = process.env } = {}) {
   return function runWorkBuddy(operation, payload = {}, { signal, onDelta } = {}) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) { reject(workBuddyError('CANCELLED')); return; }
@@ -59,7 +59,7 @@ function createWorkBuddyRunner({ spawnProcess = spawn, binary = '/Applications/W
         } catch (_) { finish(workBuddyError('INVALID_RESPONSE')); }
       }
       try {
-        child = spawnProcess(binary, [helper], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+        child = spawnProcess(binary, [helper], { env: { ...env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
         timer = schedule(() => finish(workBuddyError('TIMEOUT')), operation === 'chat' ? 185000 : 60000);
         timer?.unref?.();
         signal?.addEventListener('abort', abort, { once: true });

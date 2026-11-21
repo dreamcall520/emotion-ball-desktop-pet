@@ -41,7 +41,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     const win = new BrowserWindow({ width: 1080, height: 820, show: false, webPreferences: { contextIsolation: false, nodeIntegration: false } });
     const sourceRoot = process.env.PET_SETTINGS_SOURCE_ROOT || path.resolve(__dirname, '../..');
     await win.loadFile(path.join(sourceRoot, 'desktop-pet/global-settings.html'));
-    const run = code => win.webContents.executeJavaScript(code);
+    const run = async code => { try { return await win.webContents.executeJavaScript(code); } catch (error) { throw new Error('Renderer test step failed: '+code.slice(0,160), {cause:error}); } };
     await run(`window.calls=[];window.snapshot=${JSON.stringify(snapshot)};window.EmotionBall ||= {config:{get:()=>({raw:{}}),register(){}},create:()=>({destroy(){}})};window.qiuqiuSettings={saveQuotaCards:async config=>{window.cardCalls||=[];cardCalls.push(config);if(window.cardFail)return {ok:false,config:window.snapshot.quotaCards,error:'保存失败'};window.snapshot.quotaCards=config;return {ok:true,config,snapshot:window.snapshot}},get:async()=>window.snapshot,act:async(id,checked)=>{calls.push({id,checked});if(window.actMode==='defer')return new Promise(resolve=>window.resolveAction=resolve);if(window.actMode==='throw')throw Error('保存失败');if(window.actMode==='reject')return {snapshot:window.snapshot,error:'授权已取消'};if(window.actMode==='apply')window.findEntry(id).checked=checked;return {snapshot:window.snapshot}},onNavigate:callback=>window.navigate=callback,onPetSleepState:callback=>{window.sleepStateChanged=callback;return()=>{}}};true;`);
     await run("document.getElementById('brand-pet').replaceChildren();window.findEntry=id=>{const walk=items=>items.flatMap(item=>[item,...(item.children?walk(item.children):[])]);return walk(snapshot.entries).find(item=>item.id===id)};true");
     await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
@@ -363,6 +363,49 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.deepEqual(await run('linkActions'),['app','account','cancel']);
+    await run("snapshot.firstReleaseWorkbuddyConnection={connected:false,enabled:false,status:'needs-authorization',message:''};snapshot.version='wb-link';window.wbLinkActions=[];window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);return {status:action==='app'?'app-authorized':action==='account'?'stored':'ready'}};window.dispatchEvent(new Event('focus'))");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await run("navigate('workbuddy-settings')");
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'连接');
+    assert.doesNotMatch(await run("document.querySelector('#content').textContent"),/趣味|游戏|发送消息|聊天/);
+    await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/WorkBuddy/);
+    await run("document.querySelector('dialog[open] button[value=confirm]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    const wbTerms=await run("document.querySelector('dialog[open]').textContent");
+    assert.match(wbTerms,/额度.*消耗统计/s);assert.match(wbTerms,/官方.*本机.*登录/s);assert.match(wbTerms,/不发送模型消息/);
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.deepEqual(await run('wbLinkActions'),['app','cancel']);
+    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);return {status:action==='app'?'app-authorized':action==='account'?'invalid-directory':'cancelled'}};document.querySelector('[data-action=store-workbuddy-connection]').click()");
+    await run("document.querySelector('dialog[open] button[value=confirm]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await run("document.querySelector('dialog[open] button[value=confirm]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.match(await run("document.querySelector('.store-codex-error').textContent"),/请选择 WorkBuddy 账号目录/);
+    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='connect')snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'connecting',message:'已连接，正在查询额度…'};return {status:action==='account'?'stored':action==='disconnect'?'disconnected':'connecting',snapshot}};document.querySelector('.store-codex-error button').click()");
+    await run("document.querySelector('dialog[open] button[value=confirm]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect']);
+    assert.equal(await run("document.querySelector('.store-codex-error')"),null,'accepted background quota query is not a connection failure');
+    await run("snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'error',message:'请在 WorkBuddy 中重新登录'};snapshot.version='wb-login-error';window.dispatchEvent(new Event('focus'))");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.match(await run("document.querySelector('#content').textContent"),/请在 WorkBuddy 中重新登录/);
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-retry]').textContent"),'重试连接');
+    await run("document.querySelector('[data-action=store-workbuddy-retry]').click()");
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true,'cancelling retry preserves the existing grant');
+
+
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'解除连接');
+    assert.equal(await run("document.querySelector('[data-action=\"/workbuddy-quota-visible\"]')!==null"),true);
+    assert.doesNotMatch(await run("document.querySelector('#content').textContent"),/趣味|游戏/);
+    await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
+    await run("document.querySelector('dialog[open] button[value=confirm]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect','disconnect']);
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {

@@ -161,6 +161,7 @@ let storeRuntime = null, storeConnectionsWindow = null, storeEnableFlow = null;
 let chat = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
+let workbuddyInstalledAccess = null, workbuddyQuotaConnection = null;
 let workbuddyDiagnosticKey = '';
 let workbuddyLabel = null;
 let apiBalance = null;
@@ -576,7 +577,7 @@ function globalSettingsSnapshot() {
     chatReady: storeChatReady('codex'),
     working: storeEnableFlow.getState().codex.status === 'working'
   } : null;
-  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
+  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, firstReleaseWorkbuddyConnection: FIRST_RELEASE ? workbuddyQuotaConnection?.getState() : null, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -594,7 +595,7 @@ function fromGlobalSettings(event, requireVisible = true) {
 }
 
 function openGlobalSettings(view) {
-  const target = ['/codex-menu', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
+  const target = ['/codex-menu', 'workbuddy-settings', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     positionFunctionWindow(globalSettingsWindow);
@@ -629,7 +630,7 @@ function openGlobalSettings(view) {
   win.on('closed', () => {
     if (globalSettingsWindow !== win) return;
     globalSettingsWindow = null;
-    if (FIRST_RELEASE) storeRuntime?.clearPendingInstalledCodexApp();
+    if (FIRST_RELEASE) { storeRuntime?.clearPendingInstalledCodexApp(); workbuddyQuotaConnection?.cancel(); }
   });
   win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) { positionFunctionWindow(win); win.show(); } });
   void win.loadFile(path.join(__dirname, 'global-settings.html')).catch(error => {
@@ -1628,7 +1629,7 @@ function quotaExpandedStackPlan() {
     quotaCardVisualInk:currentSheepCapsuleInk()||currentSheepSettledInk(),sheepInk:sheepQuotaInk,sheepTheme:SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()),facing:PetFacing.resolve(pet,area)},quotaObstacleBounds());
 }
 function quotaLayoutPresentation() { const p=edgeTuck?.getPresentation(); return p?.dragging||dragState?.moved ? {...p,mode:'free',side:null}:p; }
-function quotaCardConfig() { const value=normalizeQuotaCards({order:settings?.quotaCardOrder,pinned:settings?.quotaCardPinned});return FIRST_RELEASE?{...value,order:value.order.filter(id=>['codex','weather'].includes(id)),pinned:value.pinned.filter(id=>['codex','weather'].includes(id))}:value; }
+function quotaCardConfig() { const value=normalizeQuotaCards({order:settings?.quotaCardOrder,pinned:settings?.quotaCardPinned});return FIRST_RELEASE?{...value,order:value.order.filter(id=>['codex','workbuddy','weather'].includes(id)),pinned:value.pinned.filter(id=>['codex','workbuddy','weather'].includes(id))}:value; }
 function quotaCardGroupInput() {
   const display=quotaDisplayConfig();
   return {config:quotaCardConfig(),eligible:[
@@ -1790,10 +1791,10 @@ function syncApiUsageLabel() {
 
 function workBuddyCardState() {
   const state = workbuddyQuota?.getState(), tasks = workbuddyTasks?.getState();
-  return { ...state, activity: { runningCount: null, unreadCount: tasks?.report?.pendingReview ?? null } };
+  return { ...state, ...(FIRST_RELEASE ? { quotaOnly: true } : {}), activity: { runningCount: null, unreadCount: tasks?.report?.pendingReview ?? null } };
 }
 function workBuddyDetailsState(action = workbuddyDetails?.getAction?.() || 'trend') {
-  if(IS_STORE_BUILD&&storeRuntime)return storeRuntime.getWorkbuddyDetailsState(action);
+  if(IS_STORE_BUILD&&!FIRST_RELEASE&&storeRuntime)return storeRuntime.getWorkbuddyDetailsState(action);
   return { ...require('./lib/workbuddy-label-window').safeState(workBuddyCardState()), action, usage: workbuddyUsage?.getState(), tasks: workbuddyTasks?.getState() };
 }
 async function openWorkBuddyTask(id) {
@@ -1810,7 +1811,7 @@ async function openWorkBuddyTask(id) {
   } catch (_) { return false; }
 }
 function openWorkBuddyTasks(action = 'tasks') {
-  if (!['tasks', 'results'].includes(action) || !settings?.workbuddyEnabled || screenLocked || isQuitting) return false;
+  if (FIRST_RELEASE || !['tasks', 'results'].includes(action) || !settings?.workbuddyEnabled || screenLocked || isQuitting) return false;
   codexDetails?.close(); apiBalanceDetails?.close(); quotaGuard?.close();
   const opened = workbuddyDetails?.open(workBuddyDetailsState(action));
   void workbuddyTasks?.refresh();
@@ -1893,6 +1894,11 @@ function setWorkBuddyPreference(name, value) {
 }
 
 async function setWorkBuddyEnabled(value,{openLogin=true}={}) {
+  if (FIRST_RELEASE) {
+    if (value) { openGlobalSettings('workbuddy-settings'); return false; }
+    await workbuddyQuotaConnection?.disconnect();
+    syncWorkBuddyLabel(); return true;
+  }
   const enabled = value === true;
   if (!enabled) { workbuddyEnableToken++; workbuddyConsent?.cancel(); }
   if (enabled && settings.workbuddyEnabled !== true) {
@@ -2246,7 +2252,7 @@ function canShowQuotaGuard() {
     && settings?.zcodeEnabled === true && settings.zcodeQuotaAlwaysVisible === true && settings.zcodeQuotaFunEnabled !== false
     && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible() && !presentationSuppressed()
     && zcodeLink?.isEnabled() && zcodeLink.isCardAvailable());
-  if (quotaGuardSource === 'workbuddy') return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.workbuddyEnabled && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible() && !presentationSuppressed() && petWindow?.isVisible());
+  if (quotaGuardSource === 'workbuddy') return Boolean(!FIRST_RELEASE && !isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.workbuddyEnabled && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible() && !presentationSuppressed() && petWindow?.isVisible());
   return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.codexEnabled === true &&
     settings.codexQuotaAlwaysVisible === true && settings.codexQuotaFunEnabled !== false &&
     !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible() && !zcodeLink?.isDetailsVisible() &&
@@ -3942,6 +3948,26 @@ function registerIpc() {
     if (fromGlobalSettings(event, false) && typeof value === 'boolean') shortcutRegistrar?.setRecording(value && fromGlobalSettings(event));
   });
   ipcMain.handle('pet:global-settings-get', event => fromGlobalSettings(event, false) ? globalSettingsSnapshot() : null);
+  ipcMain.handle('pet:global-workbuddy-connection', async (event, action) => {
+    if (!FIRST_RELEASE || !workbuddyQuotaConnection || !fromGlobalSettings(event) ||
+      event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'global-settings.html')).href ||
+      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel'].includes(action)) return { status: 'busy' };
+    globalSettingsBusy = true;
+    const owner = globalSettingsWindow, controller = new AbortController();
+    const abort = () => controller.abort();
+    owner.once('closed', abort);
+    owner.once('hide', abort);
+    try {
+      let result;
+      if (action === 'app' || action === 'account') result = await workbuddyQuotaConnection.authorize(action, controller.signal);
+      else if (action === 'cancel') result = workbuddyQuotaConnection.cancel();
+      else if (action === 'disconnect') result = await workbuddyQuotaConnection.disconnect();
+      else result = await workbuddyQuotaConnection.connect(controller.signal);
+      if (controller.signal.aborted) return { status: 'cancelled' };
+      return { ...result, snapshot: globalSettingsSnapshot() };
+    } catch (_) { return { status: 'error', message: 'WorkBuddy 连接未完成，请重试。', snapshot: globalSettingsSnapshot() }; }
+    finally { owner.removeListener('closed', abort); owner.removeListener('hide', abort); globalSettingsBusy = false; }
+  });
   ipcMain.handle('pet:global-codex-connection', async (event, action) => {
     if (!FIRST_RELEASE || !storeEnableFlow || !fromGlobalSettings(event) ||
       event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'global-settings.html')).href ||
@@ -3986,6 +4012,7 @@ function registerIpc() {
     if (!item || (item.type === 'checkbox' && typeof checked !== 'boolean')) return { error: '该选项暂不可用，请刷新后重试。' };
     globalSettingsBusy = true;
     try {
+      if(FIRST_RELEASE&&item.id==='workbuddy-enabled'){openGlobalSettings('workbuddy-settings');return{snapshot:globalSettingsSnapshot(),message:'请在 WorkBuddy 设置中管理额度授权。'};}
       if(IS_STORE_BUILD&&['codex-enabled','zcode-enabled','workbuddy-enabled'].includes(item.id)){openStoreConnections(item.id.replace('-enabled',''));return{snapshot:globalSettingsSnapshot(),message:'请在统一连接引导中管理该工具的授权。'};}
       // Await consent instead of reporting success while its window is still open.
       if (item.id === 'codex-enabled') await setCodexEnabled(checked);
@@ -4739,14 +4766,21 @@ async function bootstrap() {
     },
     onAction: performChatAction });
   let makeWorkbuddyChat;
-  if(!FIRST_RELEASE) {
-  const { createWorkBuddyTasks } = require('./lib/workbuddy-tasks');
+  {
+  const createWorkBuddyTasks = !FIRST_RELEASE ? require('./lib/workbuddy-tasks').createWorkBuddyTasks : null;
   const { createWorkBuddyUsage } = require('./lib/workbuddy-usage');
-  const { createWorkBuddyConsent } = require('./lib/workbuddy-consent-window');
+  const createWorkBuddyConsent = !FIRST_RELEASE ? require('./lib/workbuddy-consent-window').createWorkBuddyConsent : null;
   const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
-  const { createWorkBuddyChat } = require('./lib/workbuddy-chat');
+  const createWorkBuddyChat = !FIRST_RELEASE ? require('./lib/workbuddy-chat').createWorkBuddyChat : null;
   const { createWorkBuddyQuota } = require('./lib/workbuddy-quota');
   const { runWorkBuddy } = require('./lib/workbuddy-client');
+  if (FIRST_RELEASE) {
+    const { createDirectoryStorage } = require('./lib/mas-provider-runtime');
+    workbuddyInstalledAccess = require('./lib/mas-installed-workbuddy-access').createMasInstalledWorkBuddyAccess({ app,
+      dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed() ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
+      storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-installed-workbuddy-grants')) });
+    workbuddyRun = require('./lib/mas-installed-workbuddy').createMasInstalledWorkBuddyRunner({ access: workbuddyInstalledAccess });
+  } else {
   workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
     ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
   makeWorkbuddyChat = () => (workbuddyChat = createWorkBuddyChat({ getWeatherContext: text => weatherContext(currentWeatherState(), text), store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
@@ -4757,27 +4791,28 @@ async function bootstrap() {
   workbuddyConsent = createWorkBuddyConsent({ BrowserWindow, ipcMain, positionWindow: positionFunctionWindow,
     getInfo: codexConsentInfo, getAppearance: getNotesAppearance, isPackaged: app.isPackaged,
     canRequest: () => !isQuitting && !screenLocked });
-  workbuddyUsage = (IS_STORE_BUILD ? storeRuntime.createWorkBuddyUsagePort : createWorkBuddyUsage)({ run: workbuddyRun, getAccountKey: () => workbuddyQuota?.getState().accountKey,
+  }
+  workbuddyUsage = (IS_STORE_BUILD && !FIRST_RELEASE ? storeRuntime.createWorkBuddyUsagePort : createWorkBuddyUsage)({ run: workbuddyRun, getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => workbuddyDetails?.update(workBuddyDetailsState()) });
-  workbuddyTasks = (IS_STORE_BUILD ? storeRuntime.createWorkBuddyTasksPort : createWorkBuddyTasks)({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
+  if (!FIRST_RELEASE) workbuddyTasks = (IS_STORE_BUILD ? storeRuntime.createWorkBuddyTasksPort : createWorkBuddyTasks)({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
-  workbuddyQuota = (IS_STORE_BUILD ? storeRuntime.createWorkBuddyQuotaPort : createWorkBuddyQuota)({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
+  workbuddyQuota = (IS_STORE_BUILD && !FIRST_RELEASE ? storeRuntime.createWorkBuddyQuotaPort : createWorkBuddyQuota)({ run: workbuddyRun, ...(FIRST_RELEASE ? { watchAuth: () => () => {} } : {}), historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
     const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';
     if (diagnostic && diagnostic !== workbuddyDiagnosticKey) writeError('WorkBuddy 积分查询', {code:state.errorCode},
       {stage:'quota-query', ...state.diagnostic, severity: ['LOGIN_REQUIRED','ACCOUNT_CHANGED','UNSUPPORTED_PLATFORM','RATE_LIMITED'].includes(state.errorCode) ? 'warning' : 'error',
         expected: ['LOGIN_REQUIRED','ACCOUNT_CHANGED','UNSUPPORTED_PLATFORM','RATE_LIMITED'].includes(state.errorCode)});
     workbuddyDiagnosticKey = diagnostic;
-    workbuddyTasks.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
-    if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks.refresh(false); void workbuddyUsage.refresh(false); }
+    workbuddyTasks?.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
+    if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks?.refresh(false); void workbuddyUsage.refresh(false); }
   } });
-  workbuddyLabel = require('./lib/workbuddy-label-window').createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
+  workbuddyLabel = require('./lib/workbuddy-label-window').createWorkBuddyLabelWindow({ BrowserWindow, screen, quotaOnly: FIRST_RELEASE, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
     getStackAnchor: () => {
       const api = apiUsageLabel?.getWindow();
       return zcodeLink?.getVisibleBounds?.() || (api && !api.isDestroyed() && api.isVisible() ? api.getBounds() : quotaLabel?.getVisibleBounds?.());
     },
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('workbuddy'), quotaGroupAnimate: quotaCardGroupAnimate('workbuddy'), quotaGroupIndex: quotaCardConfig().order.indexOf('workbuddy'), quotaReducedMotion: quotaReducedMotion(), quotaGroupHidden: quotaCardCollected('workbuddy') || quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
     onLayout: syncQuotaFreeStack,
-    getGuardEntry: () => settings.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false
+    getGuardEntry: () => !FIRST_RELEASE && settings.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false
       && !(settings.zcodeQuotaFunEnabled !== false && zcodeLink?.isCardAvailable()) && !quotaLabel?.isGuardEntryVisible?.({includeStaged:true}) && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible(),
     getObstacles: () => [quotaLabel, apiUsageLabel, zcodeLink, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
       if (controller === quotaLabel) { const card = quotaLabel?.getVisibleBounds?.(); return card ? [card] : []; }
@@ -4788,10 +4823,10 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onRefresh: () => { void workbuddyQuota.refresh(); },
     onTrend: () => { codexDetails?.close(); apiBalanceDetails?.close(); quotaGuard?.close(); workbuddyDetails?.open(workBuddyDetailsState('trend')); void workbuddyUsage?.refresh(false); },
-    onGuard: () => { openQuotaGuard(true); },
+    onGuard: () => { if (!FIRST_RELEASE) openQuotaGuard(true); },
     onTasks: openWorkBuddyTasks,
     onError: () => {} });
-  workbuddyDetails = createWorkBuddyDetailsWindow({ BrowserWindow, screen,
+  workbuddyDetails = createWorkBuddyDetailsWindow({ BrowserWindow, screen, quotaOnly: FIRST_RELEASE,
     getAnchor: () => { const card = workbuddyLabel?.getWindow(); return card && !card.isDestroyed() && card.isVisible() ? card.getBounds() : petWindow?.getBounds(); },
     getAppearance: () => settings.codexQuotaAppearance, alwaysOnTop: settings.alwaysOnTop,
     onRefreshTasks: () => { void workbuddyTasks?.refresh(); },
@@ -4804,7 +4839,13 @@ async function bootstrap() {
       if (win === petWindow || win === bubble?.getWindow()) syncWorkBuddyLabel();
     });
   });
-  workbuddyQuota.setEnabled(settings.workbuddyEnabled);
+  if (FIRST_RELEASE) {
+    workbuddyQuotaConnection = require('./lib/mas-workbuddy-quota-connection').createMasWorkBuddyQuotaConnection({
+      access: workbuddyInstalledAccess, quota: workbuddyQuota, usage: workbuddyUsage,
+      saveEnabled: value => { settings = saveSettings(settingsFile, { ...settings, workbuddyEnabled: value }); },
+      onChange: () => { syncWorkBuddyLabel(); syncQuotaCardGroup(); } });
+    void workbuddyQuotaConnection.restore(settings.workbuddyEnabled);
+  } else workbuddyQuota.setEnabled(settings.workbuddyEnabled);
   }
   chat = createChatSources({ codex: chat, createWorkbuddy: IS_STORE_BUILD ? ()=>require('./lib/workbuddy-cli-chat-companion').createWorkBuddyCliChatCompanion({connection:storeRuntime.workbuddyCli,prepare:options=>storeRuntime.prepareWorkbuddyChat(options),onChange:()=>chat?.sourceChanged('workbuddy')}) : makeWorkbuddyChat,
     isWorkbuddyEnabled: () => !FIRST_RELEASE && (IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true),
@@ -5180,6 +5221,7 @@ if (!hasSingleInstanceLock) {
     apiUsage?.close();
     workbuddyEnableToken++; workbuddyConsent?.close();
     workbuddyTasks?.close();
+    workbuddyQuotaConnection?.close();
     workbuddyUsage?.close();
     workbuddyQuota?.close();
     apiBalance?.close(); apiBalanceLabel?.destroy(); apiBalanceDetails?.destroy();
