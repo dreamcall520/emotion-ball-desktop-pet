@@ -361,6 +361,13 @@ body { padding-top:38px; }
 
 /* Native settings surface for the App Store Codex connection. */
 .group.store-connected-group { position:relative; }
+:root .group.store-connected-group { border-color:transparent; }
+.group.store-connected-group::before {
+  content:""; position:absolute; inset:-1px; border:1px solid var(--module-edge); border-radius:inherit;
+  mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);
+  mask-size:100% 100%,18px 2px; mask-position:0 0,26px 100%; mask-repeat:no-repeat; mask-composite:exclude;
+  pointer-events:none;
+}
 .group.store-connected-group::after {
   content:""; position:absolute; top:100%; left:28px; width:12px; height:12px;
   transform:translateY(calc(-50% + 1px)) rotate(45deg);

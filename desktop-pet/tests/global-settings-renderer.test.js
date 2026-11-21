@@ -54,14 +54,16 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
         await run(`document.documentElement.dataset.appearance=${JSON.stringify(mode)};new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
         const value = await run(`(()=>{const button=document.querySelector('[data-action=store-${provider}-connection]');
           const references=${provider === 'workbuddy' ? "['store-workbuddy-tasks','store-workbuddy-notifications'].map(id=>document.querySelector('[data-action='+id+']'))" : "[...document.querySelectorAll('#content > section.group:not(:first-child) .row > button, #content > section.group:not(:first-child) .row > select')]"};
-          const box=button.getBoundingClientRect(),row=button.closest('.row'),group=row.closest('.group'),tail=getComputedStyle(group,'::after'),next=group.nextElementSibling;
-          return {right:box.right,referenceRights:references.filter(Boolean).map(node=>node.getBoundingClientRect().right),bubble:group.classList.contains('store-connected-group'),rowBackground:getComputedStyle(row).backgroundColor,
+          const box=button.getBoundingClientRect(),row=button.closest('.row'),group=row.closest('.group'),tail=getComputedStyle(group,'::after'),outline=getComputedStyle(group,'::before'),next=group.nextElementSibling;
+          return {right:box.right,referenceRights:references.filter(Boolean).map(node=>node.getBoundingClientRect().right),bubble:group.classList.contains('store-connected-group'),rowBackground:getComputedStyle(row).backgroundColor,parentBorderColor:getComputedStyle(group).borderBottomColor,outlineMask:outline.maskImage,outlinePointerEvents:outline.pointerEvents,
             tail:{content:tail.content,width:parseFloat(tail.width),height:parseFloat(tail.height),left:parseFloat(tail.left),clip:tail.clipPath,pointerEvents:tail.pointerEvents},gap:next?next.getBoundingClientRect().top-group.getBoundingClientRect().bottom:null,overflow:row.scrollWidth>row.clientWidth+1};})()`);
         const result = { provider, appearance: mode, width, ...value }; connectedAlignments.push(result); writeAlignmentReport(false);
         assert(value.referenceRights.length > 0, provider + ' needs a real following-module control');
         assert(value.referenceRights.every(right=>Math.abs(right-value.right)<=.5), JSON.stringify(result));
         assert(value.bubble && !value.overflow, 'the whole connected group is the parent bubble');
         assert.equal(value.rowBackground,'rgba(0, 0, 0, 0)','no nested row surface');
+        assert.equal(value.parentBorderColor,'rgba(0, 0, 0, 0)','geometry retains a transparent border while the decorative outline can open at the tail');
+        assert.notEqual(value.outlineMask,'none');assert.equal(value.outlinePointerEvents,'none');
         assert(value.tail.content!=='none'&&value.tail.clip!=='none'&&value.tail.width>0&&value.tail.width<=14&&value.tail.height<=14&&value.tail.left>=24&&value.tail.left<=40,'small left tail exists');
         assert.equal(value.tail.pointerEvents,'none');assert(value.gap>=value.tail.height+4,'tail leaves room before the next module');
         win.webContents.debugger.attach('1.3');
@@ -510,8 +512,8 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.doesNotMatch(await run("document.querySelector('#content > section.group').textContent"),/任务同步|未读标记|撤销授权/);
     for(const width of [720,840,1080]) {
       win.setSize(width,820);
-      const layout=await run(`([...document.querySelectorAll('#content > section.group')].map(section=>{const r=section.getBoundingClientRect(),style=getComputedStyle(section);return {title:section.querySelector('h3').textContent,left:r.left,right:r.right,top:r.top,bottom:r.bottom,borderRadius:style.borderRadius,background:style.backgroundImage,overflow:section.scrollWidth>section.clientWidth};}))`);
-      assert(layout.every(row=>!row.overflow&&Math.abs(row.left-layout[0].left)<.1&&Math.abs(row.right-layout[0].right)<.1&&row.borderRadius===layout[0].borderRadius&&row.background===layout[0].background),'separate task module shares the existing surface frame at '+width+'px');
+      const layout=await run(`([...document.querySelectorAll('#content > section.group')].map(section=>{const r=section.getBoundingClientRect(),style=getComputedStyle(section);return {title:section.querySelector('h3').textContent,left:r.left,right:r.right,top:r.top,bottom:r.bottom,borderRadius:style.borderRadius,background:style.backgroundImage,overflow:section.scrollWidth>r.width};}))`);
+      assert(layout.every(row=>!row.overflow&&Math.abs(row.left-layout[0].left)<.1&&Math.abs(row.right-layout[0].right)<.1&&row.borderRadius===layout[0].borderRadius&&row.background===layout[0].background),'separate task module shares the existing surface frame at '+width+'px: '+JSON.stringify(layout));
       assert(layout[0].bottom<layout[1].top&&layout[1].bottom<layout[2].top,'task module sits between connection and card visibility at '+width+'px');
       if(process.env.PET_SETTINGS_TASK_MODULE_PREVIEWS){
         await run("snapshot.firstReleaseWorkbuddyConnection.status='ready';snapshot.firstReleaseWorkbuddyConnection.message='';snapshot.version='wb-task-module-preview';window.dispatchEvent(new Event('focus'))");
