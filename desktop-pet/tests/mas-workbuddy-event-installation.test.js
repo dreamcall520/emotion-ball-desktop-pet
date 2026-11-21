@@ -3,11 +3,11 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const receiver={endpoint:'http://127.0.0.1:45678/workbuddy/events',token:'synthetic_local_capability_not_a_real_token_0123456789'};
 async function fixture(t,extra={}){
  const base=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'qiuqiu-animation-install-')),root=path.join(base,'.workbuddy');fs.mkdirSync(root);
- t.after(()=>fs.rmSync(base,{recursive:true,force:true}));let grant=null,stops=0,picks=[];
+ t.after(()=>fs.rmSync(base,{recursive:true,force:true}));let grant=null,stops=0,picks=[],requests=[];
  const storage={load:async()=>grant,save:async(_id,value)=>{grant=value;},remove:async()=>{grant=null;}};
  const create=require('../lib/mas-workbuddy-event-installation').createMasWorkBuddyEventInstallation;
- const installer=create({app:{startAccessingSecurityScopedResource:()=>()=>{stops++;}},dialog:{showOpenDialog:async()=>picks.shift()||{filePaths:[root],bookmarks:['synthetic-bookmark']}},storage,mas:true,home:()=>base,assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),...extra});
- return{base,root,installer,storage,picks,get grant(){return grant;},get stops(){return stops;},settings:path.join(root,'settings.json'),owned:path.join(root,'.qiuqiu-animation-reminders')};
+ const installer=create({app:{startAccessingSecurityScopedResource:()=>()=>{stops++;}},dialog:{showOpenDialog:async options=>{requests.push(options);return picks.shift()||{filePaths:[root],bookmarks:['synthetic-bookmark']};}},storage,mas:true,home:()=>base,assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),...extra});
+ return{base,root,installer,storage,picks,requests,get grant(){return grant;},get stops(){return stops;},settings:path.join(root,'settings.json'),owned:path.join(root,'.qiuqiu-animation-reminders')};
 }
 test('animation installation requires its independent native purpose and never adopts read-only task authority',async t=>{
  const f=await fixture(t);await f.storage.save('workbuddy',{purpose:'workbuddy-task-metadata-v1',directory:f.root,bookmark:'old'});
@@ -75,4 +75,27 @@ test('uninstall removes our command from a user-extended row without deleting th
  const f=await fixture(t);await f.installer.ensure({interactive:true});await f.installer.install({receiver});
  const settings=JSON.parse(fs.readFileSync(f.settings));settings.hooks.Stop[0].matcher='*';settings.hooks.Stop[0].hooks.push({type:'command',command:'echo user-added'});fs.writeFileSync(f.settings,JSON.stringify(settings));
  await f.installer.uninstall();const after=JSON.parse(fs.readFileSync(f.settings));assert.deepEqual(after.hooks.Stop,[{matcher:'*',hooks:[{type:'command',command:'echo user-added'}]}]);
+});
+test('repeated authorize/install/restore and disable/re-enable use three fixed files and never duplicate hooks or other plugin settings',async t=>{
+ const f=await fixture(t),original={theme:'dark',enabledPlugins:{'other@market':true},hooks:{Stop:[{hooks:[{type:'command',command:'echo keep'}]}]}};
+ fs.writeFileSync(f.settings,JSON.stringify(original));fs.mkdirSync(path.join(f.root,'plugins'));const plugins=path.join(f.root,'plugins/installed_plugins.json');fs.writeFileSync(plugins,'unrelated plugin bytes');
+ const files=directory=>fs.existsSync(directory)?fs.readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(path.join(directory,entry.name)).map(name=>entry.name+'/'+name):[entry.name]).sort():[];
+ const diskSnapshot=()=>Object.fromEntries(files(f.root).map(name=>[name,fs.readFileSync(path.join(f.root,name),'hex')]));
+ const countBackups=()=>files(path.join(f.root,'.qiuqiu-animation-backups')).length;
+ const fixedFiles=['installation.json','receiver.json','scripts/emit-metadata.sh'];
+ const assertSingleHooks=()=>{const settings=JSON.parse(fs.readFileSync(f.settings));const record=JSON.parse(fs.readFileSync(path.join(f.owned,'installation.json')));
+  for(const event of record.events)assert.equal(settings.hooks[event].flatMap(entry=>entry.hooks||[]).filter(hook=>hook.command===record.command).length,1,event);
+  assert.deepEqual(settings.enabledPlugins,original.enabledPlugins);assert.deepEqual(settings.hooks.Stop[0],original.hooks.Stop[0]);assert.equal(fs.readFileSync(plugins,'utf8'),'unrelated plugin bytes');
+ };
+ const before=diskSnapshot();await f.installer.ensure({interactive:true});assert.deepEqual(diskSnapshot(),before,'authorization alone installs no files');assert.equal(Object.hasOwn(f.requests[0],'message'),false);
+ await f.installer.install({receiver});assert.deepEqual(files(f.owned),fixedFiles);assert.equal(countBackups(),1);assertSingleHooks();const installed=diskSnapshot();
+ for(let repeat=0;repeat<3;repeat++){await f.installer.ensure({interactive:true});await f.installer.install({receiver});await f.installer.restore({receiver});assert.deepEqual(diskSnapshot(),installed);assertSingleHooks();}
+ assert.equal(f.requests.length,1,'a valid stored native grant does not reopen the picker');
+ const rotated={...receiver,token:'synthetic_new_pairing_not_a_real_secret_0123456789'};const settingsBefore=fs.readFileSync(f.settings);
+ await f.installer.restore({receiver:rotated});assert.deepEqual(files(f.owned),fixedFiles);assert.equal(countBackups(),1);assert.deepEqual(fs.readFileSync(f.settings),settingsBefore);assertSingleHooks();
+ await f.installer.uninstall();await f.installer.revoke();assert.equal(fs.existsSync(f.owned),false);assert.deepEqual(JSON.parse(fs.readFileSync(f.settings)),original);assert.equal(countBackups(),2);
+ const disabled=diskSnapshot();await f.installer.ensure({interactive:true});assert.deepEqual(diskSnapshot(),disabled);assert.equal(f.requests.length,2);
+ await f.installer.install({receiver:rotated});assert.deepEqual(files(f.owned),fixedFiles);assert.equal(countBackups(),3);assertSingleHooks();
+ const reenabled=diskSnapshot();await f.installer.install({receiver:rotated});assert.deepEqual(diskSnapshot(),reenabled);
+ await f.installer.uninstall();assert.deepEqual(JSON.parse(fs.readFileSync(f.settings)),original);assert.equal(countBackups(),4);assert.equal(fs.readFileSync(plugins,'utf8'),'unrelated plugin bytes');
 });

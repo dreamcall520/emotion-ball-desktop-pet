@@ -72,7 +72,6 @@ function createMasInstalledWorkBuddyAccess({ app, dialog, storage, mas = process
           title: isApp ? '选择已安装的 WorkBuddy' : '授权 WorkBuddy 账号目录',
           buttonLabel: isApp ? '允许使用此应用' : '允许读取此目录',
           defaultPath: isApp ? '/Applications/WorkBuddy.app' : path.join(home(), 'Library/Application Support', AUTH_SUFFIX),
-          ...(!isApp ? { message: '仅用于读取当前登录账号的积分与用量；不会读取聊天正文、修改登录或自动发送消息。' } : {}),
           properties: isApp ? ['openFile'] : ['openDirectory', 'showHiddenFiles'],
           ...(isApp ? { filters: [{ name: '应用程序', extensions: ['app'] }] } : {}),
           securityScopedBookmarks: true

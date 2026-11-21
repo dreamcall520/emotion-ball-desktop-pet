@@ -94,7 +94,12 @@
         option.setAttribute('role', 'menuitemradio');
         const check = document.createElement('span'); check.className = 'model-option-check'; check.setAttribute('aria-hidden', 'true');
         const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = item.id === 'zcode' ? 'ZCode' : item.id === 'workbuddy' ? 'WorkBuddy' : 'Codex';
-        if (item.enabled !== true || sourceNeedsAuthorization(item)) { label.textContent += ' · 启用授权'; option.title = item.message || '完成授权后连接该工具'; }
+        if (item.enabled !== true || sourceNeedsAuthorization(item)) {
+          const name = label.textContent;
+          label.textContent = `连接 ${name}…`;
+          option.title = `尚未连接 ${name}，前往连接页。`;
+          option.setAttribute('aria-label', option.title);
+        }
         option.append(check, label); option.addEventListener('click', () => chooseSource(item.id)); return option;
       });
       sourceMenu.replaceChildren(...sourceOptions);
@@ -381,7 +386,7 @@
     const showConnectionNotice = needsAuthorization && !historyOpen;
     byId('source-feedback').hidden = !showConnectionNotice;
     byId('source-hint').textContent = showConnectionNotice
-      ? snapshot.connection === 'connecting' ? '正在检查连接…' : `连接本机 ${sourceName()} 后即可聊天。`
+      ? snapshot.connection === 'connecting' ? '正在检查连接…' : '连接本机应用后即可聊天。'
       : '';
     if (enableSource) {
       enableSource.hidden = !showConnectionNotice || typeof api.openConnections !== 'function';

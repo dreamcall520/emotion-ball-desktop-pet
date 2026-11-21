@@ -390,11 +390,11 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     }
 
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'连接');
-    assert.doesNotMatch(await run("document.querySelector('#content').textContent"),/趣味|游戏|发送消息|聊天/);
+    assert.doesNotMatch(await run("document.querySelector('#content').textContent"),/趣味|游戏/);
     await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/WorkBuddy/);
     const wbAppCopy = await run(`(()=>{const p=document.querySelector('dialog[open] #store-codex-dialog-copy p'),s=getComputedStyle(p);return {text:p.textContent,lines:p.getBoundingClientRect().height/parseFloat(s.lineHeight),overflow:p.scrollWidth>p.clientWidth,whiteSpace:s.whiteSpace};})()`);
-    assert.equal(wbAppCopy.text,'使用本机 WorkBuddy 查询积分和消耗。');
+    assert.equal(wbAppCopy.text,'使用本机 WorkBuddy 连接当前账号。');
     assert.equal(Math.round(wbAppCopy.lines),1,'WorkBuddy app authorization explanation stays on one natural line');
     assert.equal(wbAppCopy.overflow,false);assert.notEqual(wbAppCopy.whiteSpace,'nowrap');
     if(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS){await run('new Promise(resolve=>setTimeout(resolve,100))');fs.mkdirSync(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS,{recursive:true});const rect=await run("(()=>{const r=document.querySelector('dialog[open]').getBoundingClientRect();return {x:Math.floor(r.x)-12,y:Math.floor(r.y)-12,width:Math.ceil(r.width)+24,height:Math.ceil(r.height)+24}})()");fs.writeFileSync(path.join(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS,'workbuddy-app-authorization.png'),(await win.webContents.capturePage(rect)).toPNG());}
@@ -408,7 +408,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     const wbTerms=await run("document.querySelector('dialog[open]').textContent");
-    assert.match(wbTerms,/积分余额.*消耗统计/s);assert.match(wbTerms,/官方.*本机.*登录/s);assert.match(wbTerms,/不发送模型消息/);
+    assert.match(wbTerms,/积分余额.*消耗统计/s);assert.match(wbTerms,/官方.*本机.*登录/s);assert.match(wbTerms,/在球球中.*WorkBuddy.*聊天/s);assert.match(wbTerms,/聊天内容发送给 WorkBuddy 官方服务/);assert.match(wbTerms,/消耗当前账号积分/);
     for(const width of [720,840,1080]) {
       win.setSize(width,820);
       const paragraphs=await run(`([...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);const style=getComputedStyle(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth,whiteSpace:style.whiteSpace};}))`);
@@ -425,12 +425,12 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.match(await run("document.querySelector('.store-codex-error').textContent"),/请选择 WorkBuddy 账号目录/);
-    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='connect')snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'connecting',message:'已连接，正在查询积分余额…'};return {status:action==='account'?'stored':action==='disconnect'?'disconnected':'connecting',snapshot}};document.querySelector('.store-codex-error button').click()");
+    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='connect')snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'connecting',message:'已连接，正在查询积分余额…',chat:{enabled:true,authorized:true,status:'ready',message:''}};return {status:action==='account'?'stored':action==='disconnect'?'disconnected':'connecting',snapshot}};document.querySelector('.store-codex-error button').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect']);
     assert.equal(await run("document.querySelector('.store-codex-error')"),null,'accepted background quota query is not a connection failure');
-    await run("snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'error',message:'请在 WorkBuddy 中重新登录'};snapshot.version='wb-login-error';window.dispatchEvent(new Event('focus'))");
+    await run("snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'error',message:'请在 WorkBuddy 中重新登录',chat:{enabled:true,authorized:true,status:'ready',message:''}};snapshot.version='wb-login-error';window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.match(await run("document.querySelector('#content').textContent"),/请在 WorkBuddy 中重新登录/);
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-retry]').textContent"),'重试连接');
@@ -504,24 +504,28 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-notifications]').textContent"),'停用提醒');
     await run("document.querySelector('[data-action=store-workbuddy-notifications]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.notifications.enabled'),false);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
-    await run("snapshot.firstReleaseWorkbuddyConnection.chat={enabled:false,authorized:false,status:'disabled',message:''};snapshot.version='wb-chat-authorization';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
-    assert.match(await run("document.querySelector('[data-workbuddy-chat]').textContent"),/使用当前 WorkBuddy 账号在球球聊天，消耗官方积分。/);
-    await run("document.querySelector('[data-action=store-workbuddy-chat]').click()");
-    assert.match(await run("document.querySelector('dialog[open]').textContent"),/使用当前 WorkBuddy 账号在球球聊天，消耗官方积分。/);
+    await run("snapshot.firstReleaseWorkbuddyConnection.chat={enabled:false,authorized:false,status:'disabled',message:''};snapshot.firstReleaseWorkbuddyConnection.status='ready';snapshot.firstReleaseWorkbuddyConnection.message='';snapshot.version='wb-chat-authorization';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('[data-workbuddy-chat]')"),null,'chat joins the main connection rather than a separate module');
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'继续连接');
+    assert.match(await run("document.querySelector('#content > section.group').textContent"),/积分已连接，聊天待授权/);
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-disconnect]').textContent"),'解除连接','existing quota authorization can still be revoked without enabling chat');
+    const beforeContinue=await run('wbLinkActions.length');
+    await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 联动/);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/聊天内容发送给 WorkBuddy 官方服务/);
     for(const width of [720,840,1080]) {
       win.setSize(width,820);
-      const paragraphs=await run(`([...document.querySelectorAll('dialog[open] #store-codex-dialog-copy p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth};}))`);
-      assert(paragraphs.every(p=>p.lines===1&&!p.overflow),'chat authorization stays concise and naturally fits at '+width+'px: '+JSON.stringify(paragraphs));
+      const paragraphs=await run(`([...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth};}))`);
+      assert(paragraphs.every(p=>p.lines===1&&!p.overflow),'unified WorkBuddy consent naturally fits at '+width+'px: '+JSON.stringify(paragraphs));
       const cards=await run("[...document.querySelectorAll('#content > section.group')].map(s=>({left:s.getBoundingClientRect().left,right:s.getBoundingClientRect().right,overflow:s.scrollWidth>s.clientWidth+1}))");
       assert(cards.every(card=>!card.overflow&&Math.abs(card.left-cards[0].left)<.1&&Math.abs(card.right-cards[0].right)<.1),'all connected WorkBuddy modules share the same surface at '+width+'px');
     }
-    await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run("wbLinkActions.includes('chat-enable')"),false);
-    await run("window.chatAllowed=false;window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);const chat=snapshot.firstReleaseWorkbuddyConnection.chat;if(action==='chat-enable'&&chatAllowed){chat.enabled=true;chat.authorized=true;}if(action==='chat-disable'){chat.enabled=false;chat.authorized=false;}return {status:action==='chat-enable'&&!chatAllowed?'error':'ready',message:chatAllowed?'':'聊天授权未完成，请重试。',snapshot}};navigate('workbuddy-chat-authorization')");
-    assert.match(await run("document.querySelector('dialog[open]').textContent"),/启用 WorkBuddy 聊天/);
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run('wbLinkActions.length'),beforeContinue);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.chat.authorized'),false);
+    await run("window.chatAllowed=false;window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='connect'&&chatAllowed){snapshot.firstReleaseWorkbuddyConnection.chat={enabled:true,authorized:true,status:'ready',message:''};}return {status:chatAllowed?'ready':'error',message:chatAllowed?'':'聊天授权未完成，请重试。',snapshot}};navigate('workbuddy-chat-authorization')");
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 联动/);
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
-    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-chat]').textContent"),'启用聊天');assert.match(await run("document.querySelector('[data-workbuddy-chat]').textContent"),/聊天授权未完成/);
-    await run("chatAllowed=true;document.querySelector('[data-action=store-workbuddy-chat]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run("document.querySelector('[data-action=store-workbuddy-chat]').textContent"),'停用聊天');
-    await run("document.querySelector('[data-action=store-workbuddy-chat]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.chat.enabled'),false);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);
+    assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'继续连接');assert.match(await run("document.querySelector('#content > section.group').textContent"),/聊天授权未完成/);
+    await run("chatAllowed=true;document.querySelector('[data-action=store-workbuddy-connection]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run("document.querySelector('[data-action=store-workbuddy-connection]').textContent"),'解除连接');assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);
     await run("snapshot.entries.push({id:'/quota-fun-enabled',label:'额度趣味互动',enabled:true,actionable:true,type:'checkbox',checked:true});snapshot.version='public-quota-game';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("navigate('/codex-menu')");assert.equal(await run("document.querySelector('[data-action=\"/codex-menu/codex-quota-fun\"]')"),null);
     await run("navigate('workbuddy-settings')");assert.equal(await run("document.querySelector('[data-action=\"/workbuddy-quota-fun\"]')"),null);
@@ -536,13 +540,19 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-workbuddy-tasks]')"),null,'task module hides again after disconnect');
     assert.equal(await run("document.querySelector('[data-workbuddy-chat]')"),null,'chat module hides after disconnect');
-    assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect','tasks-authorize','tasks-revoke','notifications-enable','notifications-disable','chat-enable','chat-enable','chat-disable','disconnect']);
+    assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect','tasks-authorize','tasks-revoke','notifications-enable','notifications-disable','connect','connect','disconnect']);
     await run("snapshot.initialView='workbuddy-tasks-authorization';snapshot.version='wb-task-initial-view'");
     await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 任务/);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),false);
+    const beforeInitialChat=await run('wbLinkActions.length');
+    await run("snapshot.initialView='workbuddy-chat-authorization';snapshot.version='wb-unified-initial-view'");
+    await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('dialog[open] h2').textContent"),'连接本机应用','a disconnected chat entry starts the existing application connection flow');
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/使用本机 WorkBuddy 连接当前账号/);
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run('wbLinkActions.length'),beforeInitialChat);
 
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });

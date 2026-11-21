@@ -104,7 +104,7 @@ function createMasWorkBuddyEventInstallation({app,dialog,storage,assetRoot,mas=p
   const before=await storage.load('workbuddy');current();try{const scope=await lease(before);scope.release();current();state.authorized=true;return{status:'stored'};}catch(error){if(error.code==='CANCELLED')throw error;}
   state.authorized=false;if(!interactive)return{status:'needs-authorization'};
   const picked=await dialog.showOpenDialog({title:'允许安装 WorkBuddy 动画提醒',buttonLabel:'允许安装提醒',defaultPath:path.join(home(),'.workbuddy'),
-   message:'仅在此目录注册球球的动画提醒 Hook、过滤脚本和本机连接信息。脚本在本机过滤原 Hook 输入，只向球球发送任务标识与阶段，不保存或发送聊天正文。不更改其他插件、账号或会话；可随时停用并移除球球配置。',properties:['openDirectory','showHiddenFiles'],securityScopedBookmarks:true});current();
+   properties:['openDirectory','showHiddenFiles'],securityScopedBookmarks:true});current();
   if(picked?.canceled)return{status:'cancelled'};
   if(picked?.filePaths?.length!==1||picked?.bookmarks?.length!==1)throw fail('DIRECTORY_ACCESS_REQUIRED');
   const grant={purpose:PURPOSE,directory:picked.filePaths[0],bookmark:picked.bookmarks[0]};try{const scope=await lease(grant);scope.release();}catch(error){if(error.code==='CANCELLED')throw error;return{status:'invalid-directory'};}current();

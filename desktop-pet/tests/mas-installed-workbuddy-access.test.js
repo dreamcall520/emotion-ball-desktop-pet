@@ -38,6 +38,7 @@ test('two explicit WorkBuddy selections save atomically and restart never opens 
   assert.deepEqual(await access.ensure({ interactive: true }), { status: 'stored', changed: true });
   assert.equal(f.saved.app.purpose, 'installed-app'); assert.equal(f.saved.account.purpose, 'workbuddy-quota-account');
   assert.ok(f.requests.every(value => value.securityScopedBookmarks === true));
+  assert.ok(f.requests.every(value => !Object.hasOwn(value, 'message')));
   assert.equal(f.requests[1].defaultPath, f.authDir);
   assert.deepEqual(await f.make().ensure(), { status: 'stored' }); assert.equal(f.requests.length, 2);
   assert.ok(f.storageCalls.every(([, provider]) => provider === 'workbuddy'));

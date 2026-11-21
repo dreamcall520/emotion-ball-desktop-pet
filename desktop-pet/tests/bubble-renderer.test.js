@@ -276,14 +276,36 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
       assert.equal(controller.getWindow().getBounds().height, stableHeight, 'natural-height feedback converges');
       assert(measurements.length - beforeMeasurements <= 8, 'no runaway resize IPC');
       checks.push({ name: 'reply-once-stable-buttons-and-height', height: stableHeight });
+      const workbuddyText=fs.readFileSync(path.join(root,'desktop-pet/main.js'),'utf8').match(/function enqueueWorkBuddyAlert\([\s\S]*?\btext:\s*'([^']+)'/)?.[1];
+      assert(workbuddyText, 'current production WorkBuddy completion text is available');
       const workbuddyDirector=createDirector();
-      const providerPayload=workbuddyDirector.offerProviderTask({provider:'workbuddy',id:7,generation:3,text:'WorkBuddy 本轮回复已完成。'},10000);
+      const providerPayload=workbuddyDirector.offerProviderTask({provider:'workbuddy',id:7,generation:3,text:workbuddyText},10000);
       assert(providerPayload);
       const workbuddyPayload=await show(providerPayload);await layout('workbuddy-completion-owned-dismiss',1);
       await run("document.querySelector('#actions button[data-action=workbuddy-dismiss]').click()");
       await until(()=>replies.at(-1)?.id===workbuddyPayload.id);
       assert.deepEqual(replies.at(-1),{id:workbuddyPayload.id,action:'workbuddy-dismiss'});
       assert.deepEqual(workbuddyDirector.respond(providerPayload.id,replies.at(-1).action,10001),{command:'provider-task',provider:'workbuddy',alertId:7,generation:3});
+      const workbuddyArtifacts=process.env.PET_WORKBUDDY_BUBBLE_ARTIFACT_DIR,workbuddyChecks=[];
+      if(workbuddyArtifacts)fs.mkdirSync(workbuddyArtifacts,{recursive:true});
+      for(const appearance of ['light','dark'])for(const skin of ['blob','cloud','new-year-sheep','codex-pet'])for(const size of [60,80,108,120,180,260]) {
+        shape=skin;area={x:0,y:0,width:1440,height:900};pet={x:1440-size,y:900-size,width:size,height:size};
+        await configure('standard',appearance,'blue');await show(providerPayload);
+        const box=await layout(`workbuddy-${appearance}-${skin}-${size}`,1),lines=await textLines();
+        assert.equal(lines.lines.length,1,'production WorkBuddy completion stays on one line for '+skin+' '+size+' '+appearance);
+        assert.equal(await run("document.querySelector('#actions button').textContent"),'知道啦');
+        workbuddyChecks.push({appearance,skin,size,width:box.width,height:box.height,lines:lines.lines.length,text:box.text,button:'知道啦'});
+        if(workbuddyArtifacts&&skin==='new-year-sheep'&&size===108)fs.writeFileSync(path.join(workbuddyArtifacts,`workbuddy-completion-${appearance}.png`),(await controller.getWindow().webContents.capturePage(undefined,{stayHidden:true})).toPNG());
+      }
+      for(const appearance of ['light','dark']) {
+        shape='new-year-sheep';area={x:0,y:0,width:208,height:900};pet={x:64,y:500,width:80,height:80};
+        await configure('standard',appearance,'blue');await show(providerPayload);const box=await layout(`workbuddy-narrow-${appearance}`,1),lines=await textLines();
+        assert.equal(lines.lines.length,1,'production completion also fits the existing 192px narrow bubble');
+        workbuddyChecks.push({appearance,skin:shape,size:80,width:box.width,height:box.height,lines:lines.lines.length,text:box.text,button:'知道啦'});
+        if(workbuddyArtifacts)fs.writeFileSync(path.join(workbuddyArtifacts,`workbuddy-completion-narrow-${appearance}.png`),(await controller.getWindow().webContents.capturePage(undefined,{stayHidden:true})).toPNG());
+      }
+      if(workbuddyArtifacts)fs.writeFileSync(path.join(workbuddyArtifacts,'report.json'),JSON.stringify({productionText:workbuddyText,realAccounts:false,windowsStayedHidden:true,checks:workbuddyChecks},null,2));
+      shape='blob';area={x:0,y:0,width:1440,height:900};pet={x:600,y:400,width:80,height:80};
       const artifacts = process.env.PET_BUBBLE_ARTIFACT_DIR;
       if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
         for (const appearance of ['light', 'dark']) {

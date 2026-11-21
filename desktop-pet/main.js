@@ -163,6 +163,7 @@ let workbuddyChat = null;
 let workbuddyQuota = null;
 let workbuddyInstalledAccess = null, workbuddyTaskAccess = null, workbuddyQuotaConnection = null;
 let workbuddyChatConnection = null;
+let workbuddyVerifiedAccountKey = null;
 let workbuddyNotifications = null, workbuddyNotificationTimer = null;
 let workbuddyRenderer = null, workbuddySentSettings = null, workbuddyPresentation = null;
 let workbuddyAlertQueue = [], workbuddyPresentationTimer = null;
@@ -1021,6 +1022,40 @@ function requestStoreNotesConsent({win,noteId,contentRevision,getAccountIdentity
 }
 
 function storeChatReady(provider){const state=chat?.getSourceState?.(provider);return Boolean(state?.connection==='ready'&&!state.accountMismatch&&['ready','provider-managed'].includes(state.modelsStatus));}
+function currentWorkBuddyAccountKey() {
+  const state = workbuddyQuota?.getState();
+  if (!workbuddyQuotaConnection?.getState().connected || !state?.enabled) return null;
+  if (['ACCOUNT_CHANGED', 'LOGIN_REQUIRED', 'DIRECTORY_ACCESS_REQUIRED'].includes(state.errorCode)) return null;
+  // A local account check can finish before the independent first balance query.
+  // A later successful balance response is authoritative for account changes.
+  if (!state.busy && !state.error && !state.stale && state.accountKey) return (workbuddyVerifiedAccountKey = state.accountKey);
+  return workbuddyVerifiedAccountKey || state.accountKey || null;
+}
+async function completeStoreWorkBuddyConnection(signal) {
+  const connected = await workbuddyQuotaConnection.connect(signal);
+  if (signal.aborted || !connected.connected) return connected;
+  let granted = false;
+  try {
+    const identity = await workbuddyRun('account-check', {}, { signal });
+    if (signal.aborted) return { status: 'cancelled' };
+    workbuddyVerifiedAccountKey = identity.accountKey;
+    const result = await workbuddyChatConnection.enable();
+    if (!result.authorized) return result;
+    await workbuddyRun('account-check', { expectedAccountKey: identity.accountKey }, { signal });
+    if (signal.aborted || workbuddyChatConnection.getAuthorizedAccountKey() !== identity.accountKey) return { status: 'cancelled' };
+    storeChatDataConsent().grantWorkBuddyLink(identity.accountKey);
+    granted = true;
+    try { await chat.connectSource('workbuddy'); }
+    catch { return { ...result, message: '已连接，聊天模型暂未读取成功，可在聊天中重试。' }; }
+    return result;
+  } finally {
+    if (!granted || signal.aborted) {
+      workbuddyVerifiedAccountKey = null;
+      await Promise.allSettled([Promise.resolve().then(() => storeChatDataConsent().revoke('workbuddy')),
+        workbuddyChatConnection.disable()]);
+    }
+  }
+}
 function syncWorkBuddyChatConnection() {
   if (!chat?.getSourceState) return;
   const authorized = workbuddyChatConnection?.getState().authorized === true;
@@ -2234,7 +2269,7 @@ function enqueueWorkBuddyAlert(alert) {
   recordWorkBuddyReminder(alert.kind);
   if (alert.kind !== 'completed') return;
   workbuddyAlertQueue.push({ id: alert.id, generation: alert.epoch, kind: 'completed', motion: 'hop',
-    text: 'WorkBuddy 本轮回复已完成。', expiresAt: Date.now() + 30000 });
+    text: 'WorkBuddy 回复完成', expiresAt: Date.now() + 30000 });
   workbuddyAlertQueue = workbuddyAlertQueue.slice(-16);
   pumpWorkBuddyPresentation();
 }
@@ -4159,7 +4194,7 @@ function registerIpc() {
   ipcMain.handle('pet:global-workbuddy-connection', async (event, action) => {
     if (!FIRST_RELEASE || !workbuddyQuotaConnection || !fromGlobalSettings(event) ||
       event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'global-settings.html')).href ||
-      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel', 'tasks-authorize', 'tasks-revoke', 'notifications-enable', 'notifications-disable', 'chat-enable', 'chat-disable'].includes(action)) return { status: 'busy' };
+      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel', 'tasks-authorize', 'tasks-revoke', 'notifications-enable', 'notifications-disable'].includes(action)) return { status: 'busy' };
     globalSettingsBusy = true;
     const owner = globalSettingsWindow, controller = new AbortController();
     const abort = () => controller.abort();
@@ -4170,6 +4205,7 @@ function registerIpc() {
       if (action === 'app' || action === 'account') result = await workbuddyQuotaConnection.authorize(action, controller.signal);
       else if (action === 'cancel') result = workbuddyQuotaConnection.cancel();
       else if (action === 'disconnect') {
+        workbuddyVerifiedAccountKey = null;
         await Promise.allSettled([workbuddyNotifications?.disable(), workbuddyChatConnection?.disable(),
           Promise.resolve().then(() => storeChatDataConsent().revoke('workbuddy'))]);
         result = await workbuddyQuotaConnection.disconnect();
@@ -4178,30 +4214,7 @@ function registerIpc() {
       else if (action === 'tasks-revoke') result = await workbuddyQuotaConnection.revokeTasks();
       else if (action === 'notifications-enable') result = await workbuddyNotifications.enable(controller.signal);
       else if (action === 'notifications-disable') result = await workbuddyNotifications.disable();
-      else if (action === 'chat-enable') {
-        const expectedAccountKey = workbuddyQuota?.getState().accountKey;
-        if (!workbuddyQuotaConnection.getState().connected || !expectedAccountKey) result = { status: 'needs-connection' };
-        else {
-          await workbuddyRun('account-check', { expectedAccountKey }, { signal: controller.signal });
-          if (controller.signal.aborted) return { status: 'cancelled' };
-          result = await workbuddyChatConnection.enable();
-          if (result.authorized) {
-            try {
-              if (controller.signal.aborted) throw Error('CANCELLED');
-              storeChatDataConsent().grantWorkBuddyLink(workbuddyChatConnection.getAuthorizedAccountKey());
-            } catch { await workbuddyChatConnection.disable(); result = { status: 'error' }; }
-            if (workbuddyChatConnection.getState().authorized) {
-              try { await chat.connectSource('workbuddy'); }
-              catch { result = { ...result, message: '聊天已授权，模型暂未读取成功，可在聊天中重试。' }; }
-            }
-          }
-        }
-      }
-      else if (action === 'chat-disable') {
-        try { storeChatDataConsent().revoke('workbuddy'); }
-        finally { result = await workbuddyChatConnection.disable(); }
-      }
-      else result = await workbuddyQuotaConnection.connect(controller.signal);
+      else result = await completeStoreWorkBuddyConnection(controller.signal);
       if (controller.signal.aborted) return { status: 'cancelled' };
       return { ...result, snapshot: globalSettingsSnapshot() };
     } catch (_) { return { status: 'error', message: 'WorkBuddy 连接未完成，请重试。', snapshot: globalSettingsSnapshot() }; }
@@ -5029,6 +5042,7 @@ async function bootstrap() {
   workbuddyTasks = (IS_STORE_BUILD && !FIRST_RELEASE ? storeRuntime.createWorkBuddyTasksPort : createWorkBuddyTasks)({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = (IS_STORE_BUILD && !FIRST_RELEASE ? storeRuntime.createWorkBuddyQuotaPort : createWorkBuddyQuota)({ run: workbuddyRun, ...(FIRST_RELEASE ? { watchAuth: () => () => {} } : {}), historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
+    if (FIRST_RELEASE && (!state.enabled || ['ACCOUNT_CHANGED', 'LOGIN_REQUIRED', 'DIRECTORY_ACCESS_REQUIRED'].includes(state.errorCode))) workbuddyVerifiedAccountKey = null;
     const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';
     if (diagnostic && diagnostic !== workbuddyDiagnosticKey) writeError('WorkBuddy 积分查询', {code:state.errorCode},
       {stage:'quota-query', ...state.diagnostic, severity: ['LOGIN_REQUIRED','ACCOUNT_CHANGED','UNSUPPORTED_PLATFORM','RATE_LIMITED'].includes(state.errorCode) ? 'warning' : 'error',
@@ -5081,8 +5095,7 @@ async function bootstrap() {
     const { createDirectoryStorage } = require('./lib/mas-provider-runtime');
     workbuddyChatConnection = require('./lib/mas-workbuddy-chat-connection').createMasWorkBuddyChatConnection({
       storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-workbuddy-chat-consent')),
-      getAccountKey: () => workbuddyQuotaConnection?.getState().connected === true && workbuddyQuota?.getState().enabled === true
-        ? workbuddyQuota.getState().accountKey : null,
+      getAccountKey: currentWorkBuddyAccountKey,
       onChange: syncWorkBuddyChatConnection,
       onDisable: () => { if (!isQuitting && chat?.workbuddyDisabled) void chat.workbuddyDisabled().catch(() => {}); }
     });

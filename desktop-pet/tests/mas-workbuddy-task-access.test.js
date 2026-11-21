@@ -15,7 +15,8 @@ async function fixture(t){
 test('task authority is independent, explicit and restored without background pickers',async t=>{
  const f=await fixture(t);assert.equal((await f.access.ensure()).status,'needs-authorization');assert.equal(f.requests.length,0);
  f.selections.push(f.pick());assert.equal((await f.access.ensure({interactive:true})).status,'stored');assert.equal(f.saved.purpose,'workbuddy-task-metadata-v1');
- assert.match(f.requests[0].message,/标题.*状态.*未读/);assert.match(f.requests[0].message,/不读.*正文/);
+ assert.equal(Object.hasOwn(f.requests[0],'message'),false);assert.equal(f.requests[0].title,'授权 WorkBuddy 任务目录');
+ assert.equal(f.requests[0].buttonLabel,'允许读取任务');assert.equal(f.requests[0].securityScopedBookmarks,true);
  assert.equal((await f.access.ensure()).status,'stored');assert.equal(f.requests.length,1);
  const lease=await f.access.acquire('workbuddy');assert.equal(lease.isCurrent(),true);lease.release();lease.release();
  assert.equal(f.scopes.filter(x=>x==='open').length,f.scopes.filter(x=>x==='close').length);

@@ -900,7 +900,12 @@ test('三家聊天来源始终可见，未授权项打开授权页而不伪装�
   const options = f.get('source-menu').children;
   assert.equal(options.length, 3);
   assert.equal(options[1].disabled, false);
-  assert.match(options[1].children[1].textContent, /ZCode.*启用授权/);
+  assert.equal(options[0].children[1].textContent, 'Codex');
+  assert.equal(options[0].attributes.get('aria-checked'), 'true');
+  assert.equal(options[1].children[1].textContent, '连接 ZCode…');
+  assert.equal(options[2].children[1].textContent, '连接 WorkBuddy…');
+  assert.match(options[2].title, /尚未连接 WorkBuddy.*前往连接页/);
+  assert.match(options[2].attributes.get('aria-label'), /尚未连接 WorkBuddy.*前往连接页/);
   await options[1].dispatch('click');
   assert.deepEqual(opened, ['zcode']); assert.deepEqual(changed, []); assert.deepEqual(f.sent, []);
   assert.equal(f.get('chat-source').textContent, 'Codex');
@@ -917,6 +922,7 @@ test('三家聊天来源始终可见，未授权项打开授权页而不伪装�
   assert.deepEqual(opened, ['zcode', 'workbuddy', 'workbuddy']);
   f.receive({ ...state, sources: state.sources.map(item => ({ ...item, enabled: false })) });
   assert.equal(f.get('source-bar').hidden, false, 'all unready tools still have an authorization entry');
+  assert.equal(f.get('source-menu').children[0].children[1].textContent, '连接 Codex…');
 });
 
 test('未连接时只显示通用连接提示，连接后模型错误提供独立重试', async () => {
@@ -928,7 +934,7 @@ test('未连接时只显示通用连接提示，连接后模型错误提供独�
   f.receive(disconnected);
   assert.equal(f.get('error-banner').hidden, true);
   assert.equal(f.get('source-feedback').hidden, false);
-  assert.equal(f.get('source-hint').textContent, '连接本机 Codex 后即可聊天。');
+  assert.equal(f.get('source-hint').textContent, '连接本机应用后即可聊天。');
   assert.equal(f.get('empty-source-note').hidden, true);
   assert.equal(f.get('model-bar').hidden, true);
   assert.equal(f.get('model-feedback').hidden, true);
@@ -996,9 +1002,9 @@ test('WorkBuddy积分连接不代替聊天授权，授权后保留独立模型�
   const f=fixture({openConnections:async id=>{opened.push(id);return{accepted:true};},setSource:async id=>{changed.push(id);return{accepted:true};},refreshModels:async()=>{refreshed++;return{accepted:true};}});await flush();
   const sources=[{id:'codex',enabled:true,needsAuthorization:false},{id:'workbuddy',enabled:true,needsAuthorization:true}];
   f.receive({...withModels(),source:'codex',sources});f.get('chat-source').dispatch('click');
-  const wb=f.get('source-menu').children.find(option=>option.value==='workbuddy');assert.match(wb.children[1].textContent,/启用授权/);await wb.dispatch('click');
+  const wb=f.get('source-menu').children.find(option=>option.value==='workbuddy');assert.equal(wb.children[1].textContent,'连接 WorkBuddy…');await wb.dispatch('click');
   assert.deepEqual(opened,['workbuddy']);assert.deepEqual(changed,[]);assert.equal(f.get('chat-source').textContent,'Codex');
-  f.receive({...withModels(),source:'workbuddy',sources});assert.equal(f.get('source-hint').textContent,'连接本机 WorkBuddy 后即可聊天。');f.get('message-input').value='保留待授权消息';f.get('message-input').dispatch('input');await f.get('composer').dispatch('submit');assert.deepEqual(f.sent,[]);
+  f.receive({...withModels(),source:'workbuddy',sources});assert.equal(f.get('source-hint').textContent,'连接本机应用后即可聊天。');f.get('message-input').value='保留待授权消息';f.get('message-input').dispatch('input');await f.get('composer').dispatch('submit');assert.deepEqual(f.sent,[]);
   const authorized={...withModels(),source:'workbuddy',sources:sources.map(item=>({...item,needsAuthorization:false})),connection:'ready',models:[{id:'workbuddy-model',displayName:'WorkBuddy Model'}]};
   f.receive(authorized);assert.equal(f.get('model-bar').hidden,false);assert(f.options().some(option=>option.value==='workbuddy-model'));assert.match(f.get('privacy-note').textContent,/WorkBuddy 积分/);
   f.receive({...authorized,modelsStatus:'error',modelsError:'暂时无法读取 WorkBuddy 模型。'});assert.equal(f.get('refresh-models').hidden,false);await f.get('refresh-models').dispatch('click');assert.equal(refreshed,1);assert.deepEqual(f.sent,[]);

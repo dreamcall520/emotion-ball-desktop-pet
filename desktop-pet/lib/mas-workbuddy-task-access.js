@@ -34,7 +34,7 @@ function createMasWorkBuddyTaskAccess({app,dialog,storage,mas=process.mas===true
    try{const currentLease=await lease(before);currentLease.release();check();return{status:'stored'};}catch(error){if(error.code==='CANCELLED')throw error;}
    if(!interactive)return{status:'needs-authorization'};
    const picked=await dialog.showOpenDialog({title:'授权 WorkBuddy 任务目录',buttonLabel:'允许读取任务',
-    defaultPath:path.join(home(),'.workbuddy'),message:'只读任务标题、状态和未读标记，不读聊天正文。',
+    defaultPath:path.join(home(),'.workbuddy'),
     properties:['openDirectory','showHiddenFiles'],securityScopedBookmarks:true});check();
    if(picked?.canceled)return{status:'cancelled'};
    if(picked?.filePaths?.length!==1||picked?.bookmarks?.length!==1)throw fail('DIRECTORY_ACCESS_REQUIRED');
