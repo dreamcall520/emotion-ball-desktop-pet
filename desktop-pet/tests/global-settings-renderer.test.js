@@ -42,6 +42,32 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     const sourceRoot = process.env.PET_SETTINGS_SOURCE_ROOT || path.resolve(__dirname, '../..');
     await win.loadFile(path.join(sourceRoot, 'desktop-pet/global-settings.html'));
     const run = async code => { try { return await win.webContents.executeJavaScript(code); } catch (error) { throw new Error('Renderer test step failed: '+code.slice(0,160), {cause:error}); } };
+    async function loadRenderer() {
+      // Initial-view cases reuse one document. Release the previous renderer
+      // as a real navigation would, so its refresh cannot repaint this view.
+      await run(`(() => {
+        window.__settingsFixtureScope?.dispose();
+        const listeners=[], intervals=new Set(), timeouts=new Set();
+        const native={windowAdd:window.addEventListener,documentAdd:document.addEventListener,
+          setInterval:window.setInterval,setTimeout:window.setTimeout};
+        window.addEventListener=(type,listener,options)=>{listeners.push([window,type,listener,options]);return native.windowAdd.call(window,type,listener,options)};
+        document.addEventListener=(type,listener,options)=>{listeners.push([document,type,listener,options]);return native.documentAdd.call(document,type,listener,options)};
+        window.setInterval=(...args)=>{const id=native.setInterval.apply(window,args);intervals.add(id);return id};
+        window.setTimeout=(...args)=>{const id=native.setTimeout.apply(window,args);timeouts.add(id);return id};
+        window.__settingsFixtureScope={listeners,intervals,dispose(){
+          window.addEventListener=native.windowAdd;document.addEventListener=native.documentAdd;
+          window.setInterval=native.setInterval;window.setTimeout=native.setTimeout;
+          for(const [target,type,listener]of listeners)if(target===window&&type==='pagehide')listener.call(window,new Event('pagehide'));
+          for(const [target,type,listener,options]of listeners)target.removeEventListener(type,listener,options);
+          for(const id of intervals)clearInterval(id);for(const id of timeouts)clearTimeout(id);
+          listeners.length=0;intervals.clear();timeouts.clear();
+        }};
+      })()`);
+      const rendererSource=fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8');
+      await run(rendererSource);
+      assert.deepEqual(await run(`({focus:__settingsFixtureScope.listeners.filter(([target,type])=>target===window&&type==='focus').length,
+        refreshIntervals:__settingsFixtureScope.intervals.size})`),{focus:1,refreshIntervals:1});
+    }
     const connectedAlignments = [];
     const writeAlignmentReport = passed => {
       if (process.env.PET_SETTINGS_ALIGNMENT_REPORT) fs.writeFileSync(process.env.PET_SETTINGS_ALIGNMENT_REPORT, JSON.stringify({ passed,
@@ -86,7 +112,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     }
     await run(`window.calls=[];window.snapshot=${JSON.stringify(snapshot)};window.EmotionBall ||= {config:{get:()=>({raw:{}}),register(){}},create:()=>({destroy(){}})};window.qiuqiuSettings={saveQuotaCards:async config=>{window.cardCalls||=[];cardCalls.push(config);if(window.cardFail)return {ok:false,config:window.snapshot.quotaCards,error:'保存失败'};window.snapshot.quotaCards=config;return {ok:true,config,snapshot:window.snapshot}},get:async()=>window.snapshot,act:async(id,checked)=>{calls.push({id,checked});if(window.actMode==='defer')return new Promise(resolve=>window.resolveAction=resolve);if(window.actMode==='throw')throw Error('保存失败');if(window.actMode==='reject')return {snapshot:window.snapshot,error:'授权已取消'};if(window.actMode==='apply')window.findEntry(id).checked=checked;return {snapshot:window.snapshot}},onNavigate:callback=>window.navigate=callback,onPetSleepState:callback=>{window.sleepStateChanged=callback;return()=>{}}};true;`);
     await run("document.getElementById('brand-pet').replaceChildren();window.findEntry=id=>{const walk=items=>items.flatMap(item=>[item,...(item.children?walk(item.children):[])]);return walk(snapshot.entries).find(item=>item.id===id)};true");
-    await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
+    await loadRenderer();
     await run('new Promise(resolve=>setTimeout(resolve,20))');
     const originalPalette = await run('({...document.documentElement.dataset})');
     const palettes = {};
@@ -348,7 +374,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     win.setSize(740,820);await run('new Promise(resolve=>setTimeout(resolve,25))');
     assert.equal(await run("[...document.querySelectorAll('.quota-card-settings .row')].every(e=>e.scrollWidth<=e.clientWidth+1)"),true,'visibility and pin controls wrap inside narrow settings');
     await run("window.snapshot.initialView='quota-cards';window.snapshot.version='initial-alias-test'");
-    await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
+    await loadRenderer();
     await run('new Promise(resolve=>setTimeout(resolve,20))');
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'联动样式管理','initialView alias opens the real edge category');
     assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards');
@@ -356,7 +382,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'API 余额');
     assert.equal(await run("document.querySelector('[data-action=\"/api-balance-menu/api-balance-enabled\"]')!==null"),true);
     await run("window.snapshot.initialView='/api-balance-menu';window.snapshot.version='balance-initial-view'");
-    await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));
+    await loadRenderer();
     await run('new Promise(resolve=>setTimeout(resolve,20))');
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'API 余额');
     await run("navigate('quota-cards');window.actMode='apply'");
@@ -625,14 +651,14 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[data-workbuddy-chat]')"),null,'chat module hides after disconnect');
     assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect','tasks-authorize','tasks-revoke','notifications-enable','notifications-disable','connect','connect','disconnect']);
     await run("snapshot.initialView='workbuddy-tasks-authorization';snapshot.version='wb-task-initial-view'");
-    await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));
+    await loadRenderer();
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 任务/);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),false);
     const beforeInitialChat=await run('wbLinkActions.length');
     await run("snapshot.initialView='workbuddy-chat-authorization';snapshot.version='wb-unified-initial-view'");
-    await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await loadRenderer();await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('dialog[open] h2').textContent"),'连接本机应用','a disconnected chat entry starts the existing application connection flow');
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/使用本机 WorkBuddy 连接当前账号/);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run('wbLinkActions.length'),beforeInitialChat);
