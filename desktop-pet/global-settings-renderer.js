@@ -329,7 +329,7 @@
     }
     if (snapshot.firstReleaseWorkbuddyConnection && (query ? '启用联动 本机连接 workbuddy 授权 额度 消耗统计 解除连接 任务同步 任务授权'.includes(query) : selected === 'workbuddy-settings')) {
       sections.push(storeWorkbuddySection());
-      if (snapshot.firstReleaseWorkbuddyConnection.tasks) sections.push(storeWorkbuddyTasksSection(snapshot.firstReleaseWorkbuddyConnection.tasks));
+      if (snapshot.firstReleaseWorkbuddyConnection.connected === true && snapshot.firstReleaseWorkbuddyConnection.tasks) sections.push(storeWorkbuddyTasksSection(snapshot.firstReleaseWorkbuddyConnection.tasks));
       count++;
     }
     for (const category of displayed) {
@@ -491,7 +491,7 @@
 
   const workbuddyLinkTerms = [
     ['访问范围', '使用所选 WorkBuddy 应用和账号目录。'],
-    ['查询用途', '由官方本机登录组件查询额度和消耗统计。', '仅向 WorkBuddy 官方查询，不发送模型消息。'],
+    ['查询用途', '由官方本机登录组件查询积分余额和消耗统计。', '仅向 WorkBuddy 官方查询，不发送模型消息。'],
     ['登录信息', '仅在本机使用，不复制到球球资料。', '不展示登录信息，可随时解除授权。']
   ];
   function storeWorkbuddySection() {
@@ -502,11 +502,11 @@
     const row = el('div', '', 'row'), info = el('div'), identity = el('div', '', 'store-codex-identity');
     const icon = el('img'); icon.alt = ''; icon.src = 'assets/integrations/workbuddy.png';
     identity.append(icon, el('span', '本机 WorkBuddy', 'row-title'));
-    const statusText = state.status === 'error' ? '查询异常' : state.status === 'needs-authorization' && state.enabled ? '需重新授权' : state.status === 'connecting' ? '正在查询额度…' : state.connected ? '已连接' : '未连接';
+    const statusText = state.status === 'error' ? '查询异常' : state.status === 'needs-authorization' && state.enabled ? '需重新授权' : state.status === 'connecting' ? '正在查询积分余额…' : state.connected ? '已连接' : '未连接';
     const status = el('span', working ? '正在处理连接…' : statusText, working ? 'store-codex-progress' : 'store-codex-state');
     status.setAttribute('role', 'status'); if (state.connected) status.dataset.connected = '';
     identity.append(status); info.append(identity);
-    if (!state.connected) info.append(el('p', '连接后可查看 WorkBuddy 额度和消耗统计。', 'description store-codex-summary'));
+    if (!state.connected) info.append(el('p', '连接后可查看 WorkBuddy 积分余额和消耗统计。', 'description store-codex-summary'));
     row.append(info);
     const actions = el('div', '', 'store-codex-identity');
     const retry = workbuddyNotice?.status === 'retry-connect';
@@ -528,7 +528,7 @@
     if (!state.connected) {
       const disclosure = el('div', '', 'store-codex-disclosure'); disclosure.append(el('h4', '授权说明'));
       const scope = el('dl');
-      for (const [label,description] of [['访问范围','访问你选择的 WorkBuddy 应用和账号目录。'],['查询用途','查询额度和消耗统计，不发送模型消息。'],['解除连接','停止查询并撤销球球保存的本地授权。']]) scope.append(el('dt',label),el('dd',description));
+      for (const [label,description] of [['访问范围','访问你选择的 WorkBuddy 应用和账号目录。'],['查询用途','查询积分余额和消耗统计，不发送模型消息。'],['解除连接','停止查询并撤销球球保存的本地授权。']]) scope.append(el('dt',label),el('dd',description));
       disclosure.append(scope); section.append(disclosure);
     }
     return section;
@@ -541,6 +541,7 @@
     const status = el('span', tasks.authorized ? '已授权' : '未授权', 'store-codex-state');
     status.setAttribute('role','status'); if (tasks.authorized) status.dataset.connected = '';
     identity.append(status); info.append(identity);
+    info.append(el('p','在球球中查看 WorkBuddy 任务和待查看提醒。','description'));
     info.append(el('p','只读任务标题、状态和未读标记，不读取正文。','description'));
     const message = workbuddyTasksNotice || (tasks.status === 'error' ? tasks.message : '');
     if (message) { const note=el('p',message,'description'); note.setAttribute('role','status'); info.append(note); }
@@ -553,7 +554,7 @@
     busy=true; request++;
     try {
       const answer = await confirmStoreCodex(revoke ? '撤销 WorkBuddy 任务授权？' : '授权 WorkBuddy 任务',
-        revoke ? ['停止读取任务；额度和用量查询保持。'] : ['只读任务标题、状态和未读标记，不读取正文。'],
+        revoke ? ['停止读取任务；积分和消耗查询保持。'] : ['只读任务标题、状态和未读标记，不读取正文。'],
         revoke ? '撤销授权' : '同意并选择目录');
       if (answer !== 'confirm') return;
       const result=await api.workbuddyConnection(revoke ? 'tasks-revoke' : 'tasks-authorize');
@@ -574,13 +575,13 @@
     busy = true; request++;
     try {
       if (step === 'app') {
-        if (await confirmStoreCodex('连接本机应用', ['使用本机 WorkBuddy 查询额度和用量。'], '允许使用此应用', {target:'WorkBuddy',path:'本机应用'}) !== 'confirm') return;
+        if (await confirmStoreCodex('连接本机应用', ['使用本机 WorkBuddy 查询积分和消耗。'], '允许使用此应用', {target:'WorkBuddy',path:'本机应用'}) !== 'confirm') return;
         const app = await api.workbuddyConnection('app');
         if (app?.status !== 'app-authorized') { workbuddyNotice = storeWorkbuddyNotice(app); return; }
       }
-      if (step === 'confirm' && await confirmStoreCodex('授权 WorkBuddy 额度', [], '同意并连接', {terms:workbuddyLinkTerms}) !== 'confirm') return;
+      if (step === 'confirm' && await confirmStoreCodex('授权 WorkBuddy 积分查询', [], '同意并连接', {terms:workbuddyLinkTerms}) !== 'confirm') return;
       if (step === 'app' || step === 'account') {
-        if (await confirmStoreCodex('授权 WorkBuddy 额度', [], '同意并选择目录', {terms:workbuddyLinkTerms}) !== 'confirm') { await api.workbuddyConnection('cancel'); workbuddyNotice = null; return; }
+        if (await confirmStoreCodex('授权 WorkBuddy 积分查询', [], '同意并选择目录', {terms:workbuddyLinkTerms}) !== 'confirm') { await api.workbuddyConnection('cancel'); workbuddyNotice = null; return; }
         const directory = await api.workbuddyConnection('account');
         if (directory?.status !== 'stored') { if (directory?.status === 'cancelled') await api.workbuddyConnection('cancel'); workbuddyNotice = storeWorkbuddyNotice(directory); return; }
       }
@@ -595,7 +596,7 @@
     if (busy) return;
     busy = true; request++;
     try {
-      if (await confirmStoreCodex('解除 WorkBuddy 连接？', ['停止额度和消耗查询，并撤销球球保存的本地授权。再次使用时需要重新连接。'], '解除连接') !== 'confirm') return;
+      if (await confirmStoreCodex('解除 WorkBuddy 连接？', ['停止积分和消耗查询，并撤销球球保存的本地授权。再次使用时需要重新连接。'], '解除连接') !== 'confirm') return;
       const result = await api.workbuddyConnection('disconnect');
       if (result?.snapshot) snapshot = result.snapshot;
       workbuddyNotice = result?.status === 'disconnected' ? null : storeWorkbuddyNotice(result);

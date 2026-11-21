@@ -373,9 +373,10 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.deepEqual(await run('linkActions'),['app','account','cancel']);
-    await run("snapshot.firstReleaseWorkbuddyConnection={connected:false,enabled:false,status:'needs-authorization',message:''};snapshot.version='wb-link';window.wbLinkActions=[];window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);return {status:action==='app'?'app-authorized':action==='account'?'stored':'ready'}};window.dispatchEvent(new Event('focus'))");
+    await run("snapshot.firstReleaseWorkbuddyConnection={connected:false,enabled:false,status:'needs-authorization',message:'',tasks:{authorized:false,status:'needs-authorization',message:''}};snapshot.version='wb-link';window.wbLinkActions=[];window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);return {status:action==='app'?'app-authorized':action==='account'?'stored':'ready'}};window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("navigate('workbuddy-settings')");
+    assert.equal(await run("document.querySelector('[data-workbuddy-tasks]')"),null,'task module stays hidden until the main connection is authorized');
     await run("snapshot.codexIconPreference='app-default';snapshot.version='wb-art';window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run(`Promise.all([...document.querySelectorAll('#navigation img.nav-icon')].map(img=>img.complete?Promise.resolve():new Promise(resolve=>img.onload=resolve)))`);
@@ -393,6 +394,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/WorkBuddy/);
     const wbAppCopy = await run(`(()=>{const p=document.querySelector('dialog[open] #store-codex-dialog-copy p'),s=getComputedStyle(p);return {text:p.textContent,lines:p.getBoundingClientRect().height/parseFloat(s.lineHeight),overflow:p.scrollWidth>p.clientWidth,whiteSpace:s.whiteSpace};})()`);
+    assert.equal(wbAppCopy.text,'使用本机 WorkBuddy 查询积分和消耗。');
     assert.equal(Math.round(wbAppCopy.lines),1,'WorkBuddy app authorization explanation stays on one natural line');
     assert.equal(wbAppCopy.overflow,false);assert.notEqual(wbAppCopy.whiteSpace,'nowrap');
     if(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS){await run('new Promise(resolve=>setTimeout(resolve,100))');fs.mkdirSync(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS,{recursive:true});const rect=await run("(()=>{const r=document.querySelector('dialog[open]').getBoundingClientRect();return {x:Math.floor(r.x)-12,y:Math.floor(r.y)-12,width:Math.ceil(r.width)+24,height:Math.ceil(r.height)+24}})()");fs.writeFileSync(path.join(process.env.PET_SETTINGS_WORKBUDDY_PREVIEWS,'workbuddy-app-authorization.png'),(await win.webContents.capturePage(rect)).toPNG());}
@@ -406,7 +408,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     const wbTerms=await run("document.querySelector('dialog[open]').textContent");
-    assert.match(wbTerms,/额度.*消耗统计/s);assert.match(wbTerms,/官方.*本机.*登录/s);assert.match(wbTerms,/不发送模型消息/);
+    assert.match(wbTerms,/积分余额.*消耗统计/s);assert.match(wbTerms,/官方.*本机.*登录/s);assert.match(wbTerms,/不发送模型消息/);
     for(const width of [720,840,1080]) {
       win.setSize(width,820);
       const paragraphs=await run(`([...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);const style=getComputedStyle(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth,whiteSpace:style.whiteSpace};}))`);
@@ -423,7 +425,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.match(await run("document.querySelector('.store-codex-error').textContent"),/请选择 WorkBuddy 账号目录/);
-    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='connect')snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'connecting',message:'已连接，正在查询额度…'};return {status:action==='account'?'stored':action==='disconnect'?'disconnected':'connecting',snapshot}};document.querySelector('.store-codex-error button').click()");
+    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='connect')snapshot.firstReleaseWorkbuddyConnection={connected:true,enabled:true,status:'connecting',message:'已连接，正在查询积分余额…'};return {status:action==='account'?'stored':action==='disconnect'?'disconnected':'connecting',snapshot}};document.querySelector('.store-codex-error button').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect']);
@@ -445,6 +447,8 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("snapshot.firstReleaseWorkbuddyConnection.tasks={status:'needs-authorization',message:'尚未授权任务同步',authorized:false};snapshot.version='wb-task-access';window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-tasks]').textContent"),'授权任务');
+    assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/在球球中查看 WorkBuddy 任务和待查看提醒。/);
+    assert.equal(await run("[...document.querySelectorAll('[data-workbuddy-tasks] p')].every(p=>p.className==='description'&&parseFloat(getComputedStyle(p).marginLeft)===0)"),true,'task purpose and read scope use the shared left-aligned hint style');
     await run("document.querySelector('[data-action=store-workbuddy-tasks]').click()");
     const taskTerms=await run("document.querySelector('dialog[open]').textContent");assert.match(taskTerms,/标题.*状态.*未读.*不读取正文/s);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
@@ -475,6 +479,12 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
 
     await run("document.querySelector('[data-action=store-workbuddy-tasks]').click()");await run("document.querySelector('dialog[open] button[value=confirm]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.tasks.authorized'),false);assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
+    for(const status of ['connecting','error']) {
+      await run(`snapshot.firstReleaseWorkbuddyConnection.status=${JSON.stringify(status)};snapshot.version='wb-authorized-'+${JSON.stringify(status)};window.dispatchEvent(new Event('focus'))`);
+      await run('new Promise(resolve=>setTimeout(resolve,30))');
+      assert.equal(await run("document.querySelector('[data-workbuddy-tasks]')!==null"),true,'authorized '+status+' connection keeps task module');
+    }
+
     await run("navigate('workbuddy-tasks-authorization')");
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'WorkBuddy');
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 任务/);
@@ -483,16 +493,17 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
 
-    await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
+    await run("window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);if(action==='disconnect')snapshot.firstReleaseWorkbuddyConnection={connected:false,enabled:false,status:'disconnected',message:'',tasks:{authorized:false,status:'needs-connection',message:''}};return {status:action==='disconnect'?'disconnected':'ready',snapshot}};document.querySelector('[data-action=store-workbuddy-connection]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('[data-workbuddy-tasks]')"),null,'task module hides again after disconnect');
     assert.deepEqual(await run('wbLinkActions'),['app','cancel','app','account','account','connect','tasks-authorize','tasks-revoke','disconnect']);
     await run("snapshot.initialView='workbuddy-tasks-authorization';snapshot.version='wb-task-initial-view'");
     await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 任务/);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
-    assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),true);
+    assert.equal(await run('snapshot.firstReleaseWorkbuddyConnection.enabled'),false);
 
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });

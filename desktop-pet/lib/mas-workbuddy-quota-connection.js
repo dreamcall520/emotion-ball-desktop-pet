@@ -15,10 +15,10 @@ function createMasWorkBuddyQuotaConnection({ access, quota, usage, taskAccess, t
       : taskState?.busy ? 'working' : taskState?.error ? 'error' : taskState?.report ? 'ready' : 'pending';
     return { enabled, connected: connected && status !== 'needs-authorization', status,
       tasks: { authorized: tasksAuthorized, status: taskStatus,
-        message: !enabled ? '请先连接 WorkBuddy 额度。' : !tasksAuthorized ? '任务目录尚未授权。'
+        message: !enabled ? '请先连接 WorkBuddy。' : !tasksAuthorized ? '任务目录尚未授权。'
           : taskState?.error || '只读本机任务；实时进行中状态未知。' },
       message: !enabled ? '尚未连接本机 WorkBuddy。' : status === 'needs-authorization' ? '请重新授权 WorkBuddy 应用和账号目录。'
-        : state.error || (state.report ? '额度已更新；消耗统计以官方返回为准。' : '已连接，正在查询额度…') };
+        : state.error || (state.report ? '积分余额已更新；消耗统计以官方返回为准。' : '已连接，正在查询积分余额…') };
   }
   function activate() { quota.setEnabled(true); usage.setEnabled(true); onChange(); void restoreTasks(); }
   async function restoreTasks() {

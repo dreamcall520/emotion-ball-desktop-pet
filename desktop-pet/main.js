@@ -4015,7 +4015,7 @@ function registerIpc() {
     if (!item || (item.type === 'checkbox' && typeof checked !== 'boolean')) return { error: '该选项暂不可用，请刷新后重试。' };
     globalSettingsBusy = true;
     try {
-      if(FIRST_RELEASE&&item.id==='workbuddy-enabled'){openGlobalSettings('workbuddy-settings');return{snapshot:globalSettingsSnapshot(),message:'请在 WorkBuddy 设置中管理额度授权。'};}
+      if(FIRST_RELEASE&&item.id==='workbuddy-enabled'){openGlobalSettings('workbuddy-settings');return{snapshot:globalSettingsSnapshot(),message:'请在 WorkBuddy 设置中管理本机授权。'};}
       if(IS_STORE_BUILD&&['codex-enabled','zcode-enabled','workbuddy-enabled'].includes(item.id)){openStoreConnections(item.id.replace('-enabled',''));return{snapshot:globalSettingsSnapshot(),message:'请在统一连接引导中管理该工具的授权。'};}
       // Await consent instead of reporting success while its window is still open.
       if (item.id === 'codex-enabled') await setCodexEnabled(checked);
