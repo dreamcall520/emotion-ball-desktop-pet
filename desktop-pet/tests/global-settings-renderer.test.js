@@ -455,19 +455,24 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     const wbTerms=await run("document.querySelector('dialog[open]').textContent");
-    assert.match(wbTerms,/积分余额.*消耗统计/s);assert.match(wbTerms,/官方.*本机.*登录/s);assert.match(wbTerms,/在球球中.*WorkBuddy.*聊天/s);
-    assert.match(wbTerms,/消息和当前对话上下文发送给 WorkBuddy 官方服务。/);
-    assert.match(wbTerms,/天气对话可能含城市天气摘要，聊天会消耗积分。/);
-    assert.match(wbTerms,/事件输入可能含正文，仅在本机过滤。/);
-    assert.match(wbTerms,/只向本机球球传任务标识和阶段，不传正文。/);
-    assert.match(wbTerms,/安装提醒组件前会备份 WorkBuddy 原设置。/);
-    assert.match(wbTerms,/仅在本机使用，不复制到球球资料。/);
+    assert.match(wbTerms,/授权 WorkBuddy 联动/);
+    assert.deepEqual(await run("[...document.querySelectorAll('dialog[open] .store-codex-terms dt')].map(p=>p.textContent)"),['本机连接','聊天发送','动画提醒']);
+    assert.deepEqual(await run("[...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>p.textContent)"),[
+      '用所选应用和账号查询积分、消耗，并在球球中聊天。',
+      '沿用本机登录，不复制或展示凭据，可随时断开。',
+      '你发的消息和当前对话上下文交给 WorkBuddy 官方。',
+      '问天气时可附城市和天气摘要，聊天会消耗积分。',
+      '默认开启，安装前会选择目录并备份原设置。',
+      '事件输入可能含正文，只在本机处理和过滤。',
+      '仅向本机球球传任务标识和阶段，不传正文。'
+    ]);
     const consentLayouts=[],consentAppearance=await run('document.documentElement.dataset.appearance');
     for(const appearance of ['light','dark']) for(const width of [720,840,1080]) {
       win.setSize(width,820);
       await run(`document.documentElement.dataset.appearance=${JSON.stringify(appearance)};new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
       const layout=await run(`(()=>{const dialog=document.querySelector('dialog[open]'),r=dialog.getBoundingClientRect(),buttons=[...dialog.querySelectorAll('button')].map(b=>{const r=b.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right};});return {dialog:{x:r.x,y:r.y,width:r.width,height:r.height},viewport:{width:innerWidth,height:innerHeight},groups:dialog.querySelectorAll('.store-codex-terms > div').length,overflow:dialog.scrollWidth>dialog.clientWidth||dialog.scrollHeight>dialog.clientHeight,buttons,paragraphs:[...dialog.querySelectorAll('.store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);const style=getComputedStyle(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth,whiteSpace:style.whiteSpace,color:style.color};})};})()`);
-      assert.equal(layout.groups,6);
+      assert.equal(layout.groups,3);assert.equal(layout.paragraphs.length,7);
+      assert(layout.dialog.height<450,'merged consent is substantially shorter than the former 609px dialog');
       assert(layout.paragraphs.every(p=>p.lines===1&&!p.overflow&&p.whiteSpace!=='nowrap'),'each concise WorkBuddy authorization item fits naturally at '+width+'px '+appearance+': '+JSON.stringify(layout.paragraphs));
       assert(!layout.overflow&&layout.dialog.x>=0&&layout.dialog.y>=0&&layout.dialog.x+layout.dialog.width<=layout.viewport.width&&layout.dialog.y+layout.dialog.height<=layout.viewport.height,'consent stays inside the unchanged window: '+JSON.stringify(layout));
       assert(layout.buttons.every(b=>b.top>=layout.dialog.y&&b.bottom<=layout.dialog.y+layout.dialog.height&&b.left>=layout.dialog.x&&b.right<=layout.dialog.x+layout.dialog.width),'both authorization actions stay visible');
@@ -584,9 +589,9 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     const beforeContinue=await run('wbLinkActions.length');
     await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 联动/);
-    assert.match(await run("document.querySelector('dialog[open]').textContent"),/消息和当前对话上下文发送给 WorkBuddy 官方服务/);
-    assert.match(await run("document.querySelector('dialog[open]').textContent"),/默认开启思考动画和新结果提醒。/);
-    assert.match(await run("document.querySelector('dialog[open]').textContent"),/首次需选择 WorkBuddy 目录，安装提醒组件。/);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/你发的消息和当前对话上下文交给 WorkBuddy 官方/);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/默认开启，安装前会选择目录并备份原设置。/);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/仅向本机球球传任务标识和阶段，不传正文。/);
     for(const width of [720,840,1080]) {
       win.setSize(width,820);
       const paragraphs=await run(`([...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth};}))`);

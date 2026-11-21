@@ -500,12 +500,9 @@
   }
 
   const workbuddyLinkTerms = [
-    ['访问范围', '使用所选 WorkBuddy 应用和账号目录。', '安装提醒组件前会备份 WorkBuddy 原设置。'],
-    ['功能用途', '由官方本机登录组件查询积分余额和消耗统计。', '在球球中使用当前 WorkBuddy 账号聊天。'],
-    ['发送说明', '消息和当前对话上下文发送给 WorkBuddy 官方服务。', '天气对话可能含城市天气摘要，聊天会消耗积分。'],
-    ['登录信息', '仅在本机使用，不复制到球球资料。', '不展示登录信息，可随时解除授权。'],
-    ['动画提醒', '默认开启思考动画和新结果提醒。', '首次需选择 WorkBuddy 目录，安装提醒组件。'],
-    ['事件过滤', '事件输入可能含正文，仅在本机过滤。', '只向本机球球传任务标识和阶段，不传正文。']
+    ['本机连接', '用所选应用和账号查询积分、消耗，并在球球中聊天。', '沿用本机登录，不复制或展示凭据，可随时断开。'],
+    ['聊天发送', '你发的消息和当前对话上下文交给 WorkBuddy 官方。', '问天气时可附城市和天气摘要，聊天会消耗积分。'],
+    ['动画提醒', '默认开启，安装前会选择目录并备份原设置。', '事件输入可能含正文，只在本机处理和过滤。', '仅向本机球球传任务标识和阶段，不传正文。']
   ];
   function storeWorkbuddySection() {
     const state = snapshot.firstReleaseWorkbuddyConnection;
@@ -661,11 +658,11 @@
     copy.append(...paragraphs.map(text => el('p', text)));
     if (terms) {
       const list = el('dl', '', 'store-codex-terms');
-      for (const [name, description, detail] of terms) {
+      for (const [name, description, ...details] of terms) {
         const group = el('div');
         const body = el('dd');
         body.append(el('p', description));
-        if (detail) body.append(el('p', detail, 'store-codex-term-detail'));
+        for (const detail of details) if (detail) body.append(el('p', detail, 'store-codex-term-detail'));
         group.append(el('dt', name), body);
         list.append(group);
       }
