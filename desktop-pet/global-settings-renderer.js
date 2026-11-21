@@ -541,7 +541,7 @@
     const status = el('span', tasks.authorized ? '已授权' : '未授权', 'store-codex-state');
     status.setAttribute('role','status'); if (tasks.authorized) status.dataset.connected = '';
     identity.append(status); info.append(identity);
-    info.append(el('p','只读任务标题、状态和未读标记，不读取正文。','description store-codex-summary'));
+    info.append(el('p','只读任务标题、状态和未读标记，不读取正文。','description'));
     const message = workbuddyTasksNotice || (tasks.status === 'error' ? tasks.message : '');
     if (message) { const note=el('p',message,'description'); note.setAttribute('role','status'); info.append(note); }
     const button=el('button',tasks.authorized ? '撤销授权' : '授权任务','action'); button.type='button'; button.dataset.action='store-workbuddy-tasks'; button.disabled=busy || tasks.status==='working';
