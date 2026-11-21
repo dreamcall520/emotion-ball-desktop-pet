@@ -205,15 +205,15 @@ for (const provider of ["workbuddy", "zcode"])
     },
   );
 test("fixed source content, no remote source, and receiver schema are required before writing", async (t) => {
-  for (const kind of ["script", "manifest", "receiver"]) {
+  for (const kind of ["script", "hooks", "manifest", "receiver"]) {
     const f = fixture(t);
     const file =
-      kind === "script"
+      kind === "script" || kind === "hooks"
         ? path.join(
             f.source,
             "plugins",
             f.spec.name,
-            "scripts/emit-metadata.sh",
+            kind === "script" ? "scripts/emit-metadata.sh" : "hooks/hooks.json",
           )
         : kind === "manifest"
           ? path.join(f.source, f.spec.manifest)
@@ -229,7 +229,9 @@ test("fixed source content, no remote source, and receiver schema are required b
           })
         : "unreviewed source",
     );
-    await assert.rejects(f.app.install({ approved: true }));
+    await assert.rejects(f.app.install({ approved: true }), {
+      code: kind === "receiver" ? "INVALID_RECEIVER" : "PLUGIN_CONTENT_MISMATCH",
+    });
     assert.deepEqual(fs.readdirSync(f.root), []);
   }
 });

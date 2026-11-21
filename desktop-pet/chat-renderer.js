@@ -64,8 +64,7 @@
       seen.add(item.id); return true;
     });
   }
-  function sourceNeedsAuthorization() {
-    const source = availableSources().find(item => item.id === sourceId());
+  function sourceNeedsAuthorization(source = availableSources().find(item => item.id === sourceId())) {
     return source?.needsAuthorization ?? Boolean(source && source.enabled !== true);
   }
   async function openConnections(id) {
@@ -85,17 +84,17 @@
     sourceSelect.textContent = sourceName();
     sourceSelect.title = `聊天来源：${sourceName()} · 各自保留聊天记录`;
     sourceSelect.disabled = changeBlocked() || typeof api.setSource !== 'function';
-    const key = JSON.stringify(choices.map(item => [item.id, item.enabled === true, item.message || '']));
+    const key = JSON.stringify(choices.map(item => [item.id, item.enabled === true, item.needsAuthorization, item.message || '']));
     if (key !== sourceOptionsKey) {
       closeSourceMenu(false); sourceOptionsKey = key;
       sourceOptions = choices.map(item => {
         const option = document.createElement('button');
         option.type = 'button'; option.className = 'model-option'; option.value = item.id;
-        option.dataset.source = item.id; option.tabIndex = -1; option.disabled = item.enabled !== true && typeof api.openConnections !== 'function';
+        option.dataset.source = item.id; option.tabIndex = -1; option.disabled = (item.enabled !== true || sourceNeedsAuthorization(item)) && typeof api.openConnections !== 'function';
         option.setAttribute('role', 'menuitemradio');
         const check = document.createElement('span'); check.className = 'model-option-check'; check.setAttribute('aria-hidden', 'true');
         const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = item.id === 'zcode' ? 'ZCode' : item.id === 'workbuddy' ? 'WorkBuddy' : 'Codex';
-        if (item.enabled !== true) { label.textContent += ' · 启用授权'; option.title = item.message || '完成授权后连接该工具'; }
+        if (item.enabled !== true || sourceNeedsAuthorization(item)) { label.textContent += ' · 启用授权'; option.title = item.message || '完成授权后连接该工具'; }
         option.append(check, label); option.addEventListener('click', () => chooseSource(item.id)); return option;
       });
       sourceMenu.replaceChildren(...sourceOptions);
@@ -131,7 +130,7 @@
     if (changeBlocked() || historyOpen || sourceBar?.hidden || typeof api.setSource !== 'function') return;
     const choice = availableSources().find(item => item.id === id);
     if (!choice) return;
-    if (choice.enabled !== true) { await openConnections(id); return; }
+    if (choice.enabled !== true || sourceNeedsAuthorization(choice)) { await openConnections(id); return; }
     closeSourceMenu(); if (id === sourceId()) return;
     pending = true; localError = ''; localSendCancelled = false; refreshControls();
     try {
@@ -382,7 +381,7 @@
     const showConnectionNotice = needsAuthorization && !historyOpen;
     byId('source-feedback').hidden = !showConnectionNotice;
     byId('source-hint').textContent = showConnectionNotice
-      ? snapshot.connection === 'connecting' ? '正在检查连接…' : '连接本机应用后即可聊天。'
+      ? snapshot.connection === 'connecting' ? '正在检查连接…' : `连接本机 ${sourceName()} 后即可聊天。`
       : '';
     if (enableSource) {
       enableSource.hidden = !showConnectionNotice || typeof api.openConnections !== 'function';

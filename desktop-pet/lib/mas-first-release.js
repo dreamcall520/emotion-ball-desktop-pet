@@ -2,9 +2,10 @@
 const path=require('node:path');
 const {automaticReportingEnabled}=require('./feedback-reporting');
 const CARD_IDS = new Set(['codex', 'workbuddy', 'weather']);
-const WORKBUDDY_MENU_IDS = new Set(['workbuddy-enabled', 'workbuddy-quota-visible']);
+const WORKBUDDY_MENU_IDS = new Set(['workbuddy-enabled', 'workbuddy-quota-visible', 'workbuddy-chat']);
 function settingsForFirstRelease(settings) {
-  return {...settings, autoReportErrors:automaticReportingEnabled(settings,true), chatSource:'codex', chatProvider:'codex', zcodeEnabled:false, workbuddyEnabled:settings.workbuddyEnabled === true,
+  const chatSource = settings.chatSource === 'workbuddy' ? 'workbuddy' : 'codex';
+  return {...settings, autoReportErrors:automaticReportingEnabled(settings,true), chatSource, chatProvider:chatSource, zcodeEnabled:false, workbuddyEnabled:settings.workbuddyEnabled === true,
     apiBalanceEnabled:false, openaiApiAlwaysVisible:false,
     quotaCardOrder:settings.quotaCardOrder?.filter(id=>CARD_IDS.has(id)),
     quotaCardPinned:settings.quotaCardPinned?.filter(id=>CARD_IDS.has(id))};

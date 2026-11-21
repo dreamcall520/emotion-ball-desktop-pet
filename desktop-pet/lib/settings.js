@@ -50,6 +50,7 @@ const DEFAULTS = Object.freeze({
   codexQuotaAlwaysVisible: true,
   codexShowExtraCredits: true,
   codexQuotaFunEnabled: true,
+  quotaFunEnabled: true,
   openaiApiAlwaysVisible: false,
   autoUpdateCheck: true,
   autoReportErrors: true,
@@ -144,6 +145,7 @@ function normalizeSettings(raw = {}) {
       ? raw.codexShowExtraCredits : DEFAULTS.codexShowExtraCredits,
     codexQuotaFunEnabled: typeof raw.codexQuotaFunEnabled === 'boolean'
       ? raw.codexQuotaFunEnabled : DEFAULTS.codexQuotaFunEnabled,
+    quotaFunEnabled: typeof raw.quotaFunEnabled === 'boolean' ? raw.quotaFunEnabled : raw.codexQuotaFunEnabled !== false,
     openaiApiAlwaysVisible: typeof raw.openaiApiAlwaysVisible === 'boolean'
       ? raw.openaiApiAlwaysVisible : DEFAULTS.openaiApiAlwaysVisible,
     autoReportErrors: typeof raw.autoReportErrors === 'boolean' ? raw.autoReportErrors : DEFAULTS.autoReportErrors,

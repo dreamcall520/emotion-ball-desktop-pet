@@ -17,15 +17,26 @@ const files = [
   'desktop-pet/lib/workbuddy-details-window.js', 'desktop-pet/lib/workbuddy-website-summary.js',
   'desktop-pet/lib/mas-workbuddy-details.js', 'desktop-pet/lib/mas-workbuddy-quota-connection.js',
   'desktop-pet/lib/mas-installed-workbuddy-access.js', 'desktop-pet/lib/mas-installed-workbuddy.js',
+  'desktop-pet/lib/workbuddy-chat.js', 'desktop-pet/lib/mas-workbuddy-chat-connection.js',
   'desktop-pet/lib/mas-workbuddy-task-access.js',
   'desktop-pet/lib/workbuddy-tasks-reader.js', 'desktop-pet/lib/workbuddy-tasks.js',
   'desktop-pet/workbuddy-tasks-renderer.js',
+  'desktop-pet/lib/mas-workbuddy-event-installation.js', 'desktop-pet/lib/mas-workbuddy-task-notifications.js',
+  'desktop-pet/lib/workbuddy-desktop-task-state.js', 'desktop-pet/lib/workbuddy-desktop-event-bridge.js',
+  'desktop-pet/lib/workbuddy-guard-entry-window.js', 'desktop-pet/workbuddy-guard-entry.html',
+  'desktop-pet/workbuddy-guard-entry.css', 'desktop-pet/workbuddy-guard-entry-preload.js',
+  'desktop-pet/lib/quota-fun-carrier.js', 'desktop-pet/lib/quota-guard-window.js',
+  'desktop-pet/quota-guard.html', 'desktop-pet/quota-guard.css', 'desktop-pet/quota-guard-preload.js',
+  'desktop-pet/quota-guard-renderer.js', 'desktop-pet/assets/quota-guard/zombie-data.js',
+  'desktop-pet/assets/quota-guard/crown.svg', 'desktop-pet/assets/quota-guard/tombstone.svg',
+  'desktop-pet/details-popovers.js',
+  'desktop-pet/assets/workbuddy-desktop-hook/plugins/qiuqiu-task-events/scripts/emit-metadata.sh',
+  'desktop-pet/assets/workbuddy-desktop-hook/plugins/qiuqiu-task-events/hooks/hooks.json',
   'desktop-pet/assets/integrations/workbuddy.png'
 ];
 const excluded = [
   'desktop-pet/workbuddy-consent.html',
-  'desktop-pet/workbuddy-guard-entry.html', 'desktop-pet/lib/workbuddy-chat.js',
-  'desktop-pet/lib/workbuddy-guard-entry-window.js',
+  'desktop-pet/lib/workbuddy-cli-chat-companion.js',
   'desktop-pet/lib/mas-workbuddy-provider.js', 'desktop-pet/lib/workbuddy-web-quota.js',
   'desktop-pet/lib/workbuddy-official-connection.js', 'desktop-pet/lib/workbuddy-cli-connection.js',
   'desktop-pet/lib/mas-bundled-workbuddy.js', 'desktop-pet/lib/mas-workbuddy-tasks.js',
@@ -44,7 +55,7 @@ function staging(t) {
   fs.writeFileSync(path.join(root, 'NOTICE.md'), '# Notice\n\n## WorkBuddy integration reference\nMIT credit\n');
   return root;
 }
-test('MAS staging保留额度和独立授权的任务元数据依赖，仍剔除网站/CLI/游戏及厂商运行时', t => {
+test('MAS staging保留积分/任务/动画/聊天及趣味资源，仍剔除网站/CLI及厂商运行时', t => {
   const root = staging(t);
   release.trimStaging(root, { releaseProfile: 'mas-first' });
   for (const name of files) assert.ok(fs.existsSync(path.join(root, name)), name);
@@ -65,7 +76,7 @@ test('真实额度模块在裁剪后的目录可加载，quotaOnly卡片无需�
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.cpSync(path.join(__dirname, '../lib'), path.join(root, 'desktop-pet/lib'), { recursive: true });
   release.trimStaging(root, { releaseProfile: 'mas-first' });
-  for (const name of ['workbuddy-quota', 'workbuddy-usage', 'workbuddy-helper.cjs', 'workbuddy-label-window', 'workbuddy-details-window', 'mas-workbuddy-quota-connection', 'mas-installed-workbuddy-access', 'mas-installed-workbuddy', 'workbuddy-tasks-reader', 'workbuddy-tasks', 'mas-workbuddy-task-access']) {
+  for (const name of ['workbuddy-quota', 'workbuddy-usage', 'workbuddy-helper.cjs', 'workbuddy-label-window', 'workbuddy-details-window', 'mas-workbuddy-quota-connection', 'mas-installed-workbuddy-access', 'mas-installed-workbuddy', 'workbuddy-tasks-reader', 'workbuddy-tasks', 'mas-workbuddy-task-access', 'mas-workbuddy-event-installation', 'mas-workbuddy-task-notifications', 'mas-workbuddy-chat-connection', 'workbuddy-chat', 'workbuddy-desktop-task-state', 'workbuddy-desktop-event-bridge', 'workbuddy-guard-entry-window', 'quota-guard-window', 'quota-fun-carrier']) {
     assert.doesNotThrow(() => require(path.join(root, 'desktop-pet/lib', name)), name);
   }
   const card = require(path.join(root, 'desktop-pet/lib/workbuddy-label-window')).createWorkBuddyLabelWindow({ quotaOnly: true });
@@ -77,7 +88,7 @@ test('真实prepareStaging再裁剪保留官网同款额度和任务页面的全
   require('../scripts/package-mac').prepareStaging(root, staging, { weatherNative: false, pluginNative: false });
   release.trimStaging(staging, { releaseProfile: 'mas-first' });
   for (const name of files) assert.ok(fs.existsSync(path.join(staging, name)), name);
-  for (const name of ['workbuddy-label.html', 'workbuddy-details.html']) {
+  for (const name of ['workbuddy-label.html', 'workbuddy-details.html', 'workbuddy-guard-entry.html', 'quota-guard.html', 'codex-details.html', 'api-balance-details.html', 'chat.html']) {
     const relative = path.join('desktop-pet', name), content = fs.readFileSync(path.join(staging, relative), 'utf8');
     assert.equal(content, fs.readFileSync(path.join(root, relative), 'utf8'), relative);
     for (const [, ref] of content.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {

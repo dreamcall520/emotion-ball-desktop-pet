@@ -12,6 +12,15 @@ function fixture(options={}){
  const run=extra=>gate.run({getContext:async()=>structuredClone(value),isCurrent:()=>true,send:()=>{sends++;return{accepted:true};},...extra});
  return{gate,run,set:patch=>Object.assign(value,patch),state:()=>({rows,prompts,sends,writes})};
 }
+test('installed WorkBuddy chat consent binds its real recipient and cannot inherit Codex permission',async()=>{
+ const {workbuddyLinkContext}=require('../lib/chat-data-consent');
+ const f=fixture();f.gate.grantCodexLink(account);f.set(workbuddyLinkContext(account));
+ assert.equal((await f.run({requireExisting:true})).needsLinkConsent,true);assert.equal(f.state().sends,0);
+ assert.equal(workbuddyLinkContext(account).recipientOrigin,'https://copilot.tencent.com');
+ f.gate.grantWorkBuddyLink(account);assert.equal((await f.run({requireExisting:true})).accepted,true);
+ f.set({accountKey:other});assert.equal((await f.run({requireExisting:true})).needsLinkConsent,true);
+ f.gate.revoke('workbuddy');assert.equal(f.gate.hasWorkBuddyLink(account),false);assert.equal(f.gate.hasCodexLink(account),true);
+});
 test('首次发送前明确披露内容/上下文/接收方/计费及撤销，默认取消；不含正文或身份',async()=>{
  const f=fixture();assert.equal((await f.run()).accepted,true);
  const {rows,prompts,sends}=f.state();assert.equal(sends,1);assert.equal(prompts.length,1);

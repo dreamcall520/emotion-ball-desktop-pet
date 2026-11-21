@@ -72,10 +72,7 @@ function entitlementsFor(config){
   'com.apple.security.get-task-allow':true,'com.apple.security.files.user-selected.read-write':true,'com.apple.security.files.user-selected.executable':true,'com.apple.security.files.bookmarks.app-scope':true,
   'com.apple.security.network.client':true,'com.apple.security.network.server':true,'com.apple.security.personal-information.location':true},
   child:{'com.apple.security.app-sandbox':true,'com.apple.security.inherit':true}};
- if (release.isFirstRelease(config)) {
-    delete rights.main['com.apple.security.files.user-selected.executable'];
-    delete rights.main['com.apple.security.network.server'];
-  }
+ // Also required by the opt-in WorkBuddy filter script and loopback receiver.
  return rights;
 }
 function packagerOptions(root,config,staging,icon,base={}){

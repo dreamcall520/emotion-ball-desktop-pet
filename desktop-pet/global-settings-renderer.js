@@ -15,7 +15,7 @@
     if (message) feedbackTimer = setTimeout(() => { $('feedback').textContent = ''; }, 3200);
   }
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false, codexTab = 'codex';
-  let latestSleepState, quotaSectionRequested = false, workbuddyNotice = null, workbuddyTasksNotice = null;
+  let latestSleepState, quotaSectionRequested = false, workbuddyNotice = null, workbuddyTasksNotice = null, workbuddyNotificationsNotice = null, workbuddyChatNotice = null;
   const quotaCardsView = () => 'quota-cards';
   const isApiView = view => ['api', 'openai-api', '/codex-menu/openai-api-menu'].includes(view);
   const descriptions = {
@@ -99,10 +99,10 @@
   function groups() {
     const categories = snapshot.entries.filter(entry => entry.children).map(entry => ({
       ...entry, ...(entry.id === '/codex-menu' ? { label: 'Codex' } : {}),
-      children: entry.children.filter(child => child.label !== '咩咩互动')
+      children: entry.children.filter(child => child.label !== '咩咩互动' && (!publicQuotaFunEntry() || !/\/(?:codex|zcode)-quota-fun$/.test(child.id)))
     }));
     const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
-    if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: snapshot.entries.filter(entry => /^\/workbuddy-(?:enabled|quota-visible|quota-fun)$/.test(entry.id)) });
+    if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: snapshot.entries.filter(entry => /^\/workbuddy-(?:enabled|quota-visible|quota-fun)$/.test(entry.id) && (!publicQuotaFunEntry() || entry.id !== '/workbuddy-quota-fun')) });
     const weatherToggle = snapshot.entries.find(entry => entry.id === '/weather-enabled');
     const weather = snapshot.entries.filter(entry => entry === weatherToggle ||
       (entry.id === '/weather-open' && weatherToggle?.checked === true));
@@ -207,6 +207,13 @@
       label.append(checkbox, document.createTextNode('固定展示')); controls.append(label); row.append(controls); section.append(row);
     });
     return section;
+  }
+  function publicQuotaFunEntry() { return snapshot.entries.find(entry=>entry.id === '/quota-fun-enabled'); }
+  function publicQuotaFunSection(entry) {
+    const section=el('section','','group');section.dataset.settingsSection='quota-fun';section.append(el('h3','额度趣味互动'));
+    const row=el('div','','row'),info=el('div');info.append(el('span','启用趣味互动','row-title'),el('p','入口显示在当前最前方支持互动的卡片上。','description'));
+    const button=el('button','','toggle');button.type='button';button.dataset.action=entry.id;button.setAttribute('role','switch');button.setAttribute('aria-label','额度趣味互动');button.setAttribute('aria-checked',String(entry.checked === true));button.disabled=busy || !entry.enabled;
+    button.onclick=()=>act(entry);row.append(info,button);section.append(row);return section;
   }
   async function saveQuotaCards(config) {
     if (busy) return;
@@ -327,9 +334,11 @@
       sections.push(storeCodexSection());
       count++;
     }
-    if (snapshot.firstReleaseWorkbuddyConnection && (query ? '启用联动 本机连接 workbuddy 授权 额度 消耗统计 解除连接 任务同步 任务授权'.includes(query) : selected === 'workbuddy-settings')) {
+    if (snapshot.firstReleaseWorkbuddyConnection && (query ? '启用联动 本机连接 workbuddy 授权 额度 积分余额 积分 消耗统计 解除连接 任务同步 任务授权 动画提醒 聊天'.includes(query) : selected === 'workbuddy-settings')) {
       sections.push(storeWorkbuddySection());
       if (snapshot.firstReleaseWorkbuddyConnection.connected === true && snapshot.firstReleaseWorkbuddyConnection.tasks) sections.push(storeWorkbuddyTasksSection(snapshot.firstReleaseWorkbuddyConnection.tasks));
+      if (snapshot.firstReleaseWorkbuddyConnection.connected === true && snapshot.firstReleaseWorkbuddyConnection.notifications) sections.push(storeWorkbuddyNotificationsSection(snapshot.firstReleaseWorkbuddyConnection.notifications));
+      if (snapshot.firstReleaseWorkbuddyConnection.connected === true && snapshot.firstReleaseWorkbuddyConnection.chat) sections.push(storeWorkbuddyChatSection(snapshot.firstReleaseWorkbuddyConnection.chat));
       count++;
     }
     for (const category of displayed) {
@@ -413,6 +422,8 @@
       sections.unshift(tabs);
     }
     if (!query && selected === 'quota-cards') { sections.unshift(quotaCardSettings()); count++; }
+    const quotaFun=publicQuotaFunEntry();
+    if (quotaFun && (!query && selected === 'quota-cards' || query && '额度趣味互动 互动游戏 游戏'.includes(query))) { sections.push(publicQuotaFunSection(quotaFun)); count++; }
     $('content').replaceChildren(...sections);
     if (panel) window.renderSettingsShortcuts(panel, snapshot.shortcuts, shortcutApi, 'panel');
     if (behaviors) window.renderSettingsShortcuts(behaviors, snapshot.shortcuts, shortcutApi, true);
@@ -564,6 +575,63 @@
       workbuddyTasksNotice = tasks?.authorized === !revoke || ['stored','ready','authorized','revoked','disconnected'].includes(result?.status) ? null : result?.message || '任务授权未完成，请重试。';
     } catch (_) { workbuddyTasksNotice='任务授权未完成，请重试。'; }
     finally { busy=false; render(); void refresh(); }
+  }
+  function storeWorkbuddyChatSection(chat) {
+    const section = el('section', '', 'group'); section.dataset.workbuddyChat = ''; section.append(el('h3', '聊天'));
+    const enabled = chat.enabled === true && chat.authorized === true;
+    const row = el('div', '', 'row'), info = el('div');
+    const status = el('span', enabled ? '已启用' : chat.enabled ? '需重新授权' : '未启用', 'store-codex-state');
+    status.setAttribute('role', 'status'); if (enabled) status.dataset.connected = '';
+    info.append(status, el('p', '使用当前 WorkBuddy 账号在球球聊天，消耗官方积分。', 'description'));
+    const message = workbuddyChatNotice || chat.message;
+    if (message) { const note = el('p', message, 'description'); note.setAttribute('role', 'status'); info.append(note); }
+    const button = el('button', enabled ? '停用聊天' : '启用聊天', 'action'); button.type = 'button'; button.dataset.action = 'store-workbuddy-chat';
+    button.disabled = busy || chat.status === 'working'; button.onclick = () => void manageStoreWorkbuddyChat(enabled);
+    row.append(info, button); section.append(row); return section;
+  }
+  async function manageStoreWorkbuddyChat(disable = false) {
+    if (busy) return;
+    busy = true; request++;
+    try {
+      const answer = await confirmStoreCodex(disable ? '停用 WorkBuddy 聊天？' : '启用 WorkBuddy 聊天',
+        disable ? ['停用聊天，积分查询、任务同步和动画提醒保持。']
+          : ['使用当前 WorkBuddy 账号在球球聊天，消耗官方积分。', '仅在你发送时提交消息，可随时停用。'],
+        disable ? '停用聊天' : '同意并启用');
+      if (answer !== 'confirm') return;
+      const result = await api.workbuddyConnection(disable ? 'chat-disable' : 'chat-enable');
+      if (result?.snapshot) snapshot = result.snapshot;
+      if (result?.status === 'cancelled') return;
+      const chat = snapshot.firstReleaseWorkbuddyConnection?.chat;
+      const complete = disable ? chat?.enabled === false : chat?.enabled === true && chat.authorized === true;
+      workbuddyChatNotice = complete ? null : result?.message || '聊天授权未完成，请重试。';
+    } catch (_) { workbuddyChatNotice = '聊天授权未完成，请重试。'; }
+    finally { busy = false; render(); void refresh(); }
+  }
+  function storeWorkbuddyNotificationsSection(notifications) {
+    const section=el('section','','group');section.dataset.workbuddyNotifications='';section.append(el('h3','动画提醒'));
+    const row=el('div','','row'),info=el('div'),status=el('span',notifications.enabled ? notifications.connected ? '已启用' : '待连接' : '未启用','store-codex-state');
+    status.setAttribute('role','status');if(notifications.enabled && notifications.connected)status.dataset.connected='';info.append(status,el('p','任务处理中显示思考动画，本轮回复结束后提示。','description'));
+    const message=workbuddyNotificationsNotice || notifications.message;
+    if(message){const note=el('p',message,'description');note.setAttribute('role','status');info.append(note);}
+    const button=el('button',notifications.enabled ? '停用提醒' : '启用提醒','action');button.type='button';button.dataset.action='store-workbuddy-notifications';button.disabled=busy || notifications.status==='working';button.onclick=()=>void manageStoreWorkbuddyNotifications(notifications.enabled === true);
+    row.append(info,button);section.append(row);return section;
+  }
+  async function manageStoreWorkbuddyNotifications(disable=false) {
+    if(busy)return;busy=true;request++;
+    try {
+      const terms=disable ? undefined : [
+        ['本机安装','在 WorkBuddy 中安装球球任务事件 Hook。'],
+        ['输入处理','Hook 输入可能含正文，仅在本机过滤。','只传阶段和标识，不传正文。'],
+        ['提醒范围','处理中显示思考，本轮回复完成后提示。','取消或失败不显示成功提醒。']
+      ];
+      const answer=await confirmStoreCodex(disable ? '停用 WorkBuddy 动画提醒？' : '启用 WorkBuddy 动画提醒',disable ? ['停止动画提醒，积分查询和任务列表保持。'] : [],disable ? '停用提醒' : '同意并安装',{terms});
+      if(answer!=='confirm')return;
+      const result=await api.workbuddyConnection(disable ? 'notifications-disable' : 'notifications-enable');if(result?.snapshot)snapshot=result.snapshot;
+      if(result?.status==='cancelled')return;
+      const state=snapshot.firstReleaseWorkbuddyConnection?.notifications;
+      workbuddyNotificationsNotice=state?.enabled === !disable ? null : result?.message || '动画提醒设置未完成，请重试。';
+    }catch(_){workbuddyNotificationsNotice='动画提醒设置未完成，请重试。';}
+    finally{busy=false;render();void refresh();}
   }
   function storeWorkbuddyNotice(result) {
     if (result?.status === 'cancelled') return null;
@@ -727,13 +795,13 @@
       if (current !== request || busy || !value) return;
       if (latestSleepState !== undefined) value.petSleepState = latestSleepState;
       const serialized = JSON.stringify(value);
-      if (last !== serialized) { const reconnect = !snapshot && value.initialView === 'codex-reconnect', authorizeTasks = !snapshot && value.initialView === 'workbuddy-tasks-authorization'; if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
+      if (last !== serialized) { const reconnect = !snapshot && value.initialView === 'codex-reconnect', authorizeTasks = !snapshot && value.initialView === 'workbuddy-tasks-authorization', authorizeChat = !snapshot && value.initialView === 'workbuddy-chat-authorization'; if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
         else if (!snapshot && ['/codex-menu', 'codex-reconnect'].includes(value.initialView)) selected = '/codex-menu';
-        else if (!snapshot && ['workbuddy-settings','/workbuddy-enabled','workbuddy-tasks-authorization'].includes(value.initialView)) selected = 'workbuddy-settings';
+        else if (!snapshot && ['workbuddy-settings','/workbuddy-enabled','workbuddy-tasks-authorization','workbuddy-chat-authorization'].includes(value.initialView)) selected = 'workbuddy-settings';
         else if (!snapshot && value.initialView === 'feedback') selected = 'feedback';
         else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
         else if (!snapshot && value.initialView === '/api-balance-menu') selected = '/api-balance-menu';
-        else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); if (reconnect) void connectStoreCodex('confirm'); if (authorizeTasks) void manageStoreWorkbuddyTasks(); }
+        else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); if (reconnect) void connectStoreCodex('confirm'); if (authorizeTasks) void manageStoreWorkbuddyTasks(); if (authorizeChat) void manageStoreWorkbuddyChat(); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
   function setSearchOpen(open) {
@@ -749,7 +817,7 @@
     if (event.key === 'Escape' && !$('search-panel').hidden) { event.preventDefault(); setSearchOpen(false); }
   });
   api.onNavigate(view => {
-    if (['workbuddy-settings','/workbuddy-enabled','workbuddy-tasks-authorization'].includes(view)) { selected = 'workbuddy-settings'; setSearchOpen(false); document.querySelector('main').scrollTop = 0; if(view==='workbuddy-tasks-authorization')void manageStoreWorkbuddyTasks(); return; }
+    if (['workbuddy-settings','/workbuddy-enabled','workbuddy-tasks-authorization','workbuddy-chat-authorization'].includes(view)) { selected = 'workbuddy-settings'; setSearchOpen(false); document.querySelector('main').scrollTop = 0; if(view==='workbuddy-tasks-authorization')void manageStoreWorkbuddyTasks(); if(view==='workbuddy-chat-authorization')void manageStoreWorkbuddyChat(); return; }
     if (view === 'codex-reconnect') {
       selected = '/codex-menu'; setSearchOpen(false); void connectStoreCodex('confirm'); return;
     }

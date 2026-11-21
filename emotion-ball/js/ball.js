@@ -927,7 +927,9 @@
         var raisedCloud = validCustomShape && opts.shape === 'cloud' && !matteCloud;
         stopA.setAttribute('stop-color', matteCloud ? color : shade(color, raisedCloud ? 0.5 : 0.22));
         stopB.setAttribute('stop-color', raisedCloud ? shade(color, 0.08) : color);
-        stopC.setAttribute('stop-color', matteCloud ? color : shade(color, raisedCloud ? -0.38 : -0.12));
+        // A pale cloud needs soft volume; a deep outer stop reads as a thick
+        // grey border when the body turns or the customization color changes.
+        stopC.setAttribute('stop-color', matteCloud ? color : shade(color, raisedCloud ? -0.18 : -0.12));
       }
       if (curSketch > 0.5) head.style.stroke = 'var(--sketch-ink, ' + shade(color, -0.6) + ')';
     }

@@ -2,6 +2,7 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 
 const MESSAGES = {
+  CHAT_AUTHORIZATION_REQUIRED: '请先单独允许球球使用当前 WorkBuddy 账号聊天。',
   LOGIN_REQUIRED: '请在 WorkBuddy 中重新登录。', UNSUPPORTED_PLATFORM: '当前仅支持 macOS WorkBuddy。',
   UNSUPPORTED_AUTH: '当前 WorkBuddy 登录格式暂不支持，请更新球球。', UNSUPPORTED_ACCOUNT: '当前 WorkBuddy 登录身份暂无法识别。',
   UNSUPPORTED_QUOTA: '当前 WorkBuddy 积分格式暂无法识别，请更新球球。',
@@ -26,7 +27,7 @@ function createWorkBuddyRunner({ spawnProcess = spawn, binary = '/Applications/W
   return function runWorkBuddy(operation, payload = {}, { signal, onDelta } = {}) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) { reject(workBuddyError('CANCELLED')); return; }
-      if (!['quota', 'models', 'chat', 'tasks', 'task-open', 'usage'].includes(operation)) { reject(workBuddyError('INVALID_REQUEST')); return; }
+      if (!['quota', 'models', 'chat', 'tasks', 'task-open', 'usage', 'account-check'].includes(operation)) { reject(workBuddyError('INVALID_REQUEST')); return; }
       let input;
       try { input = JSON.stringify({ operation, payload }); } catch (_) { reject(workBuddyError('INVALID_REQUEST')); return; }
       if (input.length > 256000) { reject(workBuddyError('CONTEXT_TOO_LONG')); return; }

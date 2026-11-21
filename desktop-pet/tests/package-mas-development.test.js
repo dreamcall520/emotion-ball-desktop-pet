@@ -86,13 +86,13 @@ test('MAS helper report must independently confirm isolated metadata transport, 
 
 test('MAS runtime probe rejects missing actual executable entitlement even when signed plist claims it',async t=>{const f=buildFixture(t),run=f.deps.command;f.deps.command=(name,args,options)=>args.includes('--qiuqiu-mas-runtime-probe')?JSON.stringify({mas:true,ownContainer:true,capabilities:{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:false,appScopeBookmarks:true}}):run(name,args,options);await assert.rejects(api.buildMasDevelopment({root:f.root,env:f.env},f.deps),{code:'MAS_DEV_RUNTIME_PROBE_FAILED'});});
 
-test('首发profile不随包带厂商组件，明确撤销外部插件执行写权限，保留天气和导入权限',()=>{
+test('商店profile不带厂商组件，为明确启用的WorkBuddy动画提醒保留必要监听和脚本写权限',()=>{
  const first=api.configFor({...pkg,qiuqiuReleaseProfile:'mas-first'},env).config;
  const o=api.packagerOptions('/synthetic',first,'/stage','/icon');
  assert.deepEqual(o.extraResource,[]);
  const rights=api.entitlementsFor(first).main;
- assert.equal(rights['com.apple.security.files.user-selected.executable'],undefined);
- assert.equal(rights['com.apple.security.network.server'],undefined,'first-release stdio Codex transport requires no inbound network server');
+ assert.equal(rights['com.apple.security.files.user-selected.executable'],true,'only the explicitly approved local WorkBuddy hook script is written');
+ assert.equal(rights['com.apple.security.network.server'],true,'WorkBuddy metadata receiver listens on loopback only');
  for(const k of ['com.apple.security.files.user-selected.read-write','com.apple.security.personal-information.location','com.apple.security.files.bookmarks.app-scope','com.apple.security.network.client'])assert.equal(rights[k],true);
  const entry=api.probeEntry(first.bundleId,first);
  assert.doesNotMatch(entry,/startBundledWorkBuddy|probeManagedHelpers|probePluginInstallation/);

@@ -208,6 +208,27 @@ class DialogueDirector {
     return true;
   }
 
+  dismissProviderTask(provider) {
+    if (this._current?.event !== 'provider-task' || this._current.provider !== provider) return false;
+    this.dismiss();
+    return true;
+  }
+
+  offerProviderTask(alert, nowMs, durationMs = 8000) {
+    if (!this.enabled || alert?.provider !== 'workbuddy' || !Number.isFinite(nowMs) ||
+      !Number.isSafeInteger(alert.id) || !Number.isSafeInteger(alert.generation) ||
+      !validCodexText(alert.text) || !Number.isFinite(durationMs) || durationMs <= 0) return null;
+    this._expire(nowMs);
+    if (this._current) return null;
+    const id = this._nextId++;
+    durationMs = Math.min(12000, durationMs);
+    const actions = [{ id: 'workbuddy-dismiss', label: '知道啦' }];
+    this._current = { id, event: 'provider-task', provider: 'workbuddy', sourceAlertId: alert.id,
+      sourceGeneration: alert.generation, actions, priority: -1, expiresAt: nowMs + durationMs };
+    this._lastBubbleAt = nowMs;
+    return { id, text: alert.text, actions: actions.map(action => ({ ...action })), durationMs };
+  }
+
   offerUpdate(version, nowMs) {
     if (!this.enabled || !Number.isFinite(nowMs) || typeof version !== 'string' || version.length > 64 ||
       !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) return null;
@@ -324,9 +345,13 @@ class DialogueDirector {
     if (!this._current || id !== this._current.id || !this._current.actions.some(item => item.id === action)) return null;
     const descriptor = this._current.descriptors?.[action];
     const updateVersion = this._current.event === 'app-update' ? this._current.version : null;
+    const providerTask = this._current.event === 'provider-task'
+      ? { command: 'provider-task', provider: this._current.provider,
+        alertId: this._current.sourceAlertId, generation: this._current.sourceGeneration } : null;
     const motion = this._current.motion;
     const sheepAction = this._current.sheepAction;
     this.dismiss();
+    if (providerTask) return providerTask;
     if (updateVersion) return { command: 'app-update', version: updateVersion, open: action === 'app-update-open' };
     if (descriptor) return { command: 'codex', descriptor: { ...descriptor } };
     if (action === 'rest') this._workQuietUntil = nowMs + TEN_MINUTES;

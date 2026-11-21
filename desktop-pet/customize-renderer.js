@@ -160,6 +160,7 @@
       icon.width = 192;
       icon.height = 208;
       icon.style.width = icon.style.height = '100%';
+      icon.style.objectFit = 'contain';
       icon.setAttribute('aria-hidden', 'true');
       art.append(icon);
       const image = new Image();
@@ -703,8 +704,7 @@
     if (auroraPreview && auroraPreview !== displayedAurora) auroraPreview.destroy();
     if (ball) ball.destroy();
     target.replaceChildren();
-    const requestedPixels = previewMode === 'desktop' ? (petPixels[petSize] || petPixels.tiny)
-      : state.appearance.shape === 'codex-pet' ? Math.min(300, $('stage').clientHeight - 64, $('stage').clientWidth - 24) : previewPixels;
+    const requestedPixels = previewMode === 'desktop' ? (petPixels[petSize] || petPixels.tiny) : previewPixels;
     const pixels = quotaEditor?.fitPreview(requestedPixels) ?? requestedPixels;
     target.style.width = pixels + 'px';
     target.style.height = pixels + 'px';

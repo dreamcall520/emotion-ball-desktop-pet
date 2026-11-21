@@ -115,7 +115,7 @@ const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
 const IS_STORE_BUILD = process.mas === true || ACCEPTANCE_KIND === 'mas' || process.argv.includes('--mas-candidate');
 const FIRST_RELEASE = IS_STORE_BUILD && require('../package.json').qiuqiuReleaseProfile === 'mas-first';
-const STORE_PROVIDERS = FIRST_RELEASE ? ['codex'] : ['codex','zcode','workbuddy'];
+const STORE_PROVIDERS = FIRST_RELEASE ? ['codex','workbuddy'] : ['codex','zcode','workbuddy'];
 const STORE_CONNECTIONS_PAGE = 'store-connections.html';
 const FirstRelease = require('./lib/mas-first-release');
 const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek','bubble','feedback','mas'].includes(ACCEPTANCE_KIND) || (IS_STORE_BUILD && process.mas !== true);
@@ -162,6 +162,12 @@ let chat = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
 let workbuddyInstalledAccess = null, workbuddyTaskAccess = null, workbuddyQuotaConnection = null;
+let workbuddyChatConnection = null;
+let workbuddyNotifications = null, workbuddyNotificationTimer = null;
+let workbuddyRenderer = null, workbuddySentSettings = null, workbuddyPresentation = null;
+let workbuddyAlertQueue = [], workbuddyPresentationTimer = null;
+let workbuddyValidationPhase = '';
+let quotaFunEntry = null, quotaFunCarrier = null;
 let workbuddyDiagnosticKey = '';
 let workbuddyLabel = null;
 let apiBalance = null;
@@ -577,7 +583,13 @@ function globalSettingsSnapshot() {
     chatReady: storeChatReady('codex'),
     working: storeEnableFlow.getState().codex.status === 'working'
   } : null;
-  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, firstReleaseWorkbuddyConnection: FIRST_RELEASE ? workbuddyQuotaConnection?.getState() : null, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
+  const notificationState = workbuddyNotifications?.getState();
+  const firstReleaseWorkbuddyConnection = FIRST_RELEASE ? { ...workbuddyQuotaConnection?.getState(),
+    ...(workbuddyChatConnection ? { chat: workbuddyChatConnection.getState() } : {}),
+    ...(notificationState ? { notifications: { enabled: notificationState.enabled, connected: notificationState.connected,
+      status: notificationState.status, generation: notificationState.generation, activeCount: notificationState.activeCount,
+      message: notificationState.message } } : {}) } : null;
+  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, firstReleaseWorkbuddyConnection, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -595,7 +607,7 @@ function fromGlobalSettings(event, requireVisible = true) {
 }
 
 function openGlobalSettings(view) {
-  const target = ['/codex-menu', 'workbuddy-settings', 'workbuddy-tasks-authorization', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
+  const target = ['/codex-menu', 'workbuddy-settings', 'workbuddy-tasks-authorization', 'workbuddy-chat-authorization', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     positionFunctionWindow(globalSettingsWindow);
@@ -717,7 +729,7 @@ async function storeConnectionState() {
   const state = await storeRuntime.getState();
   const onboarding=storeEnableFlow?.getState();
   const providerChats=Object.fromEntries(STORE_PROVIDERS.map(provider=>{const source=chat?.getSourceState?.(provider);return[provider,source?{connection:source.connection,modelsStatus:source.modelsStatus,accountMismatch:source.accountMismatch===true,busy:source.busy===true,error:source.error,modelsError:source.modelsError}:null];}));
-  if(onboarding)for(const provider of STORE_PROVIDERS)if(onboarding[provider].status!=='working'&&storeChatReady(provider)){onboarding[provider]={...onboarding[provider],status:'ready',chat:{status:'ready',message:'聊天已连接。'}};}
+  if(onboarding)for(const provider of STORE_PROVIDERS)if(onboarding[provider]&&onboarding[provider].status!=='working'&&storeChatReady(provider)){onboarding[provider]={...onboarding[provider],status:'ready',chat:{status:'ready',message:'聊天已连接。'}};}
   return { ...state, onboarding, providerChats, codexSnapshot: codexCompanion?.getSnapshot(), zcodeSnapshot: zcodeLink?.getSnapshot?.(),
     chat: chat ? { source: chat.getState().source, connection: chat.getState().connection, modelsStatus: chat.getState().modelsStatus, modelsError: chat.getState().modelsError, busy: chat.getState().busy, error: chat.getState().error } : null };
 }
@@ -727,7 +739,7 @@ function notifyStoreConnections() {
 }
 function openStoreConnections(provider) {
   if (!IS_STORE_BUILD || !storeRuntime || isQuitting || screenLocked) return null;
-  if (FIRST_RELEASE) return openGlobalSettings('/codex-menu');
+  if (FIRST_RELEASE) return openGlobalSettings(provider === 'workbuddy' ? 'workbuddy-chat-authorization' : '/codex-menu');
   if (storeConnectionsWindow && !storeConnectionsWindow.isDestroyed()) { storeConnectionsWindow.show(); storeConnectionsWindow.focus(); if(['codex','zcode','workbuddy'].includes(provider))storeConnectionsWindow.webContents.send('pet:store-focus-provider',provider); return storeConnectionsWindow; }
   const win = new BrowserWindow({ width: 840, height: 880, minWidth: 640, minHeight: 560,
     title: '球球 · 工具连接', show: false, backgroundColor: '#EDF4FC',
@@ -963,7 +975,8 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
   const owns = () => !isQuitting && !screenLocked && owner && !owner.isDestroyed() && owner.isVisible() &&
     event.sender === owner.webContents && event.senderFrame === event.sender.mainFrame &&
     event.sender.getURL() === pathToFileURL(path.join(__dirname, tools ? 'store-connections.html' : 'chat.html')).href &&
-    (!FIRST_RELEASE || (!tools && provider === 'codex' && storeRuntime.isChatEnabled('codex'))) &&
+    (!FIRST_RELEASE || (!tools && (provider === 'codex' && storeRuntime.isChatEnabled('codex') ||
+      provider === 'workbuddy' && workbuddyChatConnection?.getState().authorized === true))) &&
     (tools || chatWindow?.getWindow() === owner && !chatProviderChanging && activeChat() === controller && controller?.getState().source === provider);
   if (typeof content !== 'string' || !content.trim() || content.length > (tools ? 8000 : 2000) || content.includes('\0')) return { accepted: false, error: '请输入有效消息，消息未发送。' };
   const result = await storeChatDataConsent().run({ isCurrent: owns, requireExisting: FIRST_RELEASE,
@@ -989,11 +1002,12 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
       }
       const conversation = require('node:crypto').createHash('sha256').update(JSON.stringify([state.activeChatId || null, state.anchorMessageId || null, state.messages || []])).digest('hex');
       const scope = FIRST_RELEASE
-        ? require('./lib/chat-data-consent').codexLinkContext(identity.accountKey)
+        ? (provider === 'workbuddy' ? require('./lib/chat-data-consent').workbuddyLinkContext(identity.accountKey)
+          : require('./lib/chat-data-consent').codexLinkContext(identity.accountKey))
         : { provider, channel, recipientOrigin, billing, accountKey: identity.accountKey };
       return { ...scope, conversationKey: identity.conversationKey, revision: [identity.revision, conversation] };
     }, send });
-  if (result?.needsLinkConsent && owns()) openGlobalSettings('codex-reconnect');
+  if (result?.needsLinkConsent && owns()) openGlobalSettings(provider === 'workbuddy' ? 'workbuddy-chat-authorization' : 'codex-reconnect');
   return result;
 }
 
@@ -1007,14 +1021,24 @@ function requestStoreNotesConsent({win,noteId,contentRevision,getAccountIdentity
 }
 
 function storeChatReady(provider){const state=chat?.getSourceState?.(provider);return Boolean(state?.connection==='ready'&&!state.accountMismatch&&['ready','provider-managed'].includes(state.modelsStatus));}
+function syncWorkBuddyChatConnection() {
+  if (!chat?.getSourceState) return;
+  const authorized = workbuddyChatConnection?.getState().authorized === true;
+  if (authorized && settings.chatSource === 'workbuddy' && chat.getState().source !== 'workbuddy' &&
+    !chat.getState().busy && chat.getState().connection !== 'connecting') void chat.selectSource('workbuddy');
+  notifyStoreConnections();
+  if (!screenLocked) chatWindow?.update(chatSnapshot());
+}
 function chatSnapshot(state = activeChat()?.getState()) {
   const storeInfo=IS_STORE_BUILD ? {
     sources:STORE_PROVIDERS.map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
-      ...(FIRST_RELEASE ? { needsAuthorization: !storeRuntime?.isChatEnabled(id) ||
-        storeEnableFlow?.getState()[id]?.chat.status === 'needs-data-authorization' } : {}),
-      enabled:storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
+      ...(FIRST_RELEASE ? { needsAuthorization: id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized !== true
+        : !storeRuntime?.isChatEnabled(id) || storeEnableFlow?.getState()[id]?.chat.status === 'needs-data-authorization' } : {}),
+      enabled: FIRST_RELEASE && id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized === true
+        : storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
         ['ready','needs-new-chat'].includes(storeEnableFlow?.getState()[id]?.chat.status)||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready')})),
-    sourceNote:state?.source==='codex'?(FIRST_RELEASE?'聊天使用你在本机应用登录的账号。':'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。'):state?.sourceNote||null,
+    sourceNote:state?.source==='codex'?(FIRST_RELEASE?'聊天使用你在本机 Codex 登录的账号。':'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。')
+      : FIRST_RELEASE && state?.source === 'workbuddy' ? '使用本机 WorkBuddy 账号积分；聊天内容发送给 WorkBuddy 官方服务。' : state?.sourceNote||null,
     billingLabel:state?.source==='zcode'&&storeRuntime?.getZcodeAccountSource()==='configured-custom'?'使用 ZCode 已有自定义模型 · 按原 API 计费':null
   }:{};
   return {...state,...storeInfo,provider:state?.source||'codex',appUpdate:availableUpdate?{latestVersion:availableUpdate.latestVersion}:null};
@@ -1551,8 +1575,9 @@ function dogCodexSpriteClip(action) {
 }
 
 function finishCodexSpriteMotion(request, timedOut = false) {
-  const state = hostMotion, presentation = codexPresentation;
-  if (state?.owner !== 'codex' || !state.spriteAction || state.token !== request.token ||
+  const owner = request.source === 'workbuddy' ? 'workbuddy' : 'codex';
+  const state = hostMotion, presentation = owner === 'workbuddy' ? workbuddyPresentation : codexPresentation;
+  if (state?.owner !== owner || !state.spriteAction || state.token !== request.token ||
       state.action !== request.action || state.spriteAction !== request.spriteAction ||
       presentation?.token !== request.token || presentation.id !== request.alertId ||
       presentation.generation !== request.generation || presentation.pageEpoch !== request.pageEpoch) return false;
@@ -1560,6 +1585,7 @@ function finishCodexSpriteMotion(request, timedOut = false) {
   hostMotion = null;
   restoreDogSpriteBounds();
   if (timedOut) writeError('小白任务庆祝', {code:'ACTION_TIMEOUT'});
+  if (owner === 'workbuddy') recordWorkBuddyReminder('animation-finished', { timedOut });
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('pet:motion-frame', { token: state.token, action: state.action, frame: { done: true } });
   }
@@ -1567,8 +1593,7 @@ function finishCodexSpriteMotion(request, timedOut = false) {
 }
 
 function clearCodexPresentation() {
-  clearSpriteMotionTimer();
-  restoreDogSpriteBounds();
+  if (hostMotion?.owner !== 'workbuddy') { clearSpriteMotionTimer(); restoreDogSpriteBounds(); }
   const previous = codexPresentation;
   codexPresentation = null;
   if (hostMotion?.owner === 'codex') {
@@ -1703,7 +1728,7 @@ function syncQuotaFreeStack() {
       quotaFreeStackKey=key;
       safelyInvokeWindow('额度卡整组重排',()=>{quotaLabel?.reposition();apiUsageLabel?.reposition();zcodeLink?.reposition();workbuddyLabel?.reposition();apiBalanceLabel?.reposition();weatherWindow?.reposition();});
     }
-  } finally { quotaFreeStackApplying=false; if(quotaCardGroup?.getState().bar)showQuotaCardBar(quotaCardGroup.getState()); }
+  } finally { quotaFreeStackApplying=false; if(quotaCardGroup?.getState().bar)showQuotaCardBar(quotaCardGroup.getState()); syncQuotaFunEntry(); }
 }
 function zcodeQuotaStackBounds() {
   return [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getVisibleBounds?.()]
@@ -2157,6 +2182,143 @@ function invalidateCodexPage() {
   quotaCardGroupTransition?.cancel();
   codexRenderer = null;
   dismissCodexPresentation();
+  clearWorkBuddyPresentation();
+  workbuddyRenderer = null;
+}
+
+function recordWorkBuddyReminder(phase, details = {}) {
+  if (process.qiuqiuMasDevelopmentCandidate !== true) return;
+  // Candidate validation contains phases/counts only, never session, prompt,
+  // account, pairing capability, or source payload.
+  const record = { at: new Date().toISOString(), phase,
+    ...(Number.isSafeInteger(details.activeCount) ? { activeCount: details.activeCount } : {}),
+    ...(typeof details.timedOut === 'boolean' ? { timedOut: details.timedOut } : {}) };
+  const signature = JSON.stringify({ phase, ...details });
+  if (signature === workbuddyValidationPhase) return;
+  workbuddyValidationPhase = signature;
+  process.stderr.write('WB_REMINDER ' + JSON.stringify(record) + '\n');
+}
+
+function workBuddyActiveCount() { return workbuddyNotifications?.getState().activeCount || 0; }
+function anyCompanionTaskActive() {
+  return workBuddyActiveCount() > 0 || Boolean(codexCompanion?.getSnapshot().tasks?.items.some(task => task.state === 'active'));
+}
+function syncWorkBuddyAnimationSettings(force = false) {
+  const state = workbuddyNotifications?.getState();
+  if (!state) return;
+  const next = { source: 'workbuddy', enabled: state.connected === true, generation: state.generation,
+    pageEpoch: codexPageEpoch, activeTaskCount: state.activeCount };
+  if (workbuddySentSettings && workbuddySentSettings.generation !== next.generation) {
+    clearWorkBuddyPresentation(); workbuddyAlertQueue = []; workbuddyRenderer = null;
+  }
+  if (!anyCompanionTaskActive()) thoughts?.hide();
+  if (!codexPageReady || !petWindow || petWindow.isDestroyed()) return;
+  if (!force && JSON.stringify(workbuddySentSettings) === JSON.stringify(next)) return;
+  workbuddySentSettings = next;
+  petWindow.webContents.send('pet:codex-settings', next);
+  recordWorkBuddyReminder(next.enabled ? (state.activeCount ? 'processing' : 'listening') : 'disabled', { activeCount: state.activeCount });
+}
+
+function clearWorkBuddyPresentation() {
+  clearTimeout(workbuddyPresentationTimer); workbuddyPresentationTimer = null;
+  const previous = workbuddyPresentation; workbuddyPresentation = null;
+  if (hostMotion?.owner === 'workbuddy') {
+    clearSpriteMotionTimer(); restoreDogSpriteBounds(); windowMotion?.stop(); hostMotion = null;
+  }
+  if (previous) sendCodexCommand({ command: 'task-cancel', source: 'workbuddy', alertId: previous.id,
+    generation: previous.generation, pageEpoch: previous.pageEpoch, ...(previous.token ? { token: previous.token } : {}) });
+  if (dialogue?.dismissProviderTask('workbuddy')) hideBubble();
+}
+
+function enqueueWorkBuddyAlert(alert) {
+  recordWorkBuddyReminder(alert.kind);
+  if (alert.kind !== 'completed') return;
+  workbuddyAlertQueue.push({ id: alert.id, generation: alert.epoch, kind: 'completed', motion: 'hop',
+    text: 'WorkBuddy 本轮回复已完成。', expiresAt: Date.now() + 30000 });
+  workbuddyAlertQueue = workbuddyAlertQueue.slice(-16);
+  pumpWorkBuddyPresentation();
+}
+
+function pumpWorkBuddyPresentation() {
+  const state = workbuddyNotifications?.getState();
+  workbuddyAlertQueue = workbuddyAlertQueue.filter(alert => alert.expiresAt > Date.now() && alert.generation === state?.generation);
+  if (workbuddyPresentation || !workbuddyAlertQueue.length || !state?.connected || !codexHostAvailable() ||
+    workbuddyRenderer?.available !== true || workbuddyRenderer.generation !== state.generation || workbuddyRenderer.pageEpoch !== codexPageEpoch) return;
+  const alert = workbuddyAlertQueue.shift();
+  workbuddyPresentation = { ...alert, pageEpoch: codexPageEpoch };
+  sendCodexCommand({ command: 'task', source: 'workbuddy', alertId: alert.id, generation: alert.generation,
+    pageEpoch: codexPageEpoch, motion: alert.motion, kind: alert.kind });
+  workbuddyPresentationTimer = setTimeout(clearWorkBuddyPresentation, 12000);
+  workbuddyPresentationTimer.unref?.();
+}
+
+function taskSkinMotionDuration(request) {
+  const appearance = effectiveCustomization(settings.customization).appearance;
+  const theme = SheepTheme.resolveTheme(appearance.sheepTheme, new Date());
+  const sheepAction = appearance.shape === 'new-year-sheep' ? SheepSkin.resolveAction(request.action, theme, 'codex') : null;
+  const sheepTheme = sheepAction && require('./assets/sheep/manifest.json').themes[theme];
+  const clip = sheepTheme?.actions[sheepAction];
+  const baseDuration = clip?.durations.reduce((sum, ms) => sum + ms, 0);
+  const legalDurations = [baseDuration];
+  const reversePrefixes = bridge => {
+    let sum = 0;
+    return (bridge?.durations || []).map(ms => (sum += ms)).slice(1);
+  };
+  let leadingDurations;
+  const targetWorking = sheepAction === 'working' || Boolean(clip?.startsAtWorking);
+  if (targetWorking) {
+    let sum = 0;
+    const workHolds = sheepTheme?.workingTransition?.durations || [];
+    leadingDurations = [...workHolds].reverse().map(ms => (sum += ms)).slice(1);
+    if (workHolds.length) {
+      const fullWork = workHolds.reduce((total, ms) => total + ms, 0);
+      leadingDurations.push(...reversePrefixes(sheepTheme.idleTransition).map(ms => ms + fullWork));
+      leadingDurations.push(...reversePrefixes(sheepTheme.sleepTransition).map(ms => ms + fullWork));
+    }
+  } else {
+    leadingDurations = [...reversePrefixes(sheepTheme?.idleTransition), ...reversePrefixes(sheepTheme?.workingTransition), ...reversePrefixes(sheepTheme?.sleepTransition)];
+  }
+  // Only finite A/B/work/sleep bridge paths are legal; retain every bridge endpoint hold.
+  const skipFirstHold = (targetWorking ? clip?.startsAtWorking : clip?.startsAtIdle) ? clip.durations[0] : 0;
+  legalDurations.push(...leadingDurations.map(ms => baseDuration + ms - skipFirstHold));
+  const durationMs = Number.isInteger(request.durationMs) && legalDurations.includes(request.durationMs)
+    ? request.durationMs : baseDuration;
+  return durationMs;
+}
+
+function acceptWorkBuddyMotionReady(event, request) {
+  const alert = workbuddyPresentation, state = workbuddyNotifications?.getState();
+  if (!fromPetWindow(event) || event.senderFrame !== event.sender.mainFrame || !alert || !state?.connected ||
+    !Number.isSafeInteger(request?.token) || request.token <= 0 || request.action !== alert.motion ||
+    request.alertId !== alert.id || request.generation !== alert.generation || request.generation !== state.generation ||
+    request.pageEpoch !== codexPageEpoch || alert.pageEpoch !== codexPageEpoch || !codexHostAvailable()) return;
+  if (alert.token) return;
+  const spriteClip = dogCodexSpriteClip(request.action);
+  if (spriteClip && request.durationMs !== spriteClip.durationMs) {
+    clearWorkBuddyPresentation(); return;
+  }
+  alert.token = request.token; thoughts?.hide();
+  const show = () => { const payload = dialogue.offerProviderTask({ ...alert, provider: 'workbuddy' }, performance.now()); if (payload) showBubble(payload); };
+  recordWorkBuddyReminder('animation-ready');
+  if (spriteClip) {
+    windowMotion.stop({ notify: false }); prepareDogSpriteBounds(spriteClip);
+    hostMotion = { owner: 'workbuddy', token: request.token, action: request.action, spriteAction: spriteClip.id, anchor: petWindow.getBounds() };
+    clearSpriteMotionTimer();
+    const epoch = spriteMotionEpoch, completion = { ...request, source: 'workbuddy', spriteAction: spriteClip.id };
+    spriteMotionTimer = setTimeout(() => { if (epoch === spriteMotionEpoch) finishCodexSpriteMotion(completion, true); }, spriteClip.durationMs + 2000);
+    spriteMotionTimer.unref?.(); show(); return;
+  }
+  hostMotion = { owner: 'workbuddy', token: request.token, action: request.action, anchor: petWindow.getBounds() };
+  const bounds = petWindow.getBounds(), appearance = effectiveCustomization(settings.customization).appearance;
+  // The renderer resolves the current skin's task action. Keep the same bounded
+  // duration contract as Codex, including its known sheep bridge paths.
+  const durationMs = taskSkinMotionDuration(request);
+  if (!windowMotion.start({ token: request.token, action: request.action, durationMs: appearance.shape === 'soft-orb'
+    ? SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action, 'codex', 'completed')) : durationMs,
+    visualOnly: appearance.shape === 'soft-orb', side: PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea) })) {
+    clearWorkBuddyPresentation(); return;
+  }
+  show();
 }
 
 function syncCodexSettings(snapshot, force = false) {
@@ -2166,7 +2328,7 @@ function syncCodexSettings(snapshot, force = false) {
     : 0;
   const next = { enabled: snapshot.enabled, generation: snapshot.generation,
     pageEpoch: codexPageEpoch, activeTaskCount };
-  if (!next.enabled || activeTaskCount === 0) thoughts?.hide();
+  if ((!next.enabled || activeTaskCount === 0) && workBuddyActiveCount() === 0) thoughts?.hide();
   if (codexNotice?.generation !== next.generation) codexNotice = null;
   // 导航清理会同步触发状态更新；新页面代次只能在新页面 ready 后发送。
   if (!codexPageReady || !petWindow || petWindow.isDestroyed()) return;
@@ -2249,6 +2411,16 @@ function fromQuotaLabel(event) {
 }
 
 function canShowQuotaGuard() {
+  if (FIRST_RELEASE) {
+    if (settings?.quotaFunEnabled === false || isQuitting || screenLocked || pomodoroQuiet || shortcutWindow?.isPresenting() ||
+      chatWindow?.isVisible() || codexDetails?.isVisible() || workbuddyDetails?.isVisible() || apiBalanceDetails?.isVisible() ||
+      presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return false;
+    if (quotaGuardSource === 'workbuddy') return settings.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false;
+    if (quotaGuardSource === 'api') return settings.openaiApiAlwaysVisible === true;
+    if (quotaGuardSource === 'balance') return settings.apiBalanceEnabled === true && settings.apiBalanceAlwaysVisible !== false;
+    if (quotaGuardSource === 'zcode') return settings.zcodeEnabled === true && settings.zcodeQuotaAlwaysVisible !== false;
+    return settings.codexEnabled === true && settings.codexQuotaAlwaysVisible === true;
+  }
   if (quotaGuardSource === 'zcode') return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting()
     && settings?.zcodeEnabled === true && settings.zcodeQuotaAlwaysVisible === true && settings.zcodeQuotaFunEnabled !== false
     && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible() && !presentationSuppressed()
@@ -2264,6 +2436,36 @@ function zcodeGuardEntryAvailable() {
   return Boolean(!quotaLabel?.isGuardEntryVisible?.({includeStaged:true}) && !(quotaGuard?.isVisible() && quotaGuardSource === 'codex'));
 }
 
+function syncQuotaFunEntry() {
+  if (!FIRST_RELEASE || !quotaFunEntry) return;
+  const controllers = quotaCardControllers(), visible = {};
+  const suppressed = !settings?.quotaFunEnabled || isQuitting || screenLocked || pomodoroQuiet ||
+    !petWindow || petWindow.isDestroyed() || !petWindow.isVisible() || quotaPopups.isBlocked() ||
+    presentationSuppressed() || quotaGuard?.isVisible() || chatWindow?.isVisible() || shortcutWindow?.isPresenting() ||
+    codexDetails?.isVisible() || workbuddyDetails?.isVisible() || apiBalanceDetails?.isVisible() ||
+    quotaCardGroupTransition?.isActive();
+  if (!suppressed) for (const [source, controller] of Object.entries(controllers)) {
+    const bounds = controller?.getVisibleBounds?.();
+    if (bounds && !quotaCardCollected(source)) visible[source] = bounds;
+  }
+  const carrier = require('./lib/quota-fun-carrier').selectQuotaFunCarrier({
+    order: quotaCardConfig().order, enabled: !suppressed, visible });
+  if (!carrier) { quotaFunCarrier = null; quotaFunEntry.hide(); return; }
+  quotaFunCarrier = carrier.source;
+  const model = carrier.source === 'codex' ? { ...quotaLabelModel(), sourceId: 'codex' }
+    : carrier.source === 'zcode' ? { ...buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }), sourceId: 'zcode' }
+    : { state: 'ready', items: [], practice: true, sourceId: carrier.source };
+  quotaFunEntry.show(carrier.bounds, screen.getDisplayMatching(carrier.bounds).workArea,
+    [petWindow.getBounds(), quotaObstacleBounds(), ...Object.values(visible)], edgeTuck?.getPresentation().side, model);
+}
+
+function setQuotaFunEnabled(value) {
+  if (!settings || typeof value !== 'boolean' || isQuitting) return false;
+  settings = saveSettings(settingsFile, { ...settings, quotaFunEnabled: value });
+  if (!value) quotaGuard?.close();
+  syncQuotaFunEntry(); refreshTrayMenu(); return true;
+}
+
 function closeCodexQuotaGuard() { if (quotaGuardSource === 'codex') quotaGuard?.close(); }
 
 function syncZcodeQuotaGuard() {
@@ -2275,13 +2477,13 @@ function syncZcodeQuotaGuard() {
 function openQuotaGuard(source = 'codex') {
   if (source === 'zcode' && !zcodeGuardEntryAvailable()) return false;
   const previous = quotaGuardSource;
-  quotaGuardSource = source === true || source === 'workbuddy' ? 'workbuddy' : source === 'zcode' ? 'zcode' : 'codex';
+  quotaGuardSource = source === true || source === 'workbuddy' ? 'workbuddy' : ['zcode','api','balance'].includes(source) ? source : 'codex';
   if (!canShowQuotaGuard() || !quotaGuard) { quotaGuardSource = previous; return false; }
   // Reused game windows have no loading/pending blocker. Suppress cards before
   // open's synchronous visibility callbacks can restore or rearrange siblings.
   const release = quotaPopups.acquire();
   try {
-    const opened = quotaGuard.open(quotaGuardSource === 'workbuddy' ? { state: 'ready', items: [], practice: true } : quotaGuardSource === 'zcode'
+    const opened = quotaGuard.open(['workbuddy','api','balance'].includes(quotaGuardSource) ? { state: 'ready', items: [], practice: true } : quotaGuardSource === 'zcode'
       ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel());
     if (!opened) quotaGuardSource = previous;
     return opened;
@@ -2565,6 +2767,7 @@ function stopMotion({ restore = true, notify = true, notifyRenderer = true } = {
   thoughts?.hide();
   clearSpriteMotionTimer();
   dismissCodexPresentation();
+  clearWorkBuddyPresentation();
   stopWindowBounce(restore);
   windowMotion.stop({ restore, notify });
   hostMotion = null;
@@ -2762,6 +2965,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('ZCode 窗口置顶', () => zcodeLink?.setAlwaysOnTop(settings.alwaysOnTop));
+  quotaFunEntry?.setAlwaysOnTop(settings.alwaysOnTop);
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop); dogDream?.setAlwaysOnTop(settings.alwaysOnTop);
   sheepOfferingWindow?.setAlwaysOnTop(settings.alwaysOnTop);
   syncQuotaCardGroup();
@@ -2846,12 +3050,12 @@ function codexMenu() {
         click: item => { const enabled = item.checked; item.checked = settings.codexQuotaAlwaysVisible === true;
           setCodexPreference('codexQuotaAlwaysVisible', enabled); }
       },
-      {
+      ...(!FIRST_RELEASE ? [{
         id: 'codex-quota-fun', label: '额度趣味互动', type: 'checkbox',
         enabled: settings.codexEnabled === true, checked: settings.codexQuotaFunEnabled !== false,
         click: item => { const enabled = item.checked; item.checked = settings.codexQuotaFunEnabled !== false;
           setCodexPreference('codexQuotaFunEnabled', enabled); }
-      },
+      }] : []),
       { id: 'codex-quota-settings', label: '经典额度卡设置', enabled: cardSettingsEnabled, submenu: [
         ...(!FIRST_RELEASE ? [{
           id: 'codex-extra-credits', label: '显示额外点数', type: 'checkbox',
@@ -2912,6 +3116,8 @@ function codexMenu() {
 
 function settingsCommandTemplate() {
   return [...menuTemplate(),
+    ...(FIRST_RELEASE ? [{ id: 'quota-fun-enabled', label: '额度趣味互动', type: 'checkbox', checked: settings?.quotaFunEnabled !== false,
+      click: item => setQuotaFunEnabled(item.checked) }] : []),
     { id: 'weather-enabled', label: '启用天气', type: 'checkbox', checked: weatherWindow?.isEnabled() === true,
       click: item => { weatherWindow?.setEnabled(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
     { id: 'weather-visible', label: '显示天气卡', type: 'checkbox', checked: weatherWindow?.isCardVisible() !== false, enabled: weatherWindow?.isEnabled() === true,
@@ -3786,6 +3992,7 @@ function createPetWindow() {
     edgeTuck?.publish();
     if (!isCurrentPetWindow()) return;
     syncCodexSettings(codexCompanion?.getSnapshot(), true);
+    syncWorkBuddyAnimationSettings(true);
     if (!isCurrentPetWindow()) return;
     activityMonitor.start();
     if (!isCurrentPetWindow()) return;
@@ -3952,7 +4159,7 @@ function registerIpc() {
   ipcMain.handle('pet:global-workbuddy-connection', async (event, action) => {
     if (!FIRST_RELEASE || !workbuddyQuotaConnection || !fromGlobalSettings(event) ||
       event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'global-settings.html')).href ||
-      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel', 'tasks-authorize', 'tasks-revoke'].includes(action)) return { status: 'busy' };
+      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel', 'tasks-authorize', 'tasks-revoke', 'notifications-enable', 'notifications-disable', 'chat-enable', 'chat-disable'].includes(action)) return { status: 'busy' };
     globalSettingsBusy = true;
     const owner = globalSettingsWindow, controller = new AbortController();
     const abort = () => controller.abort();
@@ -3962,9 +4169,38 @@ function registerIpc() {
       let result;
       if (action === 'app' || action === 'account') result = await workbuddyQuotaConnection.authorize(action, controller.signal);
       else if (action === 'cancel') result = workbuddyQuotaConnection.cancel();
-      else if (action === 'disconnect') result = await workbuddyQuotaConnection.disconnect();
+      else if (action === 'disconnect') {
+        await Promise.allSettled([workbuddyNotifications?.disable(), workbuddyChatConnection?.disable(),
+          Promise.resolve().then(() => storeChatDataConsent().revoke('workbuddy'))]);
+        result = await workbuddyQuotaConnection.disconnect();
+      }
       else if (action === 'tasks-authorize') result = await workbuddyQuotaConnection.authorizeTasks(controller.signal);
       else if (action === 'tasks-revoke') result = await workbuddyQuotaConnection.revokeTasks();
+      else if (action === 'notifications-enable') result = await workbuddyNotifications.enable(controller.signal);
+      else if (action === 'notifications-disable') result = await workbuddyNotifications.disable();
+      else if (action === 'chat-enable') {
+        const expectedAccountKey = workbuddyQuota?.getState().accountKey;
+        if (!workbuddyQuotaConnection.getState().connected || !expectedAccountKey) result = { status: 'needs-connection' };
+        else {
+          await workbuddyRun('account-check', { expectedAccountKey }, { signal: controller.signal });
+          if (controller.signal.aborted) return { status: 'cancelled' };
+          result = await workbuddyChatConnection.enable();
+          if (result.authorized) {
+            try {
+              if (controller.signal.aborted) throw Error('CANCELLED');
+              storeChatDataConsent().grantWorkBuddyLink(workbuddyChatConnection.getAuthorizedAccountKey());
+            } catch { await workbuddyChatConnection.disable(); result = { status: 'error' }; }
+            if (workbuddyChatConnection.getState().authorized) {
+              try { await chat.connectSource('workbuddy'); }
+              catch { result = { ...result, message: '聊天已授权，模型暂未读取成功，可在聊天中重试。' }; }
+            }
+          }
+        }
+      }
+      else if (action === 'chat-disable') {
+        try { storeChatDataConsent().revoke('workbuddy'); }
+        finally { result = await workbuddyChatConnection.disable(); }
+      }
       else result = await workbuddyQuotaConnection.connect(controller.signal);
       if (controller.signal.aborted) return { status: 'cancelled' };
       return { ...result, snapshot: globalSettingsSnapshot() };
@@ -4347,12 +4583,13 @@ function registerIpc() {
     if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;
     if (!request.visible) { thoughts?.hide(); return; }
     const snapshot = codexCompanion?.getSnapshot();
-    if (pomodoroQuiet || !settings.codexEnabled || !codexPageReady || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || dragState || hostMotion ||
-        !petWindow.isVisible() || !snapshot?.tasks.items.some(task => task.state === 'active')) return;
+    if (pomodoroQuiet || !codexPageReady || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || dragState || hostMotion ||
+        !petWindow.isVisible() || !anyCompanionTaskActive()) return;
     thoughts?.show(request);
+    if (workBuddyActiveCount() > 0) recordWorkBuddyReminder('thinking-visible', { activeCount: workBuddyActiveCount() });
   });
   ipcMain.on('pet:say', (event, scene) => {
-    if (scene === 'thought' && !codexCompanion?.getSnapshot().tasks.items.some(task => task.state === 'active')) return;
+    if (scene === 'thought' && !anyCompanionTaskActive()) return;
     if (!fromPetWindow(event)) return;
     if (scene?.event === 'play' && scene.sheepAction !== undefined) {
       const appearance = effectiveCustomization(settings.customization).appearance;
@@ -4372,6 +4609,9 @@ function registerIpc() {
     if (action?.command === 'app-update') {
       if (action.open && availableUpdate?.latestVersion === action.version) void showUpdateResult(availableUpdate);
     } else if (action?.command === 'codex') void routeCodexAction(action.descriptor);
+    else if (action?.command === 'provider-task' && action.provider === 'workbuddy') {
+      if (workbuddyPresentation?.id === action.alertId && workbuddyPresentation.generation === action.generation) clearWorkBuddyPresentation();
+    }
     else sendCommand(action);
   });
 
@@ -4456,6 +4696,7 @@ function registerIpc() {
 
     thoughts?.hide();
     dismissCodexPresentation();
+    clearWorkBuddyPresentation();
     stopWindowBounce();
     hostMotion = { owner: 'user', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     const bounds = petWindow.getBounds();
@@ -4481,6 +4722,13 @@ function registerIpc() {
   });
 
   ipcMain.on('pet:codex-availability', (event, packet) => {
+    if (packet?.source === 'workbuddy') {
+      const state = workbuddyNotifications?.getState();
+      if (!fromPetWindow(event) || !codexPageReady || !state?.connected || packet.generation !== state.generation ||
+        packet.pageEpoch !== codexPageEpoch || typeof packet.available !== 'boolean') return;
+      workbuddyRenderer = { generation: packet.generation, pageEpoch: packet.pageEpoch, available: packet.available };
+      pumpWorkBuddyPresentation(); return;
+    }
     const snapshot = codexCompanion?.getSnapshot();
     if (!fromPetWindow(event) || !codexPageReady || !snapshot?.enabled || packet?.generation !== snapshot.generation ||
       packet.pageEpoch !== codexPageEpoch || typeof packet.available !== 'boolean') return;
@@ -4491,6 +4739,7 @@ function registerIpc() {
     if(fromPetWindow(event)&&event.senderFrame===event.sender.mainFrame&&request&&['hop','spin','bow'].includes(request.action)&&['jump','spin','happy'].includes(request.spriteAction))finishCodexSpriteMotion(request);
   });
   ipcMain.on('pet:codex-motion-ready', (event, request) => {
+    if (request?.source === 'workbuddy') { acceptWorkBuddyMotionReady(event, request); return; }
     if (!fromPetWindow(event) || !Number.isSafeInteger(request?.token) || request.token <= 0 ||
       !Number.isSafeInteger(request.alertId) || !Number.isSafeInteger(request.generation) ||
       !Number.isSafeInteger(request.pageEpoch) || request.pageEpoch <= 0 || !getMotion(request.action)) return;
@@ -4534,35 +4783,7 @@ function registerIpc() {
     hostMotion = { owner: 'codex', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     const bounds = petWindow.getBounds();
     const appearance = effectiveCustomization(settings.customization).appearance;
-    const theme = SheepTheme.resolveTheme(appearance.sheepTheme, new Date());
-    const sheepAction = appearance.shape === 'new-year-sheep' ? SheepSkin.resolveAction(request.action, theme, 'codex') : null;
-    const sheepTheme = sheepAction && require('./assets/sheep/manifest.json').themes[theme];
-    const clip = sheepTheme?.actions[sheepAction];
-    const baseDuration = clip?.durations.reduce((sum, ms) => sum + ms, 0);
-    const legalDurations = [baseDuration];
-    const reversePrefixes = bridge => {
-      let sum = 0;
-      return (bridge?.durations || []).map(ms => (sum += ms)).slice(1);
-    };
-    let leadingDurations;
-    const targetWorking = sheepAction === 'working' || Boolean(clip?.startsAtWorking);
-    if (targetWorking) {
-      let sum = 0;
-      const workHolds = sheepTheme?.workingTransition?.durations || [];
-      leadingDurations = [...workHolds].reverse().map(ms => (sum += ms)).slice(1);
-      if (workHolds.length) {
-        const fullWork = workHolds.reduce((total, ms) => total + ms, 0);
-        leadingDurations.push(...reversePrefixes(sheepTheme.idleTransition).map(ms => ms + fullWork));
-        leadingDurations.push(...reversePrefixes(sheepTheme.sleepTransition).map(ms => ms + fullWork));
-      }
-    } else {
-      leadingDurations = [...reversePrefixes(sheepTheme?.idleTransition), ...reversePrefixes(sheepTheme?.workingTransition), ...reversePrefixes(sheepTheme?.sleepTransition)];
-    }
-    // Only finite A/B/work/sleep bridge paths are legal; retain every bridge endpoint hold.
-    const skipFirstHold = (targetWorking ? clip?.startsAtWorking : clip?.startsAtIdle) ? clip.durations[0] : 0;
-    legalDurations.push(...leadingDurations.map(ms => baseDuration + ms - skipFirstHold));
-    const durationMs = Number.isInteger(request.durationMs) && legalDurations.includes(request.durationMs)
-      ? request.durationMs : baseDuration;
+    const durationMs = taskSkinMotionDuration(request);
     if (!windowMotion.start({ token: request.token, action: request.action, durationMs:appearance.shape==='soft-orb'?SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action,'codex',alert.kind)):durationMs,visualOnly:appearance.shape==='soft-orb',
       side: PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea) })) {
       dismissCodexPresentation();
@@ -4774,7 +4995,7 @@ async function bootstrap() {
   const { createWorkBuddyUsage } = require('./lib/workbuddy-usage');
   const createWorkBuddyConsent = !FIRST_RELEASE ? require('./lib/workbuddy-consent-window').createWorkBuddyConsent : null;
   const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
-  const createWorkBuddyChat = !FIRST_RELEASE ? require('./lib/workbuddy-chat').createWorkBuddyChat : null;
+  const createWorkBuddyChat = require('./lib/workbuddy-chat').createWorkBuddyChat;
   const { createWorkBuddyQuota } = require('./lib/workbuddy-quota');
   const { runWorkBuddy } = require('./lib/workbuddy-client');
   if (FIRST_RELEASE) {
@@ -4785,15 +5006,20 @@ async function bootstrap() {
     workbuddyTaskAccess = require('./lib/mas-workbuddy-task-access').createMasWorkBuddyTaskAccess({ app,
       dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed() ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
       storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-workbuddy-task-grants')) });
-    workbuddyRun = require('./lib/mas-installed-workbuddy').createMasInstalledWorkBuddyRunner({ access: workbuddyInstalledAccess, taskAccess: workbuddyTaskAccess });
+    workbuddyRun = require('./lib/mas-installed-workbuddy').createMasInstalledWorkBuddyRunner({ access: workbuddyInstalledAccess, taskAccess: workbuddyTaskAccess,
+      getChatEnabled: () => workbuddyChatConnection?.getState().authorized === true,
+      getAuthorizedChatAccountKey: () => workbuddyChatConnection?.getAuthorizedAccountKey() || null,
+      getChatGrantEpoch: () => workbuddyChatConnection?.getGeneration() || 0 });
   } else {
   workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
     ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
+  }
   makeWorkbuddyChat = () => (workbuddyChat = createWorkBuddyChat({ getWeatherContext: text => weatherContext(currentWeatherState(), text), store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
     run: workbuddyRun, initialModelSelection: settings.workbuddyModel,
     onModelSelection: workbuddyModel => { settings = saveSettings(settingsFile, { ...settings, workbuddyModel }); },
     onChange: () => chat?.sourceChanged?.('workbuddy'),
     onAction: performChatAction }));
+  if (!FIRST_RELEASE) {
   workbuddyConsent = createWorkBuddyConsent({ BrowserWindow, ipcMain, positionWindow: positionFunctionWindow,
     getInfo: codexConsentInfo, getAppearance: getNotesAppearance, isPackaged: app.isPackaged,
     canRequest: () => !isQuitting && !screenLocked });
@@ -4850,12 +5076,45 @@ async function bootstrap() {
     workbuddyQuotaConnection = require('./lib/mas-workbuddy-quota-connection').createMasWorkBuddyQuotaConnection({
       access: workbuddyInstalledAccess, quota: workbuddyQuota, usage: workbuddyUsage, taskAccess: workbuddyTaskAccess, tasks: workbuddyTasks,
       saveEnabled: value => { settings = saveSettings(settingsFile, { ...settings, workbuddyEnabled: value }); },
-      onChange: () => { syncWorkBuddyLabel(); syncQuotaCardGroup(); workbuddyDetails?.update(workBuddyDetailsState()); } });
+      onChange: () => { syncWorkBuddyLabel(); syncQuotaCardGroup(); workbuddyDetails?.update(workBuddyDetailsState());
+        void workbuddyNotifications?.refreshAccount(); void workbuddyChatConnection?.refreshAccount(); } });
+    const { createDirectoryStorage } = require('./lib/mas-provider-runtime');
+    workbuddyChatConnection = require('./lib/mas-workbuddy-chat-connection').createMasWorkBuddyChatConnection({
+      storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-workbuddy-chat-consent')),
+      getAccountKey: () => workbuddyQuotaConnection?.getState().connected === true && workbuddyQuota?.getState().enabled === true
+        ? workbuddyQuota.getState().accountKey : null,
+      onChange: syncWorkBuddyChatConnection,
+      onDisable: () => { if (!isQuitting && chat?.workbuddyDisabled) void chat.workbuddyDisabled().catch(() => {}); }
+    });
+    void workbuddyChatConnection.restore().catch(() => writeError('WorkBuddy 聊天恢复', { code: 'CHAT_RESTORE_FAILED' }));
+    const eventInstaller = require('./lib/mas-workbuddy-event-installation').createMasWorkBuddyEventInstallation({ app,
+      dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed()
+        ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
+      storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-workbuddy-event-grants')),
+      assetRoot: path.join(__dirname, 'assets/workbuddy-desktop-hook') });
+    workbuddyNotifications = require('./lib/mas-workbuddy-task-notifications').createMasWorkBuddyTaskNotifications({
+      installer: eventInstaller, storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-workbuddy-event-pairing')),
+      getAccountKey: () => workbuddyQuotaConnection?.getState().connected === true && workbuddyQuota?.getState().enabled === true
+        ? workbuddyQuota.getState().accountKey : null,
+      verifyAccount: (expectedAccountKey, signal) => workbuddyRun('account-check', { expectedAccountKey }, { signal }),
+      onChange: () => { syncWorkBuddyAnimationSettings(); },
+      onAlert: enqueueWorkBuddyAlert,
+      onClear: () => { syncWorkBuddyAnimationSettings(); }
+    });
+    void workbuddyNotifications.restore().catch(() => writeError('WorkBuddy 动画提醒恢复', { code: 'REMINDER_RESTORE_FAILED' }));
+    workbuddyNotificationTimer = setInterval(() => {
+      void workbuddyNotifications.refreshAccount().catch(() => {});
+      void workbuddyChatConnection.refreshAccount().catch(() => {});
+      pumpWorkBuddyPresentation();
+      syncQuotaFunEntry();
+    }, 500);
+    workbuddyNotificationTimer.unref?.();
     void workbuddyQuotaConnection.restore(settings.workbuddyEnabled);
   } else workbuddyQuota.setEnabled(settings.workbuddyEnabled);
   }
-  chat = createChatSources({ codex: chat, createWorkbuddy: IS_STORE_BUILD ? ()=>require('./lib/workbuddy-cli-chat-companion').createWorkBuddyCliChatCompanion({connection:storeRuntime.workbuddyCli,prepare:options=>storeRuntime.prepareWorkbuddyChat(options),onChange:()=>chat?.sourceChanged('workbuddy')}) : makeWorkbuddyChat,
-    isWorkbuddyEnabled: () => !FIRST_RELEASE && (IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true),
+  chat = createChatSources({ codex: chat, createWorkbuddy: IS_STORE_BUILD && !FIRST_RELEASE ? ()=>require('./lib/workbuddy-cli-chat-companion').createWorkBuddyCliChatCompanion({connection:storeRuntime.workbuddyCli,prepare:options=>storeRuntime.prepareWorkbuddyChat(options),onChange:()=>chat?.sourceChanged('workbuddy')}) : makeWorkbuddyChat,
+    isWorkbuddyEnabled: () => FIRST_RELEASE ? workbuddyChatConnection?.getState().authorized === true
+      : (IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true),
     initialSource: settings.chatSource,
     isZcodeEnabled: () => !FIRST_RELEASE && (IS_STORE_BUILD?storeRuntime.isChatEnabled('zcode'):(zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true)),
     onSelect: chatSource => { settings = saveSettings(settingsFile, { ...settings, chatSource, chatProvider: chatSource === 'workbuddy' ? 'workbuddy' : 'codex' }); },
@@ -4920,7 +5179,7 @@ async function bootstrap() {
       }
     });
     // Restore only already-enabled providers. No picker, login or account change.
-    void (async()=>{for(const provider of STORE_PROVIDERS){if(storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
+    void (async()=>{for(const provider of STORE_PROVIDERS){if((!FIRST_RELEASE || provider==='codex') && storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
   }
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   sheepOfferingWindow = createSheepOfferingWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,
@@ -4952,12 +5211,15 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('气泡窗口', error)
   });
+  if (FIRST_RELEASE) quotaFunEntry = require('./lib/workbuddy-guard-entry-window').createWorkBuddyGuardEntryWindow({ BrowserWindow,
+    onGuard: () => { if (quotaFunCarrier) openQuotaGuard(quotaFunCarrier); },
+    alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('额度互动入口', error) });
   quotaLabel = createQuotaLabelWindow({
     BrowserWindow, screen, getPetWindow: () => petWindow,
     getObstacle: quotaObstacleBounds,
     getSize: () => quotaDisplayConfig().style === 'card' ? settings?.codexQuotaLabelSize : 'compact',
     getAppearance: () => settings?.codexQuotaAppearance,
-    getGuardEntry: () => settings?.codexQuotaFunEnabled !== false,
+    getGuardEntry: () => !FIRST_RELEASE && settings?.codexQuotaFunEnabled !== false,
     getSuppressed: () => quotaPopups.isBlocked() || shortcutWindow?.isPresenting() === true || codexDetails?.isVisible() === true || workbuddyDetails?.isVisible() === true || apiBalanceDetails?.isVisible() === true || zcodeLink?.isDetailsVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
       ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('codex'), quotaGroupAnimate: quotaCardGroupAnimate('codex'), quotaGroupIndex: quotaCardConfig().order.indexOf('codex'), quotaReducedMotion: quotaReducedMotion(),
@@ -5228,10 +5490,16 @@ if (!hasSingleInstanceLock) {
     apiUsage?.close();
     workbuddyEnableToken++; workbuddyConsent?.close();
     workbuddyTasks?.close();
+    if (workbuddyNotificationTimer !== null) clearInterval(workbuddyNotificationTimer);
+    workbuddyNotificationTimer = null;
+    clearWorkBuddyPresentation();
+    void workbuddyNotifications?.close();
+    workbuddyChatConnection?.close();
     workbuddyQuotaConnection?.close();
     workbuddyUsage?.close();
     workbuddyQuota?.close();
     apiBalance?.close(); apiBalanceLabel?.destroy(); apiBalanceDetails?.destroy();
+    quotaFunEntry?.destroy();
     workbuddyLabel?.destroy();
     workbuddyDetails?.destroy();
     safelyInvokeWindow('退出时快捷入口清理', () => { shortcutWindow?.dispose(); shortcutRegistrar?.dispose(); });

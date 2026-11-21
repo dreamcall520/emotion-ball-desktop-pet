@@ -21,9 +21,9 @@ const SPECS = Object.freeze({
       ".codebuddy-plugin/plugin.json":
         "c62679f59a54f58f17cacf868cfb191d772ab71ac9f09d0e43baeba5082473db",
       "hooks/hooks.json":
-        "5087f751c9b5c6d17e6b6031469ffc51242e86d8d06f46dd5c6c8939bf189781",
+        "573e869b8e58a1ebb7c0b6145df82d47c8325175e9f2e3167cec09fd01a59418",
       "scripts/emit-metadata.sh":
-        "2dd72cf927898ce3b97d7184663cd18a8f3255483e8f2ef036568b7edb100979",
+        "dbedd22bafa180fd6c023964746569e503d7726b5ef3185722256fc3ec197f50",
     }),
   }),
   zcode: Object.freeze({

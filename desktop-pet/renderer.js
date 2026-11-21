@@ -70,9 +70,9 @@
   let lastDoubleMotion = null;
   let codexEnabled = false;
   let focusQuiet = false;
-  let codexGeneration = 0;
+  const taskProviders = { codex: {enabled:false,generation:0,activeTaskCount:0,lastAlertId:0}, workbuddy: {enabled:false,generation:0,activeTaskCount:0,lastAlertId:0} };
+  const taskSource = packet => packet?.source === undefined ? 'codex' : ['codex','workbuddy'].includes(packet.source) ? packet.source : null;
   let codexPageEpoch = 0;
-  let lastCodexAlertId = 0;
   let lastAvailability = null;
   let codexActiveTaskCount = 0;
   let codexThinking = false;
@@ -159,9 +159,11 @@
   function reportCodexAvailability() {
     if (!codexEnabled) { lastAvailability = null; return; }
     const available = canShowCodex();
-    if (available === lastAvailability) return;
-    lastAvailability = available;
-    desktop.codexAvailability({ generation: codexGeneration, pageEpoch: codexPageEpoch, available });
+    const providers = Object.entries(taskProviders).filter(([,state])=>state.enabled);
+    const signature = JSON.stringify([available,codexPageEpoch,providers.map(([source,state])=>[source,state.generation])]);
+    if (signature === lastAvailability) return;
+    lastAvailability = signature;
+    for (const [source,state] of providers) desktop.codexAvailability({ generation: state.generation, pageEpoch: codexPageEpoch, available, ...(source === 'workbuddy' ? {source} : {}) });
   }
 
   function stopCodexThinkingCadence() {
@@ -234,7 +236,8 @@
   const onWindow = (name, callback) => window.addEventListener(name, observe(callback));
 
   function cancelCodex(request) {
-    if (activeMotion?.owner !== 'codex' || (request && (request.generation !== activeMotion.generation ||
+    const source = taskSource(request);
+    if (!source || activeMotion?.owner !== 'codex' || (activeMotion.source || 'codex') !== source || (request && (request.generation !== activeMotion.generation ||
       request.pageEpoch !== activeMotion.pageEpoch || request.alertId !== activeMotion.alertId ||
       (request.token !== undefined && request.token !== activeMotion.token)))) return;
     stopMotion(false);
@@ -249,12 +252,13 @@
   }
 
   function startCodex(request) {
+    const source = taskSource(request), provider = taskProviders[source];
     const motion = InteractionMotion.getMotion(request.motion);
-    if (!canShowCodex() || request.generation !== codexGeneration || request.pageEpoch !== codexPageEpoch || !Number.isSafeInteger(request.alertId) ||
-      request.alertId <= lastCodexAlertId || !motion) return;
-    lastCodexAlertId = request.alertId;
+    if (!provider?.enabled || !canShowCodex() || request.generation !== provider.generation || request.pageEpoch !== codexPageEpoch || !Number.isSafeInteger(request.alertId) ||
+      request.alertId <= provider.lastAlertId || !motion || source === 'workbuddy' && (request.kind !== 'completed' || !['hop','spin','bow'].includes(request.motion))) return;
+    provider.lastAlertId = request.alertId;
     const spriteAction=ball.getCodexSpriteAction?.(motion.id);
-    activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex',...(spriteAction?{spriteAction}:{}),
+    activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex', ...(source === 'workbuddy' ? {source} : {}), ...(spriteAction?{spriteAction}:{}),
       alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch };
     if (spriteAction === 'spin') {
       const width = innerWidth, height = innerHeight, frameWidth = codexPet.sheets.spin.frameWidth || 192;
@@ -277,7 +281,7 @@
           : preparedBall.getActionDuration?.(motion.id, 'codex')) : undefined;
 
       desktop.codexMotionReady({ token: preparedMotion.token, action: motion.id,
-        alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch,
+        alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch, ...(source === 'workbuddy' ? {source} : {}),
         ...(Number.isInteger(durationMs) && durationMs >= 10 && durationMs <= 60000 ? { durationMs } : {}) });
     };
     // 完整原画先就绪，宿主再开始同长计时，首播慢加载也不会截断动作。
@@ -1172,6 +1176,8 @@
   }
 
   function runCommand(command) {
+    if (command?.command === 'task-cancel' && command.source === 'workbuddy') { cancelCodex(command); return; }
+    if (command?.command === 'task' && command.source === 'workbuddy') { startCodex(command); return; }
     if (command?.command === 'codex-cancel') { cancelCodex(command); return; }
     if (command?.command === 'codex') { startCodex(command); return; }
     if (command === 'stop') {
@@ -1452,23 +1458,29 @@
     if (lastSample) updateActivity(lastSample);
   })));
   listeners.push(desktop.onCodexSettings(observe(settings => {
-    if (!Number.isSafeInteger(settings?.generation) || settings.generation < codexGeneration ||
+    const source = taskSource(settings), provider = taskProviders[source];
+    if (!provider || !Number.isSafeInteger(settings?.generation) || settings.generation < 0 ||
       !Number.isSafeInteger(settings.pageEpoch) || settings.pageEpoch <= 0 || settings.pageEpoch < codexPageEpoch ||
-      typeof settings.enabled !== 'boolean') return;
-    const changed = settings.generation !== codexGeneration || settings.pageEpoch !== codexPageEpoch;
+      settings.pageEpoch === codexPageEpoch && settings.generation < provider.generation || typeof settings.enabled !== 'boolean') return;
+    const pageChanged = settings.pageEpoch !== codexPageEpoch;
+    const changed = settings.generation !== provider.generation || pageChanged;
     const wasActive = codexEnabled && codexActiveTaskCount > 0;
-    if (changed || !settings.enabled) cancelCodex();
-    if (changed) lastCodexAlertId = 0;
+    if (pageChanged) {
+      if (activeMotion?.owner === 'codex') cancelCodex(activeMotion);
+      for (const value of Object.values(taskProviders)) { value.enabled=false;value.activeTaskCount=0;value.lastAlertId=0;value.generation=0; }
+    } else if ((changed || !settings.enabled) && activeMotion?.owner === 'codex' && (activeMotion.source || 'codex') === source) cancelCodex(activeMotion);
+    if (changed) provider.lastAlertId = 0;
     lastAvailability = null;
-    codexGeneration = settings.generation;
     codexPageEpoch = settings.pageEpoch;
-    codexEnabled = settings.enabled;
-    codexActiveTaskCount = Number.isSafeInteger(settings.activeTaskCount) && settings.activeTaskCount >= 0 &&
-      settings.activeTaskCount <= 64 ? settings.activeTaskCount : 0;
+    provider.generation = settings.generation;
+    provider.enabled = settings.enabled;
+    provider.activeTaskCount = Number.isSafeInteger(settings.activeTaskCount) && settings.activeTaskCount >= 0 && settings.activeTaskCount <= 64 ? settings.activeTaskCount : 0;
+    codexEnabled = Object.values(taskProviders).some(value=>value.enabled);
+    codexActiveTaskCount = Object.values(taskProviders).reduce((sum,value)=>sum+(value.enabled ? value.activeTaskCount : 0),0);
     const isActive = codexEnabled && codexActiveTaskCount > 0;
     if (isActive) { clearSheepAutoNap(); restoreState(); }
     if (!isActive || presentationSuppressed) stopCodexThinkingCadence();
-    else if (changed || !wasActive) startCodexThinkingCadence();
+    else if (pageChanged || !wasActive) startCodexThinkingCadence();
   })));
   window.__petReady = true;
   reportSleepState();

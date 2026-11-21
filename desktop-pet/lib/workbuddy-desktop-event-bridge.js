@@ -3,7 +3,7 @@ const http=require('node:http');
 const {randomBytes,createHash,timingSafeEqual}=require('node:crypto');
 const {TextDecoder}=require('node:util');
 const SCOPE='authorized-original-workbuddy-hook-metadata';
-const PHASES=Object.freeze({SessionStart:'session-opened',UserPromptSubmit:'submitted',Stop:'stop-observed',StopFailure:'failure-observed',SessionEnd:'session-ended',FinalStop:'final-stop-observed'});
+const PHASES=Object.freeze({SessionStart:'session-opened',UserPromptSubmit:'submitted',PreToolUse:'tool-started',PostToolUse:'tool-finished',PostToolUseFailure:'tool-failed',PermissionRequest:'permission-requested',PermissionDenied:'permission-denied',Stop:'stop-observed',StopFailure:'failure-observed',SessionEnd:'session-ended',FinalStop:'final-stop-observed'});
 const failure=code=>Object.assign(new Error(code),{code});
 // A tiny restrictive metadata parser, not a general JSON deserializer. Unknown
 // property names are rejected before their values are interpreted. In particular
@@ -15,14 +15,21 @@ function parseMetadata(buffer){
  function quoted(){if(text[at++]!=='"')throw failure('INVALID_METADATA');const start=at;while(at<text.length&&text[at]!=='"'){if(!/[A-Za-z0-9_-]/.test(text[at])||at-start>=160)throw failure('INVALID_METADATA');at++;}if(text[at++]!=='"'||at-start<=1)throw failure('INVALID_METADATA');return text.slice(start,at-1);}
  white();if(text[at++]!=='{')throw failure('INVALID_METADATA');white();
  for(let count=0;;count++){
-  if(count>5)throw failure('INVALID_METADATA');
-  const key=quoted();if(!['version','sessionId','generationId','event','phase','finalStopReason'].includes(key)||Object.hasOwn(value,key))throw failure('INVALID_METADATA');
+  if(count>9)throw failure('INVALID_METADATA');
+  const key=quoted();if(!['version','sessionId','generationId','event','phase','finalStopReason','isInternalContinuation','isTruncationRecovery','eventId','occurredAt'].includes(key)||Object.hasOwn(value,key))throw failure('INVALID_METADATA');
   white();if(text[at++]!==':')throw failure('INVALID_METADATA');white();
-  if(key==='version'){if(text[at++]!=='1')throw failure('INVALID_METADATA');value.version=1;}else value[key]=quoted();
+  if(key==='version'){if(text[at++]!=='1')throw failure('INVALID_METADATA');value.version=1;}
+  else if(['isInternalContinuation','isTruncationRecovery'].includes(key)){
+   if(text.slice(at,at+4)==='true'){value[key]=true;at+=4;}else if(text.slice(at,at+5)==='false'){value[key]=false;at+=5;}else throw failure('INVALID_METADATA');
+  }else if(key==='occurredAt'){
+   const start=at;while(/[0-9]/.test(text[at]||'!'))at++;
+   const raw=text.slice(start,at),number=Number(raw);if(!/^(0|[1-9][0-9]{0,15})$/.test(raw)||!Number.isSafeInteger(number)||number>8640000000000000)throw failure('INVALID_METADATA');value[key]=number;
+  }else value[key]=quoted();
   white();const next=text[at++];if(next==='}')break;if(next!==',')throw failure('INVALID_METADATA');white();
  }
  white();if(at!==text.length||value.version!==1||!value.sessionId||!Object.hasOwn(PHASES,value.event)||value.phase!==PHASES[value.event])throw failure('INVALID_METADATA');
  if(value.finalStopReason!==undefined&&(value.event!=='FinalStop'||!['completed','cancelled','interrupted','failed'].includes(value.finalStopReason)))throw failure('INVALID_METADATA');
+ if(value.isInternalContinuation!==undefined&&value.event!=='UserPromptSubmit')throw failure('INVALID_METADATA');
  return value;
 }
 function createWorkBuddyDesktopEventBridge({onEvent=()=>{},onChange=()=>{},now=Date.now,staleAfterMs=60000,maxRequestsPerWindow=60,windowMs=10000}={}){
@@ -38,12 +45,12 @@ function createWorkBuddyDesktopEventBridge({onEvent=()=>{},onChange=()=>{},now=D
  function authorize(raw){if(!token||typeof raw!=='string')return false;const received=Buffer.from(raw),expected=Buffer.from('Bearer '+token);return received.length===expected.length&&timingSafeEqual(received,expected);}
  function reply(res,status){if(!res.writableEnded){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','Connection':'close'});res.end(JSON.stringify({ok:status===202||status===208}));}}
  function accept(metadata){
-  const time=clock(),fingerprint=createHash('sha256').update(JSON.stringify([metadata.sessionId,metadata.generationId||null,metadata.event,metadata.phase,metadata.finalStopReason||null])).digest('hex');
+  const time=clock(),fingerprint=createHash('sha256').update(JSON.stringify([metadata.sessionId,metadata.generationId||null,metadata.event,metadata.phase,metadata.finalStopReason||null,metadata.isInternalContinuation??null,metadata.isTruncationRecovery??null,metadata.eventId||null])).digest('hex');
   for(const[key,when]of seen)if(time-when>300000)seen.delete(key);
   if(seen.has(fingerprint)&&time-seen.get(fingerprint)<(metadata.generationId?300000:1000))return false;
   seen.set(fingerprint,time);while(seen.size>256)seen.delete(seen.keys().next().value);
   lastEventAt=time;const correlated=Boolean(metadata.generationId),id=createHash('sha256').update(metadata.sessionId+'\0'+(metadata.generationId||'uncorrelated-'+(++sequence))).digest('hex').slice(0,32);
-  const terminalState=metadata.event==='FinalStop'&&correlated?{completed:'completed',cancelled:'interrupted',interrupted:'interrupted',failed:'failed'}[metadata.finalStopReason]||null:null;
+  const terminalState=metadata.event==='FinalStop'&&correlated&&metadata.isTruncationRecovery!==true?{completed:'completed',cancelled:'interrupted',interrupted:'interrupted',failed:'failed'}[metadata.finalStopReason]||null:null;
   const terminalConfirmed=Boolean(terminalState);
   if(rows.get(id)?.terminalConfirmed&&!terminalConfirmed&&metadata.event!=='UserPromptSubmit')return false;
   const row={id,phase:metadata.phase,state:terminalState||(metadata.event==='FinalStop'?'unknown':'observed'),running:terminalConfirmed?false:null,realtime:true,correlated,terminalConfirmed,terminalKind:terminalConfirmed?'main-reply':null,overallTaskVerified:false,observedAt:time,source:'workbuddy-desktop-hook',scope:SCOPE,evidence:terminalConfirmed?'versioned-final-stop-hook':metadata.event==='Stop'?'hook-stop-before-final-decision':'hook-metadata-observed',...(metadata.finalStopReason?{finalStopReason:metadata.finalStopReason}:{})};
@@ -80,4 +87,4 @@ function createWorkBuddyDesktopEventBridge({onEvent=()=>{},onChange=()=>{},now=D
  function close(){if(closeFlight)return closeFlight;closed=true;token=null;privateConfig=null;clearInterval(timer);for(const socket of sockets)socket.destroy();closeFlight=new Promise(resolve=>{if(!server)return resolve();try{server.close(()=>resolve());}catch{resolve();}});notify();return closeFlight;}
  return{start,getState,close};
 }
-module.exports={createWorkBuddyDesktopEventBridge,parseMetadata};
+module.exports={createWorkBuddyDesktopEventBridge,parseMetadata,PHASES};

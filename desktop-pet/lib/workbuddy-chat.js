@@ -1,4 +1,4 @@
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
 const { emptyRecord, normalizeArchive, createChatRecord, hasChat, chatTitle, MAX_MESSAGES, MAX_TEXT, MAX_BYTES, MAX_CHATS } = require('./chat-store');
 const { partialReply, finalReply } = require('./chat-companion');
 
@@ -6,6 +6,7 @@ const SYSTEM = '你是桌面宠物球球，温和、有一点调皮，用简短�
   '最终仅返回JSON对象{"text":"给用户看的回复","action":"none"}，不要代码围栏。只有用户明确要求动作时才选择动作：' +
   'hop跳一下、jelly软弹、sway摇摆、peek探头、bow鞠躬、spin转圈、sleep睡觉、wake醒来、dockLeft靠左、dockRight靠右、restore离开边缘；否则action为none。不要声称已经执行操作。';
 const ERRORS = {
+  CHAT_AUTHORIZATION_REQUIRED: '请先单独允许球球使用当前 WorkBuddy 账号聊天。',
   STORAGE: '聊天记录暂时无法保存，请检查本机存储后再试。',
   LOGIN_REQUIRED: '请在 WorkBuddy 中重新登录，再继续聊天。',
   UNSUPPORTED_PLATFORM: '当前仅支持 macOS WorkBuddy。',
@@ -48,6 +49,8 @@ function createWorkBuddyChat({ store, run, onChange = () => {}, onAction = () =>
   let models = [], modelsStatus = 'idle', modelsError = null, activeModel = null;
   let modelSelection = validModel(initialModelSelection) ? initialModelSelection : 'auto';
   let active = null, connecting = null, modelController = null, closed = false, epoch = 0;
+  let recordRevision = 0;
+  const identityControllers = new Set();
   function snapshot() {
     const visible = verified && (!record.accountKey || record.accountKey === accountKey) && !storageProblem;
     return { provider: 'workbuddy', messages: visible ? record.messages.map(item => ({ ...item })) : [], busy: Boolean(active), connection, error,
@@ -58,7 +61,7 @@ function createWorkBuddyChat({ store, run, onChange = () => {}, onAction = () =>
   }
   const emit = () => { if (!closed) onChange(snapshot()); };
   function persist(next = record) {
-    try { store.write(next); storageProblem = false; }
+    try { store.write(next); storageProblem = false; recordRevision++; }
     catch (_) { storageProblem = true; throw fail('STORAGE'); }
   }
   function connect() {
@@ -147,6 +150,8 @@ function createWorkBuddyChat({ store, run, onChange = () => {}, onAction = () =>
   }
   function stop() {
     epoch++;
+    for (const controller of identityControllers) controller.abort();
+    identityControllers.clear();
     if (connecting) {
       modelController?.abort(); modelController = null; connecting = null;
       verified = false; connection = 'idle'; modelsStatus = 'idle'; modelsError = null; emit();
@@ -173,6 +178,7 @@ function createWorkBuddyChat({ store, run, onChange = () => {}, onAction = () =>
   function setModel(id) {
     if (closed || active || connecting || !validModel(id) || (id !== 'auto' && !models.some(model => model.id === id))) return { accepted: false, error: ERRORS.MODEL_UNAVAILABLE };
     try { onModelSelection(id); } catch (_) { return { accepted: false, error: '模型设置未能保存。' }; }
+    if (modelSelection !== id) recordRevision++;
     modelSelection = id; activeModel = null; emit(); return { accepted: true };
   }
   async function refreshModels() {
@@ -180,6 +186,29 @@ function createWorkBuddyChat({ store, run, onChange = () => {}, onAction = () =>
     try { await connect(); return { accepted: true }; } catch (cause) { return { accepted: false, error: messageOf(cause) }; }
   }
   function close() { stop(); closed = true; modelController?.abort(); verified = false; }
-  return { connect, send, stop, newChat, selectChat, setModel, refreshModels, close, getState: snapshot, ownsThread: () => false };
+  async function getConsentIdentity(text = '') {
+    if (closed || !verified || modelsStatus !== 'ready' || !accountKey || active || connecting || storageProblem) throw fail('UNAUTHENTICATED');
+    if (record.accountKey && record.accountKey !== accountKey) throw fail('ACCOUNT_CHANGED');
+    const selected = modelSelection === 'auto' ? models.find(model => model.id === 'auto') || models[0] : models.find(model => model.id === modelSelection);
+    if (!selected) throw fail('MODEL_UNAVAILABLE');
+    const before = accountKey, generation = epoch, mutation = recordRevision, conversationKey = record.chatId;
+    const selection = modelSelection, selectedId = selected.id;
+    const revision = createHash('sha256').update(JSON.stringify([before, selection, selectedId, mutation, generation])).digest('hex');
+    const current = () => !closed && verified && !active && !connecting && !storageProblem && modelsStatus === 'ready' &&
+      accountKey === before && epoch === generation && recordRevision === mutation && record.chatId === conversationKey && modelSelection === selection &&
+      (modelSelection === 'auto' ? models.find(model => model.id === 'auto') || models[0] : models.find(model => model.id === modelSelection))?.id === selectedId;
+    const controller = new AbortController(); identityControllers.add(controller);
+    try {
+      const observed = await run('account-check', { expectedAccountKey: before }, { signal: controller.signal });
+      if (!current() || observed?.accountKey !== before) throw fail('ACCOUNT_CHANGED');
+      return { accountKey: before, conversationKey, revision };
+    } catch (cause) {
+      if (current() && ['ACCOUNT_CHANGED', 'UNAUTHENTICATED', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH'].includes(cause?.code)) {
+        verified = false; connection = 'error'; modelsStatus = 'error'; modelsError = messageOf(cause); error = modelsError; emit();
+      }
+      throw cause;
+    } finally { identityControllers.delete(controller); }
+  }
+  return { connect, send, stop, newChat, selectChat, setModel, refreshModels, close, getConsentIdentity, getState: snapshot, ownsThread: () => false };
 }
 module.exports = { createWorkBuddyChat };

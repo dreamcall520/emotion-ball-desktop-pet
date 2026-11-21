@@ -71,6 +71,10 @@ function codexLinkContext(accountKey) {
   return { provider: 'codex', channel: 'codex-link', recipientOrigin: 'https://chatgpt.com',
     billing: '使用当前本机 Codex 账号额度', accountKey };
 }
+function workbuddyLinkContext(accountKey) {
+  return { provider: 'workbuddy', channel: 'workbuddy-installed-chat', recipientOrigin: 'https://copilot.tencent.com',
+    billing: '使用当前本机 WorkBuddy 账号积分', accountKey };
+}
 function createChatDataConsent({ store, request } = {}) {
   if (!store || typeof store.read !== 'function' || typeof store.write !== 'function' || typeof request !== 'function') throw new TypeError('consent store and request required');
   let pending = false, closed = false;
@@ -95,7 +99,7 @@ function createChatDataConsent({ store, request } = {}) {
       if (!isCurrent()) return denied('聊天窗口或来源已变化，消息未发送。');
       const before = context(await getContext()), revision = revisions.get(before.provider) || 0;
       const known = has(before);
-      if (!known && requireExisting) return { ...denied('请完成 Codex 连接授权，再发送消息。'), needsLinkConsent: true };
+      if (!known && requireExisting) return { ...denied('请完成 ' + ({codex:'Codex',workbuddy:'WorkBuddy',zcode:'ZCode'}[before.provider]) + ' 连接授权，再发送消息。'), needsLinkConsent: true };
       if (!known && await requestConsent(disclosure(before)) !== true) return { ...denied('你已取消，消息未发送。'), cancelled: true };
       const after = context(await getContext());
       if (closed || !isCurrent() || before.fingerprint !== after.fingerprint || revision !== (revisions.get(before.provider) || 0)) return denied('账号、来源或会话已变化，请重新确认后发送。');
@@ -107,6 +111,8 @@ function createChatDataConsent({ store, request } = {}) {
     finally { pending = false; }
   }
   return { run, revoke, hasCodexLink: accountKey => has(context(codexLinkContext(accountKey))),
-    grantCodexLink: accountKey => grant(context(codexLinkContext(accountKey))), close() { closed = true; } };
+    grantCodexLink: accountKey => grant(context(codexLinkContext(accountKey))),
+    hasWorkBuddyLink: accountKey => has(context(workbuddyLinkContext(accountKey))),
+    grantWorkBuddyLink: accountKey => grant(context(workbuddyLinkContext(accountKey))), close() { closed = true; } };
 }
-module.exports = { createChatDataConsent, createChatDataConsentStore, codexLinkContext, VERSION };
+module.exports = { createChatDataConsent, createChatDataConsentStore, codexLinkContext, workbuddyLinkContext, VERSION };

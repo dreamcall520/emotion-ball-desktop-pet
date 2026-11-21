@@ -5,16 +5,42 @@ const { emptyRecord } = require('../lib/chat-store');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function setup(options = {}) {
   let disk = emptyRecord(), key = 'a'.repeat(64), rejectWrite = false;
-  const calls = [], actions = [];
+  const calls = [], actions = [], identityCalls = [];
   const store = { read: () => structuredClone(disk), write: value => { if (rejectWrite) throw Error('disk'); disk = structuredClone(value); } };
   const run = async (op, payload, control) => {
     if (op === 'models') return { accountKey: key, models: [{ id: 'auto', displayName: '自动' }, { id: 'hy3', displayName: 'Hy3' }] };
+    if (op === 'account-check') { identityCalls.push({ payload, control }); return { accountKey: key }; }
     calls.push({ payload, control });
     return options.chat ? options.chat(payload, control, key) : { accountKey: key, text: '{"text":"你好","action":"none"}' };
   };
   const chat = createWorkBuddyChat({ store, run, onAction: action => actions.push(action), ...options });
-  return { chat, calls, actions, disk: () => disk, key: value => { key = value; }, failWrite: () => { rejectWrite = true; } };
+  return { chat, calls, actions, identityCalls, disk: () => disk, key: value => { key = value; }, failWrite: () => { rejectWrite = true; } };
 }
+test('chat consent identity requires a ready model and fresh local account check without sending or model HTTP', async () => {
+  const env = setup(); await assert.rejects(env.chat.getConsentIdentity('合成消息'), { code: 'UNAUTHENTICATED' });
+  await env.chat.connect(); const first = await env.chat.getConsentIdentity('合成消息'), second = await env.chat.getConsentIdentity('合成消息');
+  assert.deepEqual(second, first); assert.equal(first.accountKey, 'a'.repeat(64)); assert.match(first.revision, /^[0-9a-f]{64}$/);
+  assert.equal(env.identityCalls.length, 2); assert.deepEqual(env.identityCalls[0].payload, { expectedAccountKey: first.accountKey });
+  assert.equal(env.calls.length, 0); assert.equal(env.disk().messages.length, 0);
+  env.chat.setModel('hy3'); assert.notEqual((await env.chat.getConsentIdentity()).revision, first.revision);
+  await env.chat.send('合成消息'); await tick(); assert.notEqual((await env.chat.getConsentIdentity()).revision, first.revision);
+  env.key('b'.repeat(64)); await assert.rejects(env.chat.getConsentIdentity(), { code: 'ACCOUNT_CHANGED' });
+  assert.deepEqual(env.chat.getState().messages, []);
+});
+test('pending consent identity cannot survive model changes, stop or close and never invalidates a newer connection', async () => {
+  for (const change of ['model', 'stop', 'close']) {
+    let resolve, signal;
+    const chat = createWorkBuddyChat({ store: { read: emptyRecord, write() {} }, run: async (operation, payload, control) => {
+      if (operation === 'models') return { accountKey: 'a'.repeat(64), models: [{ id: 'auto', displayName: '自动' }, { id: 'hy3', displayName: 'Hy3' }] };
+      assert.equal(operation, 'account-check'); signal = control.signal; return new Promise(done => { resolve = done; });
+    } });
+    await chat.connect(); const pending = chat.getConsentIdentity(); await tick();
+    if (change === 'model') chat.setModel('hy3'); else chat[change]();
+    if (change !== 'model') assert.equal(signal.aborted, true);
+    resolve({ accountKey: 'a'.repeat(64) }); await assert.rejects(pending, { code: 'ACCOUNT_CHANGED' });
+    if (change !== 'close') { await chat.connect(); assert.equal(chat.getState().connection, 'ready'); chat.close(); }
+  }
+});
 test('WorkBuddy multi-turn history uses local conversation and validated actions', async () => {
   const env = setup({ chat: async (_, control, key) => { control.onDelta('{"text":"转'); return { accountKey: key, text: '{"text":"转给你看","action":"spin"}' }; } });
   assert.equal((await env.chat.send('转一下')).accepted, true); await tick();

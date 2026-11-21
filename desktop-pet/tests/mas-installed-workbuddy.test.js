@@ -13,7 +13,7 @@ function child() {
   value.finish = code => { value.exitCode = code; value.emit('exit', code); value.emit('close', code); };
   return value;
 }
-async function fixture(t) {
+async function fixture(t, options = {}) {
   const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'mas-workbuddy-runner-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const app = path.join(root, 'WorkBuddy.app'), auth = path.join(root, 'Library/Application Support/CodeBuddyExtension/Data/Public/auth');
@@ -26,7 +26,7 @@ async function fixture(t) {
   } });
   const access = { installedAppAccess: port(app), directoryAccess: port(auth) };
   const run = createMasInstalledWorkBuddyRunner({ access, env: { QIUQIU_FAKE_SECRET: 'secret', HTTP_PROXY: 'http://127.0.0.1:1234', NODE_OPTIONS: '--bad', ELECTRON_EXTRA_LAUNCH_ARGS: 'bad' },
-    spawnProcess(...args) { spawnCalls.push(args); const value = child(); children.push(value); return value; } });
+    spawnProcess(...args) { spawnCalls.push(args); const value = child(); children.push(value); return value; }, ...options });
   return { root, app, auth, binary, run, access, releases, acquired, spawnCalls, children, revoke() { valid = false; } };
 }
 async function tick() { await new Promise(resolve => setImmediate(resolve)); }
@@ -49,11 +49,81 @@ test('quota runs only the selected WorkBuddy component and selected auth directo
   assert.deepEqual(await pending, { accountKey: key, report }); assert.equal(f.releases.length, 2);
 });
 
-test('models, chat, tasks and caller-supplied auth overrides never reach a helper', async t => {
+test('tasks and caller-supplied auth overrides never reach a helper without their required request', async t => {
   const f = await fixture(t);
-  for (const operation of ['models', 'chat', 'tasks', 'task-open']) await assert.rejects(f.run(operation), { code: 'INVALID_REQUEST' });
+  for (const operation of ['chat', 'tasks', 'task-open', 'unreviewed']) await assert.rejects(f.run(operation), { code: 'INVALID_REQUEST' });
   await assert.rejects(f.run('quota', { authDirectory: '/outside' }), { code: 'INVALID_REQUEST' });
   assert.equal(f.acquired.length, 0); assert.equal(f.spawnCalls.length, 0);
+});
+
+const chatPayload = { model: 'auto', conversationId: 'synthetic-conversation', expectedAccountKey: key,
+  messages: [{ role: 'system', content: 'Synthetic companion only. No tools.' }, { role: 'user', content: '合成消息' }] };
+async function chatFixture(t) {
+  const authorization = { enabled: true, accountKey: key, epoch: 1 };
+  const f = await fixture(t, { getChatEnabled: () => authorization.enabled,
+    getAuthorizedChatAccountKey: () => authorization.accountKey, getChatGrantEpoch: () => authorization.epoch,
+    taskAccess: { acquire() { throw Error('chat must never acquire task scope'); } } });
+  return { ...f, authorization };
+}
+test('quota grants alone cannot list chat models or send a message', async t => {
+  const f = await fixture(t);
+  for (const [operation, payload] of [['models', {}], ['chat', chatPayload]])
+    await assert.rejects(f.run(operation, payload), { code: 'CHAT_AUTHORIZATION_REQUIRED' });
+  assert.equal(f.acquired.length, 0); assert.equal(f.children.length, 0);
+});
+test('authorized models bind expected account before helper startup and return only reviewed model fields', async t => {
+  const f = await chatFixture(t), pending = f.run('models'); await spawned(f);
+  let input = ''; f.children[0].stdin.on('data', chunk => { input += chunk; });
+  await tick(); assert.deepEqual(JSON.parse(input), { operation: 'models', payload: { expectedAccountKey: key } });
+  result(f.children[0], { models: [{ id: 'auto', displayName: '自动', token: 'private' }], token: 'private' }); f.children[0].finish(0);
+  assert.deepEqual(await pending, { accountKey: key, models: [{ id: 'auto', displayName: '自动' }] });
+  assert.equal(f.acquired.length, 2); assert.equal(f.releases.length, 2);
+});
+test('authorized chat preserves the website streaming protocol and no additional source scope', async t => {
+  const f = await chatFixture(t), deltas = [], pending = f.run('chat', chatPayload, { onDelta: text => deltas.push(text) }); await spawned(f);
+  let input = ''; f.children[0].stdin.on('data', chunk => { input += chunk; }); await tick();
+  assert.deepEqual(JSON.parse(input), { operation: 'chat', payload: chatPayload });
+  assert.equal(f.spawnCalls[0][2].env.QIUQIU_WORKBUDDY_TASK_DIRECTORY, undefined);
+  f.children[0].stdout.write(JSON.stringify({ type: 'delta', text: '合成' }) + '\n');
+  assert.deepEqual(deltas, ['合成']); assert.equal(f.releases.length, 0);
+  result(f.children[0], { text: '合成回复', token: 'private', uid: 'private' }); f.children[0].finish(0);
+  assert.deepEqual(await pending, { accountKey: key, text: '合成回复' }); assert.equal(f.releases.length, 2);
+});
+test('chat grant revocation and same-account reauthorization suppress old deltas and final results until confirmed child exit', async t => {
+  for (const change of ['disable', 'account', 'epoch']) {
+    const f = await chatFixture(t), deltas = [], pending = f.run('chat', chatPayload, { onDelta: text => deltas.push(text) }); await spawned(f);
+    if (change === 'disable') f.authorization.enabled = false;
+    else if (change === 'account') f.authorization.accountKey = 'b'.repeat(64);
+    else f.authorization.epoch++;
+    f.children[0].stdout.write(JSON.stringify({ type: 'delta', text: '不应显示' }) + '\n'); await tick();
+    assert.deepEqual(deltas, []); assert.equal(f.children[0].killed, true); assert.equal(f.releases.length, 0);
+    result(f.children[0], { text: '不应显示' }); f.children[0].finish(0);
+    await assert.rejects(pending, { code: 'CANCELLED' }); assert.equal(f.releases.length, 2);
+  }
+});
+test('chat authorization cannot cross accounts or accept tools and unreviewed payload fields', async t => {
+  const f = await chatFixture(t);
+  await assert.rejects(f.run('chat', { ...chatPayload, expectedAccountKey: 'b'.repeat(64) }), { code: 'ACCOUNT_CHANGED' });
+  for (const payload of [{ ...chatPayload, tools: [] }, { ...chatPayload, messages: [{ role: 'tool', content: 'result' }] },
+    { ...chatPayload, messages: [{ role: 'user', content: 'synthetic', tool_calls: [] }] }, { ...chatPayload, token: 'private' }])
+    await assert.rejects(f.run('chat', payload), { code: 'INVALID_REQUEST' });
+  assert.equal(f.acquired.length, 0); assert.equal(f.children.length, 0);
+});
+test('a revoked model lookup cannot complete and malformed catalogs never cross the adapter', async t => {
+  const revoked = await chatFixture(t), pending = revoked.run('models'); await spawned(revoked); revoked.authorization.epoch++;
+  result(revoked.children[0], { models: [{ id: 'auto', displayName: '自动' }] }); revoked.children[0].finish(0);
+  await assert.rejects(pending, { code: 'CANCELLED' }); assert.equal(revoked.releases.length, 2);
+  const malformed = await chatFixture(t), bad = malformed.run('models'); await spawned(malformed);
+  result(malformed.children[0], { models: [{ id: 'auto', displayName: '自动' }, { id: 'auto', displayName: '重复' }] }); malformed.children[0].finish(0);
+  await assert.rejects(bad, { code: 'INVALID_RESPONSE' });
+});
+test('chat cancellation suppresses late text and keeps App/account scopes until child exit', async t => {
+  const f = await chatFixture(t), abort = new AbortController(), deltas = [];
+  const pending = f.run('chat', chatPayload, { signal: abort.signal, onDelta: text => deltas.push(text) }); await spawned(f);
+  abort.abort(); await tick(); assert.equal(f.children[0].killed, true); assert.equal(f.releases.length, 0);
+  f.children[0].stdout.write(JSON.stringify({ type: 'delta', text: '不应显示' }) + '\n');
+  result(f.children[0], { text: '不应显示' }); f.children[0].finish(0);
+  await assert.rejects(pending, { code: 'CANCELLED' }); assert.deepEqual(deltas, []); assert.equal(f.releases.length, 2);
 });
 
 test('cancel terminates its child but retains both scopes until confirmed process exit', async t => {
@@ -223,4 +293,11 @@ test('task metadata cannot supply arbitrary running counts, secrets in titles or
   const invalid = await taskFixture(t), bad = invalid.run('tasks', { expectedAccountKey: key }); await spawned(invalid);
   result(invalid.children[0], { ...taskReport, total: 2, items: [taskReport.items[0], taskReport.items[0]] }); invalid.children[0].finish(0);
   await assert.rejects(bad, { code: 'INVALID_RESPONSE' });
+});
+test('account-check uses only the authorized App/account scopes and returns a single verified account hash',async t=>{
+ const f=await taskFixture(t),pending=f.run('account-check',{expectedAccountKey:key});await spawned(f);
+ assert.equal(f.taskAcquires,0);result(f.children[0],{token:'private',uid:'private',report:{private:true}});f.children[0].finish(0);
+ assert.deepEqual(await pending,{accountKey:key});assert.equal(f.releases.length,2);
+ const mismatch=await fixture(t),bad=mismatch.run('account-check',{expectedAccountKey:key});await spawned(mismatch);
+ result(mismatch.children[0],{accountKey:'b'.repeat(64)});mismatch.children[0].finish(0);await assert.rejects(bad,{code:'ACCOUNT_CHANGED'});
 });

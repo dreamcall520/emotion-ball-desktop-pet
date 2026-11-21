@@ -118,6 +118,7 @@ test('损坏文件回退且有效设置可回读', t => {
     codexQuotaAlwaysVisible: true,
     codexShowExtraCredits: true,
     codexQuotaFunEnabled: true,
+    quotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true, autoReportErrors: true, autoReportErrorsConsentVersion: '',
     lastUpdateNotifiedVersion: '',
@@ -139,6 +140,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     codexTaskNameInAlerts: true, codexQuotaAlwaysVisible: true,
     codexShowExtraCredits: true,
     codexQuotaFunEnabled: true,
+    quotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true, autoReportErrors: true, autoReportErrorsConsentVersion: '', lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'

@@ -81,7 +81,11 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
       petWorkBuddyDetails: { resize: height => sizes.push(height), onModel: fn => { receive = fn; }, onColorMode: fn => { receiveColor = fn; }, close: () => close++ } },
     Date: class extends Date { static now() { return now; } }
   });
-  receive({quotaOnly:true,action:'tasks',report:{total:5}});
+  receive({openRevision:1,report:{total:5}});
+  assert.equal(get('view-daily').attrs['aria-selected'],'true');
+  get('view-records').listeners.click();receive({openRevision:1,report:{total:6}});assert.equal(get('view-records').attrs['aria-selected'],'true','data refresh preserves the chosen chart');
+  receive({openRevision:2,report:{total:6}});assert.equal(get('view-daily').attrs['aria-selected'],'true','reopening starts from daily consumption');
+  taskRenders=0;receive({quotaOnly:true,action:'tasks',report:{total:5}});
   assert.equal(taskRenders,0);assert.equal(get('task-view').hidden,true);assert.equal(get('quota-view').hidden,false);
   receive({quotaOnly:true,tasksEnabled:true,action:'tasks',report:{total:5}});assert.equal(taskRenders,1);
   receive({ report: { total: 7399.91, updatedAt: now, nextRefreshAt: now + 7 * 86400000, expires: [{ at: now + 2 * 86400000, amount: 99.91 }] }, history: [{ at: now - 300000, total: 7500 }, { at: now, total: 7399.91 }] });
@@ -229,4 +233,12 @@ test('independently enabled tasks survive quota-only details and retain owned IP
   win.webContents.emit('ipc-message',event,'pet:workbuddy-details-open-task','task_1');
   win.webContents.emit('ipc-message',event,'pet:workbuddy-details-refresh-tasks');win.webContents.emit('ipc-message',event,'pet:workbuddy-details-clear-tasks');
   assert.deepEqual(calls,['task_1','refresh','clear']);details.destroy();
+});
+
+
+test('each explicit details open carries a fresh revision while data updates keep it', () => {
+  const {details,windows}=fixture();details.open({report:{total:5}});const win=windows[0];win.webContents.emit('did-finish-load');
+  const revision=win.messages.at(-1).value.openRevision;assert(Number.isSafeInteger(revision)&&revision>0);
+  details.update({report:{total:6}});assert.equal(win.messages.at(-1).value.openRevision,revision);
+  details.close();details.open({report:{total:7}});assert.equal(win.messages.at(-1).value.openRevision,revision+1);details.destroy();
 });

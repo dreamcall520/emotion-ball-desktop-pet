@@ -36,3 +36,10 @@ test('FinalStop unknown/missing reason or missing generation cannot become compl
  assert.equal((await f.send(payload)).status,202);assert.equal(f.bridge.getState().observations.find(x=>x.correlated).state,'completed');
  assert.equal((await f.send(message('Stop'))).status,208);assert.equal(f.bridge.getState().observations.find(x=>x.correlated).state,'completed');
 });
+test('activity IDs preserve distinct heartbeats while boolean flags are strictly typed and final recovery never confirms',async t=>{
+ const f=await fixture(t);const activity=message('Stop',{event:'PreToolUse',phase:'tool-started',eventId:'tool-event-1',occurredAt:1000});
+ assert.equal((await f.send(activity)).status,202);assert.equal((await f.send({...activity,eventId:'tool-event-2',occurredAt:2000})).status,202);assert.equal((await f.send(activity)).status,208);
+ assert.equal((await f.send(message('UserPromptSubmit',{isInternalContinuation:true}))).status,202);assert.equal(f.events.at(-1).isInternalContinuation,true);
+ assert.equal((await f.send(message('UserPromptSubmit',{isInternalContinuation:'true'}))).status,400);
+ assert.equal((await f.send(message('Stop',{event:'FinalStop',phase:'final-stop-observed',finalStopReason:'completed',isTruncationRecovery:true}))).status,202);assert.equal(f.events.at(-1).terminalConfirmed,false);
+});

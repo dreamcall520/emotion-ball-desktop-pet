@@ -16,6 +16,23 @@ function declaration(source, name) {
   assert.ok(end > match.index, `${name} 结束边界存在`);
   return source.slice(match.index,end+match[1].length+2);
 }
+function taskProviders(generation = 2) {
+  return { codex:{enabled:true,generation,activeTaskCount:0,lastAlertId:0},
+    workbuddy:{enabled:false,generation:0,activeTaskCount:0,lastAlertId:0} };
+}
+const taskSourceMatch = renderer.match(/^  const taskSource = (.+);$/m);
+assert.ok(taskSourceMatch, '实际任务来源解析器存在');
+const taskSource = vm.runInNewContext(taskSourceMatch[1]);
+function skinMotionDuration(manifest, requested, action = 'complete') {
+  const context = vm.createContext({
+    settings:{customization:{appearance:{shape:'new-year-sheep',sheepTheme:'none'}}},
+    effectiveCustomization:value=>value, SheepSkin, SheepTheme,
+    request:{action,durationMs:requested}, require:name=>{
+      assert.equal(name, './assets/sheep/manifest.json'); return manifest;
+    }
+  });
+  return vm.runInContext(declaration(main,'taskSkinMotionDuration')+'\ntaskSkinMotionDuration(request)',context);
+}
 function registration(pattern) {
   const match = renderer.match(pattern);
   assert.ok(match, '实际事件注册存在');
@@ -44,7 +61,7 @@ function fixture({ realClick = false } = {}) {
       update:()=>({mode:'sleep',emotionId:'00',gaze:null}), setKeepAwake(){}, setManualSleep(value){this.manualSleep=Boolean(value);}},
     edgeSlidePacket:null, edgeSlideTimer:null, presentationSuppressed:false, presentationMode:'free', presentationPaused:false, presentationFrozen:false,
     lastSample:{locked:false}, currentState:{mode:'awake',emotionId:'50',gaze:null},
-    activeMotion:null, dragState:null, facing:null, focusQuiet:false, codexEnabled:false,
+    activeMotion:null, dragState:null, facing:null, focusQuiet:false, codexEnabled:false, taskSource,
     lastSheepClick:null,lastAuroraClick:null,nextSheepAmbientAt:0,lastSheepAmbient:null,sheepAutoNap:false,sheepLastInteractionAt:0,sheepLastNapAt:null,sheepAutomaticWakeUntil:0,lastWorkAttempt:0,singleClickTimer:null,helloTimer:null,petHovered:false,wakeOnDoubleClick:false,Math:Object.assign(Object.create(Math),{random:()=>0.01}),
     codexActiveTaskCount:0, codexThinking:false, codexThinkingVisible:false, codexThinkingTimer:null, quotaEffects:null, quotaPacket:{config:{}},
     compactMode:null, officialAurora:null, clickVisual:null, codexPet:null, listeners:[], lastSpriteInkSignature:'',
@@ -235,7 +252,7 @@ test('咩咩Codex提醒等当前原画加载再确认，旧请求或换外观后
       focusQuiet:false,presentationSuppressed:false,codexEnabled:true,lastSample:{locked:false},
       companion:{manualSleep:false},currentState:{mode:'awake'},dragState:null,sheepOffering:null,singleClickTimer:null,helloTimer:null,
       performance:{now:()=>1000},actionUntil:0,
-      codexGeneration:2,codexPageEpoch:3,lastCodexAlertId:0,nextMotionToken:0,activeMotion:null,ball:player,
+      taskProviders:taskProviders(),taskSource,codexPageEpoch:3,nextMotionToken:0,activeMotion:null,ball:player,
       petElement:{dataset:{}},customization:{appearance:{shape:scenario==='ordinary'?'blob':'new-year-sheep'}},
       desktop:{codexMotionReady:packet=>sent.push(packet)},cancelCodex:()=>sent.push('cancel')});
     vm.runInContext(declaration(renderer,'canShowCodex')+'\n'+declaration(renderer,'startCodex'),context);
@@ -514,11 +531,11 @@ test('从发呆或疲倦状态开始拖道具，真实互动恢复清醒但不�
 test('拖道具时Codex完成可用性与思考让行，异步原画就绪后再次检查拖放且不ACK抢播',async()=>{
  const h=fixture(),c=h.context;let dragging=true,readyResolve;const ready=new Promise(r=>{readyResolve=r;}),ack=[],availability=[];
  c.sheepOffering={isDragging:()=>dragging,isPlaying:()=>false,cancel(){dragging=false;},update(){}};
- Object.assign(c,{InteractionMotion:require('../lib/interaction-motion'),codexEnabled:true,codexGeneration:2,codexPageEpoch:3,lastCodexAlertId:0,nextMotionToken:0,lastAvailability:null,codexThinking:false,codexThinkingVisible:true});
+ Object.assign(c,{InteractionMotion:require('../lib/interaction-motion'),codexEnabled:true,taskProviders:taskProviders(),taskSource,codexPageEpoch:3,nextMotionToken:0,lastAvailability:null,codexThinking:false,codexThinkingVisible:true});
  c.syncThought=()=>{};c.desktop.codexMotionReady=p=>ack.push(p);c.desktop.codexAvailability=p=>availability.push(p.available);c.ball.setMotionFrame=()=>{};c.ball.whenMotionReady=()=>ready;
  vm.runInContext(['canShowCodex','reportCodexAvailability','cancelCodex','startCodex','syncCodexWorking'].map(n=>declaration(renderer,n)).join('\n'),c);
  assert.equal(c.canShowCodex(),false);c.reportCodexAvailability();assert.deepEqual(availability,[false]);
- const request={motion:'hop',generation:2,pageEpoch:3,alertId:1};c.startCodex(request);assert.equal(h.actions().length,0);assert.equal(c.lastCodexAlertId,0);
+ const request={motion:'hop',generation:2,pageEpoch:3,alertId:1};c.startCodex(request);assert.equal(h.actions().length,0);assert.equal(c.taskProviders.codex.lastAlertId,0);
  dragging=false;c.startCodex(request);assert.equal(h.actions().length,1);assert.equal(c.activeMotion.owner,'codex');dragging=true;readyResolve(true);await ready;await Promise.resolve();
  assert.equal(ack.length,0);assert.equal(c.activeMotion,null);assert.equal(dragging,true);
  c.codexActiveTaskCount=1;c.syncCodexWorking();assert.equal(c.petElement.dataset.codexWorking,'false');assert.equal(c.codexThinking,false);
@@ -611,7 +628,7 @@ test('睡眠pointerdown和刚hover唤醒后的同次点击不取消刚开始的�
 
 test('Codex ACK只在whenMotionReady后读取含前缀的真实时长，保持准备期不提前计时',async()=>{
   const h=fixture(),c=h.context;let resolve,reads=0,duration=1000;const ready=new Promise(r=>resolve=r),acks=[];
-  Object.assign(c,{InteractionMotion:require('../lib/interaction-motion'),codexEnabled:true,codexGeneration:2,codexPageEpoch:3,lastCodexAlertId:0,nextMotionToken:0});
+  Object.assign(c,{InteractionMotion:require('../lib/interaction-motion'),codexEnabled:true,taskProviders:taskProviders(),taskSource,codexPageEpoch:3,nextMotionToken:0});
   c.ball.setMotionFrame=()=>{};c.ball.whenMotionReady=()=>ready;c.ball.getActionDuration=()=>{reads++;return duration;};c.desktop.codexMotionReady=p=>acks.push(p);
   vm.runInContext(declaration(renderer,'canShowCodex')+'\n'+declaration(renderer,'startCodex'),c);
   c.startCodex({motion:'hop',generation:2,pageEpoch:3,alertId:1});assert.equal(reads,0);assert.equal(acks.length,0);
@@ -619,24 +636,18 @@ test('Codex ACK只在whenMotionReady后读取含前缀的真实时长，保持�
 });
 
 test('完成宿主时长仅接受本地manifest推导的全段/中途中转前缀，仍拒绝伪造任意时长',()=>{
-  const begin=main.indexOf("    const sheepTheme = sheepAction && require('./assets/sheep/manifest.json').themes[theme];");
-  const end=main.indexOf('    if (!windowMotion.start(',begin);assert.ok(begin>0&&end>begin);
   const manifest={themes:{none:{actions:{complete:{durations:[100,1000],startsAtIdle:true}},idleTransition:{durations:[60,70,80,70,60]}}}};
   for(const [requested,expected] of [[1340,1340],[1280,1280],[1100,1100],[60000,1100],[1300,1100]]) {
-    const c=vm.createContext({sheepAction:'complete',theme:'none',request:{durationMs:requested},require:()=>manifest});
-    assert.equal(vm.runInContext(main.slice(begin,end)+'\ndurationMs',c),expected);
+    assert.equal(skinMotionDuration(manifest,requested),expected);
   }
 });
 
 
 test('完成ACK严格匹配A/B/拿收纸有限拓扑，端点hold全计入且不接受无前缀裁首帧或跨错桥',()=>{
-  const begin=main.indexOf("    const sheepTheme = sheepAction && require('./assets/sheep/manifest.json').themes[theme];");
-  const end=main.indexOf('    if (!windowMotion.start(',begin);
   function evaluate(clip,requested,hasWork=true,action='complete') {
     const theme={actions:{[action]:clip},idleTransition:{durations:[60,70,80,70,60]},
       ...(hasWork?{workingTransition:{durations:[90,110,130,150]}}:{})};
-    const c=vm.createContext({sheepAction:action,theme:'none',request:{durationMs:requested},require:()=>({themes:{none:theme}})});
-    return vm.runInContext(main.slice(begin,end)+'\ndurationMs',c);
+    return skinMotionDuration({themes:{none:theme}},requested,action);
   }
   const base={durations:[100,1000]};
   // targetA: idle reverse prefixes 130/210/280/340; work reverse 200/330/480.
@@ -676,7 +687,7 @@ function actualPlayerHarness(sleepBridge = false) {
 
 test('真实renderer接真实SheepSkin：working→Codex完成直接交接不先收/重拿，done只选一次idle',async()=>{
   const player=actualPlayerHarness();await player.flush();player.api.setEmotion('51');await player.flush();player.advance(210);assert.equal(player.node.dataset.transition,'');
-  const h=fixture(),c=h.context;Object.assign(c,{ball:player.api,InteractionMotion:require('../lib/interaction-motion'),codexEnabled:true,codexGeneration:2,codexPageEpoch:3,lastCodexAlertId:0,nextMotionToken:0});
+  const h=fixture(),c=h.context;Object.assign(c,{ball:player.api,InteractionMotion:require('../lib/interaction-motion'),codexEnabled:true,taskProviders:taskProviders(),taskSource,codexPageEpoch:3,nextMotionToken:0});
   const ack=[];c.desktop.codexMotionReady=p=>ack.push(p);c.syncThought=()=>{};c.currentState={mode:'awake',emotionId:'50'};
   vm.runInContext(declaration(renderer,'canShowCodex')+'\n'+declaration(renderer,'startCodex')+'\n'+declaration(renderer,'onMotion'),c);
   c.startCodex({motion:'hop',generation:2,pageEpoch:3,alertId:1});await player.flush();
@@ -704,13 +715,10 @@ test('睡眠桥真实wakeSheep的同轮restore/greet链路先反放醒来，不�
 });
 
 test('睡眠桥完成ACK只接受反放醒来加目标桥的有限时长，拒绝任意延长',()=>{
-  const begin=main.indexOf("    const sheepTheme = sheepAction && require('./assets/sheep/manifest.json').themes[theme];");
-  const end=main.indexOf('    if (!windowMotion.start(',begin);
   function evaluate(startsAtWorking,requested){
     const theme={actions:{complete:{durations:[100,1000],startsAtIdle:!startsAtWorking,startsAtWorking}},
       workingTransition:{durations:[90,110,130,150]},sleepTransition:{durations:[70,80,90]}};
-    const c=vm.createContext({sheepAction:'complete',theme:'none',request:{durationMs:requested},require:()=>({themes:{none:theme}})});
-    return vm.runInContext(main.slice(begin,end)+'\ndurationMs',c);
+    return skinMotionDuration({themes:{none:theme}},requested);
   }
   for(const requested of [1100,1150,1240])assert.equal(evaluate(false,requested),requested);
   for(const requested of [1100,1630,1720])assert.equal(evaluate(true,requested),requested);

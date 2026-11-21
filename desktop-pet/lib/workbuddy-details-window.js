@@ -7,7 +7,7 @@ const { safeDeviceTasks, safeWebsiteUsage } = require('./mas-workbuddy-details')
 const { safeWebsiteSummaryReport } = require('./workbuddy-website-summary');
 function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {}, onRefreshTasks = () => {}, onOpenTask = () => {}, onClearTasks = () => {} }) {
   const file = path.join(__dirname, '../workbuddy-details.html'), url = pathToFileURL(file).href;
-  let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360, action = 'trend';
+  let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360, action = 'trend', openRevision = 0;
   const alive = () => win && !win.isDestroyed();
   const report = error => { try { onError(error); } catch (_) {} };
   function clean(value) {
@@ -29,7 +29,7 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
       historyError: value?.historyError ? '积分趋势暂时无法保存。' : null,
       stale: value?.stale === true || Boolean(value?.error) };
   }
-  function send() { if (alive() && ready) win.webContents.send('pet:workbuddy-details', { ...state, appearance: getAppearance() }); }
+  function send() { if (alive() && ready) win.webContents.send('pet:workbuddy-details', { ...state, openRevision, appearance: getAppearance() }); }
   function changed(value) { if (visible === value) return; visible = value; try { onVisibilityChange(value); } catch (error) { report(error); } }
   function close() { changed(false); if (alive()) win.hide(); }
   function destroy() { const old = win; win = null; ready = false; changed(false); if (old && !old.isDestroyed()) old.destroy(); }
@@ -63,7 +63,7 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     target.on('closed', () => { if (win === target) { win = null; ready = false; changed(false); } });
     Promise.resolve(target.loadFile(file)).catch(error => { report(error); if (win === target) destroy(); });
   }
-  return { open(value) { action = ['tasks','results'].includes(value?.action) ? value.action : 'trend'; state = clean(value); try { ensure(); changed(true); reposition(); send(); if (ready && visible) win.show(); return visible; } catch (error) { report(error); destroy(); return false; } },
+  return { open(value) { openRevision++; action = ['tasks','results'].includes(value?.action) ? value.action : 'trend'; state = clean(value); try { ensure(); changed(true); reposition(); send(); if (ready && visible) win.show(); return visible; } catch (error) { report(error); destroy(); return false; } },
     update(value) { state = clean(value); if (visible) { try { send(); } catch (error) { report(error); } } },
     close, destroy, reposition, setAlwaysOnTop(value) { top = Boolean(value); if (alive()) win.setAlwaysOnTop(top, 'floating'); },
     getAction: () => action,

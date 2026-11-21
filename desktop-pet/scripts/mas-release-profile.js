@@ -17,8 +17,8 @@ function ownSigningTargets(appPath,io=fs){
  for(const child of ['Frameworks','Library/LoginItems','Resources/app.asar.unpacked'])walk(path.join(appPath,'Contents',child));
  return targets;
 }
-// Keep installed-client quota and explicitly authorized task metadata separate
-// from legacy website, bundled CLI, chat, plugin and game capabilities. Report projections
+// Keep installed-client quota, task metadata and the separately approved
+// animation hook and explicit chat consent separate from legacy website and bundled CLI capabilities. Report projections
 // below contain no provider I/O and are shared with the website channel.
 const WORKBUDDY_FILES = new Set([
   'desktop-pet/workbuddy-label.html', 'desktop-pet/workbuddy-label.css',
@@ -26,6 +26,7 @@ const WORKBUDDY_FILES = new Set([
   'desktop-pet/workbuddy-details.html', 'desktop-pet/workbuddy-details.css',
   'desktop-pet/workbuddy-details-preload.js', 'desktop-pet/workbuddy-details-renderer.js',
   'desktop-pet/lib/mas-installed-workbuddy-access.js', 'desktop-pet/lib/mas-installed-workbuddy.js',
+  'desktop-pet/lib/mas-workbuddy-chat-connection.js', 'desktop-pet/lib/workbuddy-chat.js',
   'desktop-pet/lib/workbuddy-client.js', 'desktop-pet/lib/workbuddy-helper.cjs',
   'desktop-pet/lib/workbuddy-quota.js', 'desktop-pet/lib/workbuddy-quota-status.js',
   'desktop-pet/lib/workbuddy-auth-watch.js', 'desktop-pet/lib/workbuddy-usage.js',
@@ -34,6 +35,10 @@ const WORKBUDDY_FILES = new Set([
   'desktop-pet/lib/mas-workbuddy-details.js', 'desktop-pet/lib/mas-workbuddy-quota-connection.js',
   'desktop-pet/lib/mas-workbuddy-task-access.js', 'desktop-pet/lib/workbuddy-tasks-reader.js',
   'desktop-pet/lib/workbuddy-tasks.js', 'desktop-pet/workbuddy-tasks-renderer.js',
+  'desktop-pet/lib/mas-workbuddy-event-installation.js', 'desktop-pet/lib/mas-workbuddy-task-notifications.js',
+  'desktop-pet/lib/workbuddy-desktop-task-state.js', 'desktop-pet/lib/workbuddy-desktop-event-bridge.js',
+  'desktop-pet/lib/workbuddy-guard-entry-window.js', 'desktop-pet/workbuddy-guard-entry.html',
+  'desktop-pet/workbuddy-guard-entry.css', 'desktop-pet/workbuddy-guard-entry-preload.js',
   'desktop-pet/assets/integrations/workbuddy.png'
 ]);
 function trimStaging(staging, config, io = fs) {
@@ -43,7 +48,8 @@ function trimStaging(staging, config, io = fs) {
     'desktop-pet/store-connections.css',
     'desktop-pet/store-connections-renderer.js',
     'desktop-pet/store-connections-preload.js',
-    'desktop-pet/assets/workbuddy-desktop-hook',
+    'desktop-pet/assets/workbuddy-desktop-hook/.codebuddy-plugin',
+    'desktop-pet/assets/workbuddy-desktop-hook/plugins/qiuqiu-task-events/.codebuddy-plugin',
     'desktop-pet/assets/zcode-desktop-hook',
     'desktop-pet/vendor/workbuddy-cli',
     'desktop-pet/lib/mas-plugin-install-probe.js',
@@ -60,6 +66,20 @@ function trimStaging(staging, config, io = fs) {
       }
     }
   }
+  // Global hooks need only the reviewed filter script and event declarations;
+  // no marketplace/plugin registration assets or arbitrary sibling files ship.
+  const hookRoot = 'desktop-pet/assets/workbuddy-desktop-hook';
+  const hookFiles = ['plugins/qiuqiu-task-events/scripts/emit-metadata.sh', 'plugins/qiuqiu-task-events/hooks/hooks.json'];
+  function trimHook(directory, prefix = '') {
+    const full = path.join(staging, directory); if (!io.existsSync(full)) return;
+    for (const name of io.readdirSync(full)) {
+      const relative = prefix + name, target = path.posix.join(directory, name);
+      if (hookFiles.includes(relative)) continue;
+      if (hookFiles.some(file => file.startsWith(relative + '/'))) trimHook(target, relative + '/');
+      else removed.push(target);
+    }
+  }
+  trimHook(hookRoot);
   for (const name of removed) io.rmSync(path.join(staging, name), { recursive: true, force: true });
   return removed;
 }

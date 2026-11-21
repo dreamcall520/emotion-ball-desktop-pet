@@ -276,6 +276,14 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
       assert.equal(controller.getWindow().getBounds().height, stableHeight, 'natural-height feedback converges');
       assert(measurements.length - beforeMeasurements <= 8, 'no runaway resize IPC');
       checks.push({ name: 'reply-once-stable-buttons-and-height', height: stableHeight });
+      const workbuddyDirector=createDirector();
+      const providerPayload=workbuddyDirector.offerProviderTask({provider:'workbuddy',id:7,generation:3,text:'WorkBuddy 本轮回复已完成。'},10000);
+      assert(providerPayload);
+      const workbuddyPayload=await show(providerPayload);await layout('workbuddy-completion-owned-dismiss',1);
+      await run("document.querySelector('#actions button[data-action=workbuddy-dismiss]').click()");
+      await until(()=>replies.at(-1)?.id===workbuddyPayload.id);
+      assert.deepEqual(replies.at(-1),{id:workbuddyPayload.id,action:'workbuddy-dismiss'});
+      assert.deepEqual(workbuddyDirector.respond(providerPayload.id,replies.at(-1).action,10001),{command:'provider-task',provider:'workbuddy',alertId:7,generation:3});
       const artifacts = process.env.PET_BUBBLE_ARTIFACT_DIR;
       if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
         for (const appearance of ['light', 'dark']) {

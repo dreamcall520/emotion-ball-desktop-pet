@@ -44,21 +44,56 @@ function safeTasks(value) {
     truncated: value.total > items.length, items };
 }
 
-// Run only the explicitly selected WorkBuddy component. Task metadata requires a
-// separate directory grant; no CLI bundle, shell, account copy or model request.
+function safeModels(value) {
+  if (!Array.isArray(value) || !value.length || value.length > 200) return null;
+  const seen = new Set(), models = [];
+  for (const model of value) {
+    if (!model || typeof model.id !== 'string' || !/^[a-zA-Z0-9._-]{1,100}$/.test(model.id) || seen.has(model.id) ||
+      typeof model.displayName !== 'string' || !model.displayName.trim() || model.displayName.length > 200 || model.displayName.includes('\0')) return null;
+    seen.add(model.id); models.push({ id: model.id, displayName: model.displayName });
+  }
+  return models;
+}
+function validChatPayload(payload) {
+  return typeof payload.model === 'string' && /^[a-zA-Z0-9._-]{1,100}$/.test(payload.model) &&
+    typeof payload.conversationId === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(payload.conversationId) &&
+    /^[0-9a-f]{64}$/.test(payload.expectedAccountKey || '') && Array.isArray(payload.messages) &&
+    payload.messages.length > 0 && payload.messages.length <= 100 && payload.messages.every(message =>
+      message && typeof message === 'object' && !Array.isArray(message) &&
+      Object.keys(message).every(key => ['role', 'content'].includes(key)) &&
+      ['system', 'user', 'assistant'].includes(message.role) && typeof message.content === 'string') &&
+    JSON.stringify(payload.messages).length <= 200000;
+}
+
+// Run only the explicitly selected official component. Task access and chat
+// consent are independent of the two quota grants; no CLI bundle or shell.
 function createMasInstalledWorkBuddyRunner({ access, taskAccess, fs: fileSystem = fs, spawnProcess = spawn,
+  getChatEnabled = () => false, getAuthorizedChatAccountKey = () => null, getChatGrantEpoch = () => 0,
   env = process.env, closeTimeoutMs = 6000 } = {}) {
   if (!access?.installedAppAccess?.acquire || !access?.directoryAccess?.acquire ||
     !Number.isFinite(closeTimeoutMs) || closeTimeoutMs <= 0) throw new TypeError('WorkBuddy App/account access is required');
-  return async function run(operation, payload = {}, { signal } = {}) {
+  return async function run(operation, payload = {}, { signal, onDelta } = {}) {
     const taskOperation = ['tasks', 'task-open'].includes(operation);
-    if (!['quota', 'usage', 'tasks', 'task-open'].includes(operation) || !payload || typeof payload !== 'object' || Array.isArray(payload) ||
-      Object.keys(payload).some(key => key !== 'expectedAccountKey' && !(operation === 'task-open' && key === 'id')) ||
+    const chatOperation = ['models', 'chat'].includes(operation);
+    if (!['quota', 'usage', 'tasks', 'task-open', 'account-check', 'models', 'chat'].includes(operation) || !payload || typeof payload !== 'object' || Array.isArray(payload) ||
+      Object.keys(payload).some(key => key !== 'expectedAccountKey' && !(operation === 'task-open' && key === 'id') &&
+        !(operation === 'chat' && ['model', 'messages', 'conversationId'].includes(key))) ||
       taskOperation && !/^[0-9a-f]{64}$/.test(payload.expectedAccountKey || '') ||
       operation === 'task-open' && (typeof payload.id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(payload.id)) ||
+      operation === 'chat' && !validChatPayload(payload) || onDelta !== undefined && typeof onDelta !== 'function' ||
       payload.expectedAccountKey !== undefined && !/^[0-9a-f]{64}$/.test(payload.expectedAccountKey)) throw fail('INVALID_REQUEST');
     if (signal?.aborted) throw fail('CANCELLED');
     if (taskOperation && typeof taskAccess?.acquire !== 'function') throw fail('DIRECTORY_ACCESS_REQUIRED');
+    let chatBinding = null;
+    if (chatOperation) {
+      let enabled, accountKey, epoch;
+      try { enabled = getChatEnabled(); accountKey = getAuthorizedChatAccountKey(); epoch = getChatGrantEpoch(); } catch {}
+      if (enabled !== true || !/^[0-9a-f]{64}$/.test(accountKey || '') || !Number.isSafeInteger(epoch) || epoch < 0)
+        throw fail('CHAT_AUTHORIZATION_REQUIRED');
+      if (payload.expectedAccountKey !== undefined && payload.expectedAccountKey !== accountKey) throw fail('ACCOUNT_CHANGED');
+      chatBinding = { accountKey, epoch };
+      payload = { ...payload, expectedAccountKey: accountKey };
+    }
     const leases = [];
     let child = null, exited = false, released = false, resolveExit;
     const childExit = new Promise(resolve => { resolveExit = resolve; });
@@ -67,7 +102,11 @@ function createMasInstalledWorkBuddyRunner({ access, taskAccess, fs: fileSystem 
       for (const lease of leases.slice().reverse()) { try { lease.release(); } catch {} }
     };
     const confirmExit = () => { exited = true; resolveExit(); release(); };
-    const current = () => !signal?.aborted && leases.every(lease => typeof lease.isCurrent !== 'function' || lease.isCurrent());
+    const current = () => {
+      try { return !signal?.aborted && leases.every(lease => typeof lease.isCurrent !== 'function' || lease.isCurrent()) &&
+        (!chatBinding || getChatEnabled() === true && getAuthorizedChatAccountKey() === chatBinding.accountKey && getChatGrantEpoch() === chatBinding.epoch); }
+      catch { return false; }
+    };
     const check = () => { if (!current()) throw fail('CANCELLED'); };
     async function directory(port, kind) {
       const lease = await port.acquire('workbuddy');
@@ -103,9 +142,23 @@ function createMasInstalledWorkBuddyRunner({ access, taskAccess, fs: fileSystem 
         child.on('error', () => { if (!child.pid) confirmExit(); });
         return child;
       } });
-      const result = await runner(operation, payload, { signal }); check();
+      let deltaLength = 0;
+      const result = await runner(operation, payload, { signal, onDelta: operation === 'chat' ? text => {
+        check(); deltaLength += text.length;
+        if (deltaLength > 32000) throw fail('INVALID_RESPONSE');
+        onDelta?.(text);
+      } : undefined }); check();
       if (!/^[0-9a-f]{64}$/.test(result?.accountKey || '')) throw fail('INVALID_RESPONSE');
       if (payload.expectedAccountKey !== undefined && result.accountKey !== payload.expectedAccountKey) throw fail('ACCOUNT_CHANGED');
+      if (operation === 'account-check') return { accountKey: result.accountKey };
+      if (operation === 'models') {
+        const models = safeModels(result.models); if (!models) throw fail('INVALID_RESPONSE');
+        return { accountKey: result.accountKey, models };
+      }
+      if (operation === 'chat') {
+        if (typeof result.text !== 'string' || !result.text.trim() || result.text.length > 32000) throw fail('INVALID_RESPONSE');
+        return { accountKey: result.accountKey, text: result.text };
+      }
       if (operation === 'tasks') {
         const report = safeTasks(result); if (!report) throw fail('INVALID_RESPONSE');
         return { accountKey: result.accountKey, ...report };

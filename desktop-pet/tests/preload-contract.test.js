@@ -44,9 +44,9 @@ test('气泡只允许当前普通或 Codex 固定按钮动作', () => {
     require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
       ipcRenderer: { send: (...args) => messages.push(args) } })
   });
-  for (const action of ['again', 'rest', 'codex-open', 'codex-results', 'codex-list', 'codex-dismiss', 'shell', 'https://invalid']) api.reply(1, action);
-  assert.equal(messages.length, 5);
-  assert.deepEqual(messages.map(item => item[1].action), ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss']);
+  for (const action of ['again', 'rest', 'codex-open', 'codex-results', 'codex-list', 'codex-dismiss', 'workbuddy-dismiss', 'shell', 'https://invalid']) api.reply(1, action);
+  assert.equal(messages.length, 6);
+  assert.deepEqual(messages.map(item => item[1].action), ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss', 'workbuddy-dismiss']);
   api.resize(1, 65.1, 161.1);
   assert.equal(JSON.stringify(messages.at(-1)), JSON.stringify(['pet:bubble-resize', { id: 1, height: 66, width: 162 }]));
   for (const width of [Infinity, -1, 1001, '162']) {
@@ -299,4 +299,32 @@ test('sprite mask aspect survives the real preload boundary and invalid ratios n
   assert.equal(Object.hasOwn(sent.at(-1)[1], 'aspect'), false, 'legacy mask packets remain valid');
   desktop.spriteEdgeInk(null);
   assert.equal(sent.at(-1)[1], null);
+});
+
+test('真实预加载双向保留WorkBuddy来源，三种回执拒绝未知来源且兼容旧Codex协议', () => {
+  let desktop; const sent = [], subscriptions = new Map();
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../preload.js'), 'utf8'), {
+    require: () => ({ contextBridge:{exposeInMainWorld(_name, api){desktop=api;}},
+      ipcRenderer:{send:(...args)=>sent.push(args),on:(channel,fn)=>subscriptions.set(channel,fn),removeListener:(channel)=>subscriptions.delete(channel)} })
+  });
+  const settings={source:'workbuddy',enabled:true,generation:7,pageEpoch:3,activeTaskCount:1};let received;
+  const unsubscribe=desktop.onCodexSettings(value=>{received=value;});subscriptions.get('pet:codex-settings')({},settings);
+  assert.equal(received,settings,'main-to-renderer settings retains provider and generation');
+  const ready={source:received.source,token:4,action:'hop',alertId:2,generation:received.generation,pageEpoch:received.pageEpoch,secret:'drop'};
+  desktop.codexAvailability({...received,available:true});desktop.codexMotionReady({...ready,durationMs:1340});desktop.codexSpriteComplete({...ready,spriteAction:'jump'});
+  assert.equal(JSON.stringify(sent),JSON.stringify([
+    ['pet:codex-availability',{source:'workbuddy',generation:7,pageEpoch:3,available:true}],
+    ['pet:codex-motion-ready',{source:'workbuddy',token:4,action:'hop',alertId:2,generation:7,pageEpoch:3,durationMs:1340}],
+    ['pet:codex-sprite-complete',{source:'workbuddy',token:4,action:'hop',spriteAction:'jump',alertId:2,generation:7,pageEpoch:3}]
+  ]));
+  const before=sent.length;
+  for(const source of ['other','WorkBuddy','__proto__',null,{},['workbuddy'],new String('workbuddy')]){
+    desktop.codexAvailability({...received,source,available:true});desktop.codexMotionReady({...ready,source});desktop.codexSpriteComplete({...ready,source,spriteAction:'jump'});
+  }
+  assert.equal(sent.length,before,'unknown sources cannot fall through as Codex');
+  for(const source of [undefined,'codex']){
+    desktop.codexAvailability({...received,source,available:true});desktop.codexMotionReady({...ready,source});desktop.codexSpriteComplete({...ready,source,spriteAction:'jump'});
+    assert(sent.slice(-3).every(([,packet])=>!Object.hasOwn(packet,'source')),'Codex retains its original payload');
+  }
+  unsubscribe();assert.equal(subscriptions.has('pet:codex-settings'),false);
 });

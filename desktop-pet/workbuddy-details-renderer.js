@@ -1,6 +1,6 @@
 (() => {
   const api = window.petWorkBuddyDetails, el = id => document.getElementById(id);
-  let state = {}, period = 'today', view = 'records', preference = 'system';
+  let state = {}, period = 'week', view = 'daily', preference = 'system', openRevision = null;
   const amount = value => value.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
   const system = window.matchMedia('(prefers-color-scheme: dark)');
   function theme() {
@@ -100,6 +100,9 @@
   el('details-close').addEventListener('click', () => api.close());
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !event.isComposing) { event.preventDefault(); api.close(); } });
   api.onModel(value => {
+    if (Number.isSafeInteger(value?.openRevision) && value.openRevision > 0 && value.openRevision !== openRevision) {
+      openRevision = value.openRevision; view = 'daily'; period = 'week'; window.DetailsPopovers?.closeAll();
+    }
     state = value; preference = ['light', 'dark'].includes(value.appearance) ? value.appearance : 'system'; theme();
     if (value.quotaOnly === true && value.tasksEnabled !== true) { el('task-view').hidden = true; el('quota-view').hidden = false; }
     else if (window.workBuddyTasksView?.render(value, resize)) return;

@@ -8,3 +8,7 @@
 
 #refresh-note { text-align:left; }
 #expiry-block { text-align:right; }
+
+/* Keep the data explanation close to its trigger without a large reading panel. */
+.chart-help-body { width:196px; padding:8px 10px; font-size:10px; line-height:1.45; }
+.chart-help-body li + li { margin-top:3px; }

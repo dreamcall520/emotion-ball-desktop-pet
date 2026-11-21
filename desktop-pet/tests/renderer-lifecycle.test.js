@@ -1686,3 +1686,46 @@ test('directional declarations clear when switching to an old skin or a built-in
   assert.equal(r.pet.dataset.spriteIdleFacing, undefined);
   r.windowEvents.beforeunload();
 });
+
+const workbuddyCommand = overrides => ({command:'task',source:'workbuddy',alertId:1,generation:7,pageEpoch:1,motion:'hop',kind:'completed',...overrides});
+test('WorkBuddy processing uses existing thinking cadence while Codex is disabled and both sources aggregate', () => {
+  const r=createRenderer();
+  r.codexSettings({enabled:false,generation:2});
+  r.codexSettings({source:'workbuddy',enabled:true,generation:7,activeTaskCount:1});
+  assert.equal(r.pet.dataset.codexWorking,'true');assert.equal(r.pet.dataset.codexActiveTasks,'1');
+  assert.equal(r.host.availability.at(-1).source,'workbuddy');assert.equal(r.host.availability.at(-1).generation,7);
+  r.codexSettings({enabled:true,generation:3,activeTaskCount:1});assert.equal(r.pet.dataset.codexActiveTasks,'2');
+  r.codexSettings({source:'workbuddy',enabled:false,generation:8,activeTaskCount:0});
+  assert.equal(r.pet.dataset.codexWorking,'true');assert.equal(r.pet.dataset.codexActiveTasks,'1');
+  r.windowEvents.beforeunload();
+});
+test('WorkBuddy completion owns its ready token while unrelated Codex generation and cancellation cannot clear it', () => {
+  const r=createRenderer();r.codexSettings({enabled:true,generation:1});r.codexSettings({source:'workbuddy',enabled:true,generation:7});
+  r.command(workbuddyCommand());
+  const ready=r.host.codexAcks.at(-1);assert.equal(ready?.source,'workbuddy');assert.equal(ready.generation,7);
+  r.codexSettings({enabled:false,generation:2});assert.equal(r.pet.dataset.motionOwner,'codex');
+  r.command({command:'codex-cancel',...ready,source:undefined,generation:2});assert.equal(r.pet.dataset.motionOwner,'codex');
+  r.command({command:'task-cancel',...ready,source:'workbuddy'});assert.equal(r.pet.dataset.motionOwner,'none');
+  r.codexSettings({enabled:true,generation:3});r.command(codexCommand({generation:3}));
+  assert.equal(r.host.codexAcks.length,2);assert.equal(r.host.codexAcks.at(-1).source,undefined);
+  r.codexSettings({source:'workbuddy',enabled:false,generation:8});assert.equal(r.pet.dataset.motionOwner,'codex');
+  r.windowEvents.beforeunload();
+});
+test('WorkBuddy rejects unsuccessful, stale and unknown source commands without fabricating completion', () => {
+  const r=createRenderer();r.codexSettings({source:'workbuddy',enabled:true,generation:7});
+  for(const change of [{kind:'failed'},{kind:'interrupted'},{kind:'cancelled'},{generation:6},{pageEpoch:2},{source:'other'},{motion:'sway'}])r.command(workbuddyCommand(change));
+  assert.equal(r.host.codexAcks.length,0);
+  r.command(workbuddyCommand());assert.equal(r.host.codexAcks.length,1);
+  r.frame({...r.host.codexAcks[0],frame:{done:true}});r.command(workbuddyCommand());assert.equal(r.host.codexAcks.length,1);
+  r.windowEvents.beforeunload();
+});
+test('WorkBuddy completion reuses the selected Xiaobai original sheets and readiness duration', async () => {
+  for(const [motion,action] of [['hop','jump'],['spin','happy'],['bow','spin']]) {
+    const {r,canvas}=await createDedicatedCelebrationFixture();const petId=r.pet.dataset.codexPetId;
+    r.codexSettings({source:'workbuddy',enabled:true,generation:7});r.command(workbuddyCommand({motion}));
+    for(let i=0;i<4;i++)await Promise.resolve();
+    assert.equal(canvas.dataset.codexAction,action);assert.equal(r.host.codexAcks.at(-1)?.source,'workbuddy');assert.equal(r.host.codexAcks.at(-1).durationMs,200);
+    assert.equal(r.pet.dataset.codexPetId,petId);assert.equal(r.host.motions.length,0);
+    r.frame({...r.host.codexAcks.at(-1),frame:{done:true}});assert.equal(canvas.dataset.codexAction,'idle');r.windowEvents.beforeunload();
+  }
+});

@@ -12,6 +12,10 @@ function pointPayload(point) {
   return { x: point && point.x, y: point && point.y };
 }
 
+function validTaskSource(request) {
+  return request.source === undefined || request.source === 'codex' || request.source === 'workbuddy';
+}
+
 function subscribe(channel, callback) {
   if (typeof callback !== 'function') return () => {};
   const listener = (_event, payload) => callback(payload);
@@ -55,29 +59,30 @@ contextBridge.exposeInMainWorld('petDesktop', {
       side: request.side === 'left' ? 'left' : 'right', reducedMotion: request.reducedMotion === true });
   },
   codexMotionReady: request => {
-    if (request && Number.isSafeInteger(request.token) && request.token > 0 && motionIds.has(request.action) &&
+    if (request && validTaskSource(request) && Number.isSafeInteger(request.token) && request.token > 0 && motionIds.has(request.action) &&
       Number.isSafeInteger(request.alertId) && request.alertId > 0 && Number.isSafeInteger(request.generation) && request.generation > 0 &&
       Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0) {
       ipcRenderer.send('pet:codex-motion-ready', {
+        ...(request.source === 'workbuddy' ? { source: 'workbuddy' } : {}),
         token: request.token, action: request.action, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch,
         ...(Number.isInteger(request.durationMs) && request.durationMs >= 10 && request.durationMs <= 60000 ? { durationMs: request.durationMs } : {})
       });
     }
   },
   codexSpriteComplete: request => {
-    if (request && Number.isSafeInteger(request.token) && request.token > 0 &&
+    if (request && validTaskSource(request) && Number.isSafeInteger(request.token) && request.token > 0 &&
         ['hop', 'spin', 'bow'].includes(request.action) && ['jump', 'spin', 'happy'].includes(request.spriteAction) &&
         Number.isSafeInteger(request.alertId) && request.alertId > 0 &&
         Number.isSafeInteger(request.generation) && request.generation > 0 &&
         Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0) {
-      ipcRenderer.send('pet:codex-sprite-complete', { token: request.token, action: request.action,
+      ipcRenderer.send('pet:codex-sprite-complete', { ...(request.source === 'workbuddy' ? { source: 'workbuddy' } : {}), token: request.token, action: request.action,
         spriteAction: request.spriteAction, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch });
     }
   },
   codexAvailability: request => {
-    if (request && Number.isSafeInteger(request.generation) && request.generation > 0 &&
+    if (request && validTaskSource(request) && Number.isSafeInteger(request.generation) && request.generation > 0 &&
       Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0 && typeof request.available === 'boolean') {
-      ipcRenderer.send('pet:codex-availability', { generation: request.generation, pageEpoch: request.pageEpoch, available: request.available });
+      ipcRenderer.send('pet:codex-availability', { ...(request.source === 'workbuddy' ? { source: 'workbuddy' } : {}), generation: request.generation, pageEpoch: request.pageEpoch, available: request.available });
     }
   },
   say: event => {

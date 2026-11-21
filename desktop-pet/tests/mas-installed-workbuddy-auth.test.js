@@ -58,3 +58,56 @@ test('account changes during a personal usage response cannot publish the prior 
     { code: 'ACCOUNT_CHANGED', accountKey: first });
   } finally { global.fetch = originalFetch; }
 });
+test('account-check verifies only current local identity with no HTTP/model operation or secret result',async()=>{
+ const previous=global.fetch;let networkCalls=0,reads=0;global.fetch=async()=>{networkCalls++;throw Error('network must not run');};
+ const key='a'.repeat(64),auth={accountKey:key,uid:'synthetic-private',scope:'personal',token:'synthetic-private'};
+ try{
+  const result=await execute('account-check',{expectedAccountKey:key},()=>{},{authReader:()=>{reads++;return{...auth};}});
+  assert.deepEqual(result,{accountKey:key});assert.ok(reads>=2);assert.equal(networkCalls,0);
+  await assert.rejects(execute('account-check',{expectedAccountKey:'b'.repeat(64)},()=>{},{authReader:()=>({...auth})}),{code:'ACCOUNT_CHANGED'});
+  let index=0;await assert.rejects(execute('account-check',{expectedAccountKey:key},()=>{},{authReader:()=>({...auth,accountKey:index++?'b'.repeat(64):key})}),{code:'ACCOUNT_CHANGED'});
+ }finally{global.fetch=previous;}
+});
+
+test('personal model and chat requests verify the expected local account before any HTTP', async () => {
+  const previous = global.fetch; let calls = 0;
+  global.fetch = async () => { calls++; throw Error('HTTP must not run for the wrong account'); };
+  try {
+    for (const operation of ['models', 'chat']) await assert.rejects(execute(operation,
+      { expectedAccountKey: 'b'.repeat(64) }, () => {}, { authReader: () => ({ scope: 'personal', accountKey: 'a'.repeat(64),
+        uid: 'synthetic-user', domain: 'www.workbuddy.cn', token: 'synthetic-token-not-real' }) }), { code: 'ACCOUNT_CHANGED' });
+    assert.equal(calls, 0);
+  } finally { global.fetch = previous; }
+});
+test('personal chat rechecks local identity after model HTTP, on every SSE delta, and before final success', async () => {
+  const previous = global.fetch, key = 'a'.repeat(64), { Readable } = require('node:stream');
+  try {
+    for (const change of ['models', 'delta', 'terminal']) {
+      let current = key, posts = 0; const deltas = [];
+      const event = text => 'data: ' + JSON.stringify({ choices: [{ delta: { content: text } }] }) + '\n\n';
+      const terminal = 'data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }) + '\n\n';
+      global.fetch = async input => {
+        const pathname = new URL(input).pathname;
+        if (pathname === '/v3/config') {
+          if (change === 'models') current = 'b'.repeat(64);
+          return { ok: true, status: 200, headers: { get: () => 'application/json' }, body: Readable.from([Buffer.from(JSON.stringify({ code: 0,
+            data: { agents: [{ name: 'cli', models: ['auto'] }], models: [{ id: 'auto', name: '自动' }] } }))]) };
+        }
+        assert.equal(pathname, '/v2/chat/completions'); posts++;
+        return { ok: true, status: 200, headers: { get: () => 'text/event-stream' }, body: (async function* () {
+          yield Buffer.from(event('已核验的合成片段'));
+          if (change === 'delta') current = 'b'.repeat(64);
+          yield Buffer.from(event('后续片段') + terminal);
+          if (change === 'terminal') current = 'b'.repeat(64);
+        })() };
+      };
+      await assert.rejects(execute('chat', { expectedAccountKey: key, model: 'auto', conversationId: 'synthetic-turn',
+        messages: [{ role: 'user', content: 'synthetic input, not sent outside this fixture' }] }, text => deltas.push(text),
+      { authReader: () => ({ scope: 'personal', accountKey: current, uid: 'synthetic-user', domain: 'www.workbuddy.cn', token: 'synthetic-token-not-real' }) }),
+      { code: 'ACCOUNT_CHANGED', accountKey: key });
+      assert.equal(posts, change === 'models' ? 0 : 1);
+      if (change === 'models') assert.deepEqual(deltas, []);
+      if (change === 'delta') assert.deepEqual(deltas, ['已核验的合成片段']);
+    }
+  } finally { global.fetch = previous; }
+});

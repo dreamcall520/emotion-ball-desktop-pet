@@ -1,5 +1,5 @@
 #!/bin/sh
-# REVIEW DRAFT ONLY. WorkBuddy runs this source-side filter after explicit opt-in.
+# WorkBuddy runs this source-side filter only after explicit opt-in.
 # Full hook stdin exists only in bounded local process memory. Never read a
 # transcript, print the raw input, put it in argv, or save it to a temporary file.
 # macOS system tools only; users do not install Node/Python or operate Terminal.
@@ -20,6 +20,11 @@ if [ -n "$generation" ]; then valid_id "$generation" || exit 0; fi
 case "$event" in
   SessionStart) phase='session-opened';;
   UserPromptSubmit) phase='submitted';;
+  PreToolUse) phase='tool-started';;
+  PostToolUse) phase='tool-finished';;
+  PostToolUseFailure) phase='tool-failed';;
+  PermissionRequest) phase='permission-requested';;
+  PermissionDenied) phase='permission-denied';;
   Stop) phase='stop-observed';;
   StopFailure) phase='failure-observed';;
   FinalStop) phase='final-stop-observed';;
@@ -31,10 +36,35 @@ if [ -n "$generation" ]; then
 else
   payload=$(printf '{"version":1,"sessionId":"%s","event":"%s","phase":"%s"}' "$session" "$event" "$phase")
 fi
-# Versioned Desktop 5.9.3 FinalStop occurs after Stop continuation decisions.
+# Use source time to reject old/out-of-order events without forwarding a clock
+# from provider content. Activity IDs distinguish real repeated tool heartbeats.
+seconds=$(/bin/date +%s) || exit 0
+case "$seconds" in ''|*[!0-9]*) exit 0;; esac
+occurred=$((seconds * 1000))
+payload=$(printf '%s,"occurredAt":%s}' "${payload%?}" "$occurred")
+case "$event" in PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|PermissionDenied)
+  event_id=$(/usr/bin/uuidgen) || exit 0
+  valid_id "$event_id" || exit 0
+  payload=$(printf '%s,"eventId":"%s"}' "${payload%?}" "$event_id")
+;; esac
+continuation_type=$(printf '%s' "$input" | /usr/bin/plutil -type is_internal_continuation - 2>/dev/null) || continuation_type=''
+if [ "$event" = 'UserPromptSubmit' ]; then
+  case "$continuation_type" in
+    bool|boolean) continuation=$(field is_internal_continuation) || exit 0; payload=$(printf '%s,"isInternalContinuation":%s}' "${payload%?}" "$continuation");;
+    '') ;;
+    *) exit 0;;
+  esac
+fi
+recovery_type=$(printf '%s' "$input" | /usr/bin/plutil -type is_truncation_recovery - 2>/dev/null) || recovery_type=''
+recovery=''
+case "$recovery_type" in
+  bool|boolean) recovery=$(field is_truncation_recovery) || exit 0; payload=$(printf '%s,"isTruncationRecovery":%s}' "${payload%?}" "$recovery");;
+  '') ;;
+  *) exit 0;;
+esac
+# Current Desktop 5.11.3 FinalStop follows Stop continuation decisions.
 # Truncation recovery and unknown/missing reasons must never imply completion.
 if [ "$event" = 'FinalStop' ]; then
-  recovery=$(field is_truncation_recovery) || recovery=''
   reason=''
   case "$recovery" in ''|false)
     candidate=$(string_field final_stop_reason) || candidate=''
@@ -46,7 +76,7 @@ unset input
 if [ "${QIUQIU_HOOK_DRY_RUN:-}" = '1' ]; then printf '%s\n' "$payload"; exit 0; fi
 # The reviewed App must generate this private local capability after native
 # approval. It is deliberately absent from this draft: nothing is sent by default.
-root=${CODEBUDDY_PLUGIN_ROOT:-}
+root=${QIUQIU_METADATA_ROOT:-${CODEBUDDY_PLUGIN_ROOT:-}}
 [ -n "$root" ] && [ -d "$root" ] || exit 0
 config="$root/receiver.json"
 [ -f "$config" ] && [ ! -L "$config" ] || exit 0

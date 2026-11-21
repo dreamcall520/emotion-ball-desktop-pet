@@ -235,11 +235,11 @@ test('错SHA、仅有Darwin归档或链接缓存明确拒绝，在任何编译�
  assert.deepEqual(validateMasRuntimeCache(config),{used:false,validated:false});
 });
 
-test('首发分发配置不携带厂商组件，不授予外部任务插件执行写权限',()=>{
+test('商店分发配置不携带厂商组件，动画提醒具备必要的本机监听和脚本写权限',()=>{
  const config={...configFor(pkg,env).config,releaseProfile:'mas-first'};
  assert.deepEqual(packagerOptions('/root',config,'/stage','/icon').extraResource,[]);
- assert.equal(entitlementsFor(config).main['com.apple.security.files.user-selected.executable'],undefined);
- assert.equal(entitlementsFor(config).main['com.apple.security.network.server'],undefined,'first-release stdio Codex transport requires no inbound network server');
+ assert.equal(entitlementsFor(config).main['com.apple.security.files.user-selected.executable'],true,'required only for the approved local WorkBuddy hook');
+ assert.equal(entitlementsFor(config).main['com.apple.security.network.server'],true,'required for the fixed loopback WorkBuddy metadata receiver');
 });
 
  test('首发正式流水线可以无厂商helper产物，并验证自有Electron/native/loginhelper签名',async t=>{
