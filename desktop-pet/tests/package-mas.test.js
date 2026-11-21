@@ -119,6 +119,7 @@ function buildFixture(t, overrides = {}) {
     makeIcon() { calls.push(['icon']); return '/synthetic/icon.icns'; },
     buildWeatherLocation() { calls.push(['weather']); },
     buildPluginHost() { calls.push(['plugin-native']); },
+    validateBuildTools() { calls.push(['validate-build-tools']); },
     validateResources:async()=>{calls.push(['resources-validated']);},
     async packager(options) { calls.push(['packager']); captured.options = options; const output = path.join(options.out, '球球桌宠-mas-' + options.arch); const app=path.join(output,'球球桌宠.app');fs.mkdirSync(app,{recursive:true});if(options.extraResource.length)resources(app,options.arch);else{fs.mkdirSync(path.join(app,'Contents/Resources'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Frameworks/Fixture Helper.app'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Library/LoginItems/Fixture Login Helper.app'),{recursive:true});const native=path.join(app,'Contents/Resources/app.asar.unpacked/desktop-pet/native');fs.mkdirSync(native,{recursive:true});fs.writeFileSync(path.join(native,'weather-location.node'),'native');}captured.app=app;return [output]; },
     signing: { async sign(options){calls.push(['sign']);captured.sign=options;if(options.binaries.length){fs.appendFileSync(options.binaries[0],'-signed');fs.appendFileSync(path.join(options.app,'Contents/Resources/qiuqiu-workbuddy/node_modules/fixture/native.node'),'-signed');}else assert.equal(fs.existsSync(path.join(options.app,'Contents/Resources/qiuqiu-codex')),false);},async flat(options) { calls.push(['flat']); captured.flat = options; fs.writeFileSync(options.pkg, 'synthetic-not-a-package'); } },
@@ -133,6 +134,25 @@ test('缺配置或证书就明确停止，绝不降级Darwin/adhoc或先下载�
   h.dep.command = (name, args) => { h.calls.push([name, args]); return '0 valid identities found'; };
   await assert.rejects(buildMas({ root: h.root, env: h.env }, h.dep), { code: 'MAS_DISTRIBUTION_IDENTITY_UNAVAILABLE' });
   assert.equal(h.calls.some(([name]) => ['weather', 'icon', 'staging', 'packager', 'flat'].includes(name)), false);
+});
+
+test('正式MAS复用必需工具与SDK预检，不因只有CLT而强求Xcode版本', async t => {
+  const h=buildFixture(t),run=h.dep.command;
+  h.dep.command=(name,args)=>{if(name==='xcodebuild')throw Error('Full Xcode unavailable');return run(name,args);};
+  const result=await buildMas({root:h.root,env:h.env},h.dep);
+  const names=h.calls.map(([name])=>name);
+  assert.equal(result.signedDistributionPackage,true);assert.equal(result.profileValidated,true);assert.equal(result.signedEntitlementsValidated,true);
+  assert.ok(names.includes('validate-build-tools'));
+  assert.ok(names.indexOf('validate-build-tools')<names.indexOf('weather'));
+  assert.ok(names.indexOf('validate-build-tools')<names.indexOf('plugin-native'));
+  assert.ok(names.indexOf('validate-build-tools')<names.indexOf('packager'));
+  assert.equal(names.includes('xcodebuild'),false);
+});
+
+test('正式MAS缺少真实必需工具时仍在任何编译打包签名前停止', async t => {
+  const h=buildFixture(t,{validateBuildTools(){throw Object.assign(Error(),{code:'MAS_DEV_BUILD_TOOLS_UNAVAILABLE'});}});
+  await assert.rejects(buildMas({root:h.root,env:h.env},h.dep),{code:'MAS_DEV_BUILD_TOOLS_UNAVAILABLE'});
+  assert.equal(h.calls.some(([name])=>['weather','plugin-native','icon','staging','packager','sign','flat'].includes(name)),false);
 });
 
 test('不在macOS或native架构不匹配时明确停止，x64不会混入arm64天气组件', async t => {

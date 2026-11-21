@@ -163,7 +163,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   // arm64 .node into x64 or vice versa; cross-architecture build is not implied.
   if ((dependencies.hostArch || process.arch) !== config.arch) throw failure('MAS_MATCHING_NATIVE_BUILD_HOST_REQUIRED');
   const run = dependencies.command || command;
-  run('xcodebuild', ['-version']);
+  (dependencies.validateBuildTools || require('./mas-development-tools').validateMasDevelopmentTools)({ run, io });
   let profileInfo;
   try { const stat = io.lstatSync(config.profile); if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4 * 1024 * 1024) throw new Error(); }
   catch (_) { throw failure('MAS_PROFILE_UNAVAILABLE'); }
