@@ -2269,7 +2269,7 @@ function enqueueWorkBuddyAlert(alert) {
   recordWorkBuddyReminder(alert.kind);
   if (alert.kind !== 'completed') return;
   workbuddyAlertQueue.push({ id: alert.id, generation: alert.epoch, kind: 'completed', motion: 'hop',
-    text: 'WorkBuddy 已回复', expiresAt: Date.now() + 30000 });
+    text: 'WorkBuddy 有新结果', expiresAt: Date.now() + 30000 });
   workbuddyAlertQueue = workbuddyAlertQueue.slice(-16);
   pumpWorkBuddyPresentation();
 }
