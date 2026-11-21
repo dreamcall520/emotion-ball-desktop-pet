@@ -360,7 +360,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   });
   vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../main.js'), 'utf8'), context);
   await flush();
-  const pet = windows[0];
+  const pet = vm.runInContext('petWindow', context);
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { clipboard, weather, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,

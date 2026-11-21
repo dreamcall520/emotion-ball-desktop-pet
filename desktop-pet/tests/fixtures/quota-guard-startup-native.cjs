@@ -48,7 +48,9 @@ async function ready(label) {
   throw Error(label + ' did not become playable');
 }
 app.whenReady().then(async () => {
-  guard = createQuotaGuardWindow({ BrowserWindow: Window, screen, getAnchor: () => ({ x: 300, y: 300, width: 108, height: 108 }),
+  let anchor = process.env.QIUQIU_GUARD_TIMING_NO_ANCHOR === '1' ? null : { x: 300, y: 300, width: 108, height: 108 };
+  guard = createQuotaGuardWindow({ BrowserWindow: Window, screen, getAnchor: () => anchor,
+    getObstacles: () => { assert.ok(anchor, 'prewarm must not need pet obstacle placement'); return []; },
     prepareWindow: win => popups.preparePopup(win), onPresentation: value => { presentationCount++; stamp('presentation-ready', value); }, onError: () => stamp('window-error') });
   let prewarm = null;
   if (process.env.QIUQIU_GUARD_TIMING_PREWARM === '1') {
@@ -59,6 +61,7 @@ app.whenReady().then(async () => {
     assert.equal(guard.getWindow().isVisible(), false); assert.equal(guard.isVisible(), false); assert.equal(popups.isBlocked(), false);
     assert.equal(prewarm.state.spritesReady, true); assert.equal(prewarm.state.round, 0); assert.equal(prewarm.state.quota, null); assert.equal(prewarm.state.time, 0);
   }
+  anchor = { x: 300, y: 300, width: 108, height: 108 };
   stamp('open-practice'); expectedPresentations++; guard.open({ state: 'ready', items: [], practice: true });
   await ready('practice-playable');
   const first = await snapshot(guard.getWindow());

@@ -17,6 +17,19 @@ test('无效设置回退默认值', () => {
   );
 });
 
+test('WorkBuddy提醒首次默认开启，手动关闭经保存和商店配置恢复后保持关闭', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-wb-reminder-preference-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  assert.equal(loadSettings(file).workbuddyNotificationsEnabled, true);
+  saveSettings(file, { workbuddyNotificationsEnabled: false });
+  const saved = loadSettings(file);
+  assert.equal(saved.workbuddyNotificationsEnabled, false);
+  assert.equal(require('../lib/mas-first-release').settingsForFirstRelease(saved).workbuddyNotificationsEnabled, false);
+  saveSettings(file, { ...saved, workbuddyNotificationsEnabled: true });
+  assert.equal(loadSettings(file).workbuddyNotificationsEnabled, true);
+});
+
 test('无主题设置默认晴空蓝，保留已选主题及形象外观偏好', t => {
   assert.equal(DEFAULTS.uiTheme, 'blue');
   assert.equal(normalizeSettings({}).uiTheme, 'blue');

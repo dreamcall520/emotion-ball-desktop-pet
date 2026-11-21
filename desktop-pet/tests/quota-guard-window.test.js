@@ -199,6 +199,20 @@ test('prewarm only loads hidden local graphics and presents the actual chosen ga
   f.guard.close();f.guard.open(model());await flush();assert.deepEqual(shown,[{practice:true,ready:true},{practice:false,ready:true}]);assert.equal(win.loadCalls,1);
   f.guard.destroy();
 });
+test('startup prewarm needs no pet anchor or obstacle placement and later open uses the real pet bounds', async () => {
+  let placementAllowed=false;
+  const f=fixture({getObstacles:()=>{assert.equal(placementAllowed,true,'prewarm must not ask for pet placement');return[];}});
+  f.anchor=null;
+  const warming=f.guard.prewarm(),win=f.guard.getWindow();assert.ok(win,'startup prewarm must create its hidden window before the pet exists');
+  assert.equal(win.isVisible(),false);assert.equal(f.guard.isVisible(),false);
+  const hidden=win.getBounds();assert(hidden.x>=AREA.x&&hidden.y>=AREA.y&&hidden.x+hidden.width<=AREA.x+AREA.width&&hidden.y+hidden.height<=AREA.y+AREA.height);
+  assert(hidden.width<=420&&hidden.height<=410);assert.deepEqual(f.visibility,[]);assert.deepEqual(win.sent,[]);
+  win.webContents.emit('did-finish-load');assert.equal(await warming,true);assert.deepEqual(f.errors,[]);assert.deepEqual(win.sent,[]);
+  f.anchor={x:600,y:300,width:108,height:108};placementAllowed=true;
+  assert.equal(f.guard.open({state:'ready',practice:true,items:[]}),true);await flush();
+  assert.equal(win.isVisible(),true);assert.equal(win.getBounds().height,310);assert.notDeepEqual(win.getBounds(),hidden);
+  assert.deepEqual(f.errors,[]);f.guard.destroy();
+});
 test('an actual open during prewarm loading supersedes the decode-only request and still presents its chosen model', async () => {
   const requests=[];
   const f=fixture({renderReady:code=>{requests.push(code);return Promise.resolve(true);}});

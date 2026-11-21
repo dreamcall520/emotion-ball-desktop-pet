@@ -102,9 +102,17 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
       }).catch(error => { if (presenting === request) { report(error); destroy(); } });
     } catch (error) { report(error); destroy(); }
   }
-  function ensure() {
+  function ensure(preparing = false) {
     if (alive()) return;
-    win = new BrowserWindow({ ...bounds(), show: false, frame: false, transparent: true,
+    let initialBounds;
+    if (preparing) {
+      // Startup warming precedes the pet window. A hidden decoding surface only
+      // needs a valid screen rectangle; it must not run adjacent pet placement.
+      const area = screen.getPrimaryDisplay().workArea;
+      const width = Math.min(420, area.width), height = Math.min(410, area.height);
+      initialBounds = { x: Math.round(area.x + (area.width - width) / 2), y: Math.round(area.y + (area.height - height) / 2), width, height };
+    } else initialBounds = bounds();
+    win = new BrowserWindow({ ...initialBounds, show: false, frame: false, transparent: true,
       backgroundColor: '#00000000', hasShadow: false, resizable: false, useContentSize: true,
       fullscreenable: false, minimizable: false, maximizable: false, skipTaskbar: true,
       title: '球球守护战', webPreferences: { preload: path.join(__dirname, '../quota-guard-preload.js'),
@@ -137,7 +145,7 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
       if (visible) return Promise.resolve(ready);
       if (prewarmFlight && alive()) return prewarmFlight;
       try {
-        ensure(); const target = win, loading = loaded;
+        ensure(true); const target = win, loading = loaded;
         prewarmFlight = Promise.resolve(loading).then(ok => ok && win === target && !target.isDestroyed() && !visible
           ? target.webContents.executeJavaScript('window.quotaGuardView.whenReady(null)') : false)
           .then(ok => ok === true && win === target && !target.isDestroyed())

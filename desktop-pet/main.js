@@ -2526,6 +2526,7 @@ function setQuotaFunEnabled(value) {
   if (!settings || typeof value !== 'boolean' || isQuitting) return false;
   settings = saveSettings(settingsFile, { ...settings, quotaFunEnabled: value });
   if (!value) quotaGuard?.close();
+  else if (FIRST_RELEASE) void quotaGuard?.prewarm().catch(error => writeError('守护战准备', error));
   syncQuotaFunEntry(); refreshTrayMenu(); return true;
 }
 
@@ -5326,7 +5327,7 @@ async function bootstrap() {
       pomodoroWindows?.sync();
     },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('守护战窗口', error) });
-  void quotaGuard.prewarm().catch(error => writeError('守护战准备', error));
+  if (FIRST_RELEASE && settings.quotaFunEnabled !== false) void quotaGuard.prewarm().catch(error => writeError('守护战准备', error));
   if(!FIRST_RELEASE) apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getSuppressed: () => quotaPopups.isBlocked(),
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
