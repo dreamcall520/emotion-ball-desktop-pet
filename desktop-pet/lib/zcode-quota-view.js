@@ -101,6 +101,8 @@ function safeDeviceTasks(snapshot) {
   for (const source of sources) for (const row of source) {
     const id = text(row?.id); if (!id) continue;
     const turnId = text(row.turnId) || null;
+    const name = text(row.title).trim();
+    if ((!name || name === '未命名任务') && !turnId) continue;
     const projected = { id, title: text(row.title) || '未命名任务', turnId,
       state: turnId && ['completed', 'failed', 'interrupted'].includes(row.state) ? row.state : 'unknown',
       updatedAt: validTime(row.updatedAt) ? row.updatedAt : null };

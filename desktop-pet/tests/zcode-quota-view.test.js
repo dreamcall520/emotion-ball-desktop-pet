@@ -59,6 +59,13 @@ test('MAS device cache cannot become a verified running count and paid periods r
  assert.deepEqual(model.items.map(item=>item.label),['5 小时额度','每周额度']);
  assert.equal(model.activity.runningCount,null);
 });
+test('MAS task list omits empty cache placeholders while preserving named unknown and untitled verified turns',()=>{
+ const model=buildZcodeDetailsModel({...snapshot,tasks:{scope:'authorized-device-cache',items:[
+  {id:'empty',title:'未命名任务',state:'unknown',updatedAt:now},
+  {id:'named',title:'待核实的本机任务',state:'unknown',updatedAt:now}],results:[
+  {id:'actual',title:'未命名任务',turnId:'verified-turn',state:'completed',updatedAt:now}]}},{action:'tasks'},now);
+ assert.deepEqual(model.tasks.map(t=>t.id).sort(),['actual','named']);assert.equal(model.activity.runningCount,null);
+});
 test('MAS recent device tasks merge exact terminal records with current items and keep the latest turn per task',()=>{
  const source={...snapshot,tasks:{state:'unknown',scope:'authorized-device-cache',items:[
    {id:'same',title:'旧索引',state:'unknown',updatedAt:now-3000},
@@ -74,7 +81,7 @@ test('device task read flags never imply completion, and unknown cache states ca
  const model=buildZcodeDetailsModel({...snapshot,tasks:{state:'connected',scope:'authorized-device-cache',items:[
    {id:'unread',title:'仅未读标记',state:'unknown',unread:true,updatedAt:now},
    {id:'active',state:'active',liveVerified:true,turnId:'turn-active',updatedAt:now-1}],
-   results:[{id:'no-turn',state:'completed',updatedAt:now-2},{id:'done',state:'completed',turnId:'turn-done',updatedAt:now-3}]}},{action:'tasks'},now);
+   results:[{id:'no-turn',title:'无本轮证据的缓存状态',state:'completed',updatedAt:now-2},{id:'done',state:'completed',turnId:'turn-done',updatedAt:now-3}]}},{action:'tasks'},now);
  assert.deepEqual(model.tasks.map(row=>row.state),['unknown','unknown','unknown','completed']);assert.equal(model.activity.runningCount,null);
 });
 test('MAS task merging stays scope-gated and does not change website task or result behavior',()=>{
