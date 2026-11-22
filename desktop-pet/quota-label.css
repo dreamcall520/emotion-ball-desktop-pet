@@ -939,16 +939,17 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 .empty-status-text { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 10px; line-height: 12px; }
 
 
-/* Only the standard folded card uses a source watermark and compact quota tags. */
+/* Only the standard folded card uses the compact source identity and quota tags. */
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] { padding:5px 8px; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-header { display:block; position:absolute; left:8px; top:7px; width:42px; height:44px; margin:0; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .compact-product { position:relative; width:100%; height:100%; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product { display:block; position:absolute; inset:0; overflow:visible; color:var(--quota-muted); font-size:10px; line-height:12px; font-weight:650; letter-spacing:0; }
-#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon { position:absolute; top:1px; left:4px; opacity:.13; }
-#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-source="codex"] #compact-product .source-icon { opacity:.26; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon { position:absolute; top:0; left:11px; opacity:1; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-source="codex"] #compact-product .source-icon { top:5px; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon,
-#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon img { width:34px; height:34px; }
-#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .collapsed-source-name { position:absolute; bottom:11px; left:0; width:42px; text-align:center; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon img { width:20px; height:20px; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .collapsed-source-name { position:absolute; top:22px; bottom:auto; left:0; width:42px; text-align:center; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-source="codex"] .collapsed-source-name { top:27px; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-period { position:absolute; left:0; bottom:0; width:42px; padding:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border:0; background:none; box-shadow:none; color:var(--quota-subtle); font-size:7px; line-height:10px; font-weight:500; text-align:center; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-period:empty,
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .compact-collapse,
