@@ -1,0 +1,8 @@
+/* Numbered reading sections for the Mac App Store privacy page only. */
+.privacy-document-main h3 { margin: 26px 0 8px; color: var(--text); font-size: 16px; font-weight: 600; line-height: 1.6; letter-spacing: 0; }
+.privacy-clause-number { display: inline-block; min-width: 1.35em; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.privacy-document-main h3 + p { margin-top: 0; }
+.privacy-document-main h2 + h3 { margin-top: 18px; }
+@media (max-width: 680px) {
+  .privacy-document-main h3 { margin-top: 22px; }
+}
