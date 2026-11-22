@@ -81,6 +81,11 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
     } catch (error) { report(error); return false; }
     finally { enabling = false; }
   }
+  async function suspend() {
+    if (closed) return;
+    ++revision; enabled = false; cancelConsent(); card.destroy(); details.close();
+    await service.setEnabled(false); await onEnabledChanged(false); onChange();
+  }
   function setPreference(key, value) {
     if (closed || !enabled || !['zcodeQuotaAlwaysVisible', 'zcodeQuotaLabelSize', 'zcodeQuotaFunEnabled'].includes(key)) return false;
     const next = key === 'zcodeQuotaLabelSize' ? ['compact', 'standard'].includes(value) ? value : null : typeof value === 'boolean' ? value : null;
@@ -144,7 +149,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
       { id: 'zcode-refresh', label: '刷新 ZCode 状态', enabled, click: () => { void service.refresh(); } }
     ] };
   }
-  return { menu, sync, setEnabled, setPreference, openDetails, getSnapshot: service.getSnapshot, refresh: service.refresh,
+  return { menu, sync, setEnabled, suspend, setPreference, openDetails, getSnapshot: service.getSnapshot, refresh: service.refresh,
     start: () => enabled ? service.setEnabled(true) : undefined,
     isEnabled: () => enabled && !closed,
     isDetailsVisible: () => details.isVisible(),

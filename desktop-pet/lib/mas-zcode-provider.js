@@ -12,7 +12,7 @@ const title = value => typeof value === 'string' && value.trim() ? value.replace
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 
 // Only follows resources inside the explicitly selected .zcode directory.
-// The parent path is an identity/cipher context string, never an additional read grant.
+// The parent path identifies the data base, never an additional read grant or cipher identity.
 function scopedFiles(directory) {
   if (typeof directory !== 'string' || !path.isAbsolute(directory) || path.basename(directory) !== '.zcode') throw fail('ZCODE_DIRECTORY_REQUIRED');
   const root = fs.realpathSync(directory);
@@ -73,25 +73,106 @@ function capabilities() {
       reason: '现有聊天需要外部 ZCode 运行时；尚未验证可供球球使用的官方授权聊天接口，未改用独立付费 API。' }
   };
 }
-function createMasZcodeProvider({ directoryAccess, credentialContext = {}, fetch: fetchImpl = globalThis.fetch,
+function createMasZcodeProvider({ directoryAccess, installedAppAccess, run, credentialContext = {}, fetch: fetchImpl = globalThis.fetch,
   Database = require('node:sqlite').DatabaseSync, now = Date.now } = {}) {
-  if (!directoryAccess || typeof directoryAccess.withAccess !== 'function') throw new TypeError('Explicit directoryAccess.withAccess is required');
+  if (!directoryAccess || typeof directoryAccess.withAccess !== 'function' && typeof directoryAccess.acquire !== 'function') throw new TypeError('Explicit directory access is required');
+  if (installedAppAccess !== undefined && typeof installedAppAccess?.acquire !== 'function') throw new TypeError('Explicit installed App access is required');
+  if (run !== undefined && typeof run !== 'function') throw new TypeError('An official ZCode runner is required');
+  function safeAccount(value) {
+    const kind = value?.selection?.kind ?? null, scope = kind === 'team-coding-plan' ? 'team' : 'personal';
+    if (!/^[a-f0-9]{64}$/.test(value?.accountKey || '') || !['zai', 'bigmodel'].includes(value?.family)
+      || kind !== null && !['start-plan', 'individual-coding-plan', 'team-coding-plan'].includes(kind)
+      || value?.selection?.scope !== scope) throw fail('ZCODE_INVALID_RESPONSE');
+    return { accountKey: value.accountKey, family: value.family, selection: { kind, scope },
+      ...Object.fromEntries(['hasJwtToken', 'hasAccessToken', 'hasCodingPlanKey', 'hasDeviceMid']
+        .filter(key => typeof value[key] === 'boolean').map(key => [key, value[key]])) };
+  }
+  function safeUsage(value) {
+    const validTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000;
+    const rows = Array.isArray(value?.buckets) ? value.buckets : value?.windows;
+    if (value?.state !== 'connected' || !Array.isArray(rows) || rows.length > 64 || !validTime(value.updatedAt)) throw fail('ZCODE_INVALID_RESPONSE');
+    const buckets = rows.map(row => {
+      if (typeof row?.id !== 'string' || !row.id.startsWith('zcode:') || row.id.length > 400
+        || !Number.isFinite(row.remaining) || row.remaining < 0 || row.remaining > 100 || !validTime(row.resetsAt)
+        || !(row.windowMinutes === null || Number.isFinite(row.windowMinutes) && row.windowMinutes > 0)
+        || !(row.periodStart === null || validTime(row.periodStart))) throw fail('ZCODE_INVALID_RESPONSE');
+      const projected = { sourceId: 'zcode', id: row.id, bucketId: row.id, remaining: row.remaining,
+        resetsAt: row.resetsAt, windowMinutes: row.windowMinutes, periodStart: row.periodStart };
+      for (const key of ['source', 'planId', 'entitlementId', 'label', 'planName', 'model', 'unit', 'meter', 'periodKind']) {
+        if (typeof row[key] === 'string') projected[key] = row[key].replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 160);
+      }
+      for (const key of ['expiresAt', 'total', 'remainingUnits']) {
+        if (row[key] === null || Number.isFinite(row[key]) && row[key] >= 0) projected[key] = row[key];
+      }
+      return projected;
+    });
+    const states = new Set(['connected', 'empty', 'unavailable', 'error']);
+    return { state: 'connected', buckets, windows: buckets, updatedAt: value.updatedAt,
+      modelIds: (Array.isArray(value.modelIds) ? value.modelIds : []).filter(value => typeof value === 'string' && value.length <= 160).slice(0, 64),
+      balanceState: states.has(value.balanceState) ? value.balanceState : 'unavailable',
+      paidState: states.has(value.paidState) ? value.paidState : 'unavailable' };
+  }
   function accountFrom(files) {
-    const credentialHome = credentialContext.home || path.dirname(files.root);
-    const username = credentialContext.username || os.userInfo().username;
+    // The official cipher uses the OS account's home, even when ZCode stores
+    // data in a custom base directory or Qiuqiu runs inside an App container.
+    const user = os.userInfo();
+    const credentialHome = credentialContext.home || user.homedir;
+    const username = credentialContext.username || user.username;
     const secret = credentialContext.secret || `zcode-credential-fallback:${credentialContext.platform || os.platform()}:${credentialHome}:${username}`;
     return readZcodeAccount({ home: path.dirname(files.root), env: {
       ZCODE_DATA_BASE_DIR: path.dirname(files.root), ZCODE_CREDENTIAL_SECRET: secret
-    }, fs: files.io });
+    }, fs: files.io, requireScopedApiKey: true });
   }
-  async function scoped(operation) {
-    return directoryAccess.withAccess('zcode', directory => operation(scopedFiles(directory)));
+  const check = (lease, signal) => {
+    if (signal?.aborted || typeof lease?.isCurrent === 'function' && !lease.isCurrent()) throw fail('DISCONNECTED');
+  };
+  async function scoped(operation, { signal } = {}) {
+    check(null, signal);
+    if (typeof directoryAccess.acquire !== 'function') return directoryAccess.withAccess('zcode', async directory => {
+      check(null, signal); const result = await operation(scopedFiles(directory)); check(null, signal); return result;
+    });
+    const lease = await directoryAccess.acquire('zcode');
+    try {
+      if (!lease || typeof lease.release !== 'function') throw fail('ZCODE_DIRECTORY_REQUIRED');
+      check(lease, signal); const result = await operation(scopedFiles(lease.directory)); check(lease, signal); return result;
+    } finally { if (typeof lease?.release === 'function') lease.release(); }
   }
-  const readAccount = () => scoped(files => accountFrom(files));
+  async function withAppVersion(operation, { signal } = {}) {
+    if (!installedAppAccess) return operation(undefined);
+    check(null, signal);
+    const lease = await installedAppAccess.acquire('zcode');
+    try {
+      check(lease, signal);
+      const directory = lease?.directory;
+      if (typeof lease?.release !== 'function' || typeof directory !== 'string' || !path.isAbsolute(directory)
+        || path.basename(directory) !== 'ZCode.app') throw fail('ZCODE_APP_VERSION_UNAVAILABLE');
+      const root = fs.realpathSync(directory), stat = fs.lstatSync(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink() || root !== path.resolve(directory)) throw fail('ZCODE_APP_VERSION_UNAVAILABLE');
+      const plist = fs.realpathSync(path.join(root, 'Contents/Info.plist'));
+      if (!inside(root, plist)) throw fail('ZCODE_APP_VERSION_UNAVAILABLE');
+      const info = fs.statSync(plist);
+      if (!info.isFile() || info.size > 1024 * 1024) throw fail('ZCODE_APP_VERSION_UNAVAILABLE');
+      const version = /<key>CFBundleShortVersionString<\/key>\s*<string>(\d{1,4}(?:\.\d{1,4}){1,3})<\/string>/.exec(fs.readFileSync(plist, 'utf8'))?.[1];
+      if (!version) throw fail('ZCODE_APP_VERSION_UNAVAILABLE');
+      check(lease, signal); const result = await operation(version); check(lease, signal); return result;
+    } finally { if (typeof lease?.release === 'function') lease.release(); }
+  }
+  const readAccount = async (options = {}) => {
+    check(null, options.signal);
+    if (!run) return scoped(files => accountFrom(files), options);
+    const account = safeAccount(await run('account-check', {}, { signal: options.signal }));
+    check(null, options.signal); return account;
+  };
   function verifyAccount(expected, latest) {
     if (expected && expected.accountKey !== latest.accountKey) throw fail('ZCODE_LOGIN_REQUIRED');
   }
   async function fetchUsage(account, options = {}) {
+    if (run) {
+      const latest = await readAccount(options); verifyAccount(account, latest);
+      const result = await run('usage', { expectedAccountKey: latest.accountKey }, { signal: options.signal, now: options.now ?? now });
+      check(null, options.signal); verifyAccount(latest, result); verifyAccount(latest, await readAccount(options));
+      return safeUsage(result);
+    }
     return scoped(async files => {
       const latest = accountFrom(files); verifyAccount(account, latest);
       const readOnlyFetch = (url, init = {}) => {
@@ -99,20 +180,21 @@ function createMasZcodeProvider({ directoryAccess, credentialContext = {}, fetch
         if (typeof fetchImpl !== 'function') throw fail('ZCODE_NETWORK_ERROR');
         return fetchImpl(url, init);
       };
-      const result = await fetchZcodeUsage(latest, { ...options, now: options.now ?? now,
+      const result = await withAppVersion(appVersion => fetchZcodeUsage(latest, { ...options, now: options.now ?? now,
+        ...(appVersion ? { appVersion } : {}),
         fetch: readOnlyFetch, resolveTeamAccount: async selected => {
           // Never mint a project token or change an account from this read-only adapter.
           if (isTeam(selected) && !selected.codingPlanApiKey) throw fail('ZCODE_TEAM_KEY_MISSING');
           return selected;
-        } });
+        } }), options);
       verifyAccount(latest, accountFrom(files));
       return result;
-    });
+    }, options);
   }
   async function readTasks({ account, now: observedAt = now(), signal } = {}) {
-    return scoped(files => {
+    const latest = await readAccount({ signal }); verifyAccount(account, latest);
+    const result = await scoped(files => {
       if (signal?.aborted) throw fail('DISCONNECTED');
-      const latest = accountFrom(files); verifyAccount(account, latest);
       const observed = typeof observedAt === 'function' ? observedAt() : observedAt;
       const caches = [], errors = [];
       for (const [relative, query, runtime] of [
@@ -132,7 +214,9 @@ function createMasZcodeProvider({ directoryAccess, credentialContext = {}, fetch
         activity: { runningCount: null, unreadCount: null }, source: 'zcode-authorized-device-cache',
         scope: 'authorized-device-cache', accountAttributionVerified: false, partial: true,
         ...(errors.length ? { code: 'ZCODE_TASK_CACHE_UNAVAILABLE' } : {}) };
-    });
+    }, { signal });
+    verifyAccount(latest, await readAccount({ signal }));
+    return result;
   }
   async function read() {
     const account = await readAccount();

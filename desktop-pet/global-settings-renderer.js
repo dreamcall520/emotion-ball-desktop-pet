@@ -16,6 +16,7 @@
   }
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false, codexTab = 'codex';
   let latestSleepState, quotaSectionRequested = false, workbuddyNotice = null, workbuddyTasksNotice = null, workbuddyNotificationsNotice = null;
+  let zcodeNotice = null;
   const quotaCardsView = () => 'quota-cards';
   const isApiView = view => ['api', 'openai-api', '/codex-menu/openai-api-menu'].includes(view);
   const descriptions = {
@@ -314,9 +315,10 @@
       if (!enable) return apiSections;
       const storeCodex = category.id === '/codex-menu' && snapshot.firstReleaseConnection;
       const storeWorkbuddy = category.id === 'workbuddy-settings' && snapshot.firstReleaseWorkbuddyConnection;
-      if (storeCodex && !storeCodex.connected || storeWorkbuddy && !storeWorkbuddy.connected) return [];
-      const sections = storeCodex || storeWorkbuddy ? [] : [{ ...category, heading: '启用联动', children: [enable] }];
-      if (!storeCodex && !storeWorkbuddy && enable.checked !== true) return sections.concat(apiSections);
+      const storeZcode = category.id === '/zcode-menu' && snapshot.firstReleaseZcodeConnection;
+      if (storeCodex && !storeCodex.connected || storeWorkbuddy && !storeWorkbuddy.connected || storeZcode && !storeZcode.connected) return [];
+      const sections = storeCodex || storeWorkbuddy || storeZcode ? [] : [{ ...category, heading: '启用联动', children: [enable] }];
+      if (!storeCodex && !storeWorkbuddy && !storeZcode && enable.checked !== true) return sections.concat(apiSections);
       const children = category.children.filter(child => child !== enable && child !== apiGroup &&
         (!storeCodex || !/\/codex-(?:status|tasks-open|trend-open)$/.test(child.id)));
       if (category.id === 'workbuddy-settings') return sections.concat([
@@ -338,6 +340,13 @@
       sections.push(storeWorkbuddySection());
       if (snapshot.firstReleaseWorkbuddyConnection.connected === true && snapshot.firstReleaseWorkbuddyConnection.tasks) sections.push(storeWorkbuddyTasksSection(snapshot.firstReleaseWorkbuddyConnection.tasks));
       if (snapshot.firstReleaseWorkbuddyConnection.connected === true && snapshot.firstReleaseWorkbuddyConnection.notifications) sections.push(storeWorkbuddyNotificationsSection(snapshot.firstReleaseWorkbuddyConnection.notifications));
+      count++;
+    }
+    if (snapshot.firstReleaseZcodeConnection && (query ? '启用联动 本机连接 zcode 授权 额度 余额 趋势 任务 动画 提醒 聊天 解除连接'.includes(query) : selected === '/zcode-menu')) {
+      sections.push(storeZcodeSection());
+      if (snapshot.firstReleaseZcodeConnection.connected) {
+        sections.push(storeZcodeCapabilitySection('tasks'),storeZcodeCapabilitySection('notifications'));
+      }
       count++;
     }
     for (const category of displayed) {
@@ -497,6 +506,63 @@
       section.append(disclosure);
     }
     return section;
+  }
+
+  function storeZcodeSection() {
+    const state = snapshot.firstReleaseZcodeConnection, connected = state.connected === true;
+    const section = el('section','',connected ? 'group store-connected-group' : 'group');
+    section.append(el('h3','启用联动'));
+    const row = el('div','',connected ? 'row store-connected-row' : 'row'), info = el('div'), identity = el('div','','store-codex-identity');
+    const icon=el('img');icon.alt='';icon.src='assets/integrations/zcode.png';
+    const status=el('span',busy?'正在处理连接…':connected?'已连接':'未连接','store-codex-state');status.setAttribute('role','status');if(connected)status.dataset.connected='';
+    identity.append(icon,el('span','本机 ZCode','row-title'),status);info.append(identity);
+    if(!connected)info.append(el('p','连接后可查看当前官方账号的套餐额度和趋势。','description store-codex-summary'));
+    const button=el('button',connected?'解除连接':'连接',connected?'action':'action store-codex-primary');button.type='button';button.disabled=busy;button.dataset.action='store-zcode-connection';
+    button.onclick=()=>void manageStoreZcode(connected?'disconnect':'app');row.append(info,button);section.append(row);
+    const note=zcodeNotice||(['error','needs-authorization'].includes(state.status)?state.message:null);
+    if(note){const box=el('div','','store-codex-error');box.append(el('p',note,'description'));section.append(box);}
+    section.append(el('p',state.chat?.message || '官方套餐尚不能用于球球普通聊天；请在 ZCode 中使用。','description'));
+    if(!connected){
+      const disclosure=el('div','','store-codex-disclosure'),scope=el('dl');disclosure.append(el('h4','授权说明'));
+      for(const [name,description]of [['访问范围','访问你选择的 ZCode 应用和账号目录。'],['功能用途','只读查询官方套餐额度，按来源分别展示趋势。'],['任务提醒','任务读取和动画提醒分别授权，可单独撤销。'],['解除连接','停止联动并撤销球球保存的本地授权。']])scope.append(el('dt',name),el('dd',description));
+      disclosure.append(scope);section.append(disclosure);
+    }
+    return section;
+  }
+  function storeZcodeCapabilitySection(kind) {
+    const state=snapshot.firstReleaseZcodeConnection[kind]||{},tasks=kind==='tasks',authorized=tasks?state.authorized===true:state.enabled===true;
+    const section=el('section','','group');section.dataset[tasks?'zcodeTasks':'zcodeNotifications']='';section.append(el('h3',tasks?'本机任务':'动画提醒'));
+    const row=el('div','','row'),info=el('div');info.append(el('p',tasks?'仅读任务名称、状态和更新时间，不读取聊天正文。':'任务处理中或有本轮新结果时，球球主动提醒。','description'));
+    info.append(el('p',tasks?'任务来自授权目录，可能包含其他账号留下的记录。':state.message||'仅观察本机新任务，不把停止事件当作完成。','description'));
+    const button=el('button',authorized?(tasks?'撤销授权':'关闭提醒'):(tasks?'授权任务':'开启提醒'),'action');button.type='button';button.disabled=busy;button.dataset.action='store-zcode-'+kind;
+    button.onclick=()=>void manageStoreZcode(tasks?(authorized?'tasks-revoke':'tasks-authorize'):(authorized?'notifications-disable':'notifications-enable'));
+    row.append(info,button);section.append(row);return section;
+  }
+  async function manageStoreZcode(action) {
+    if(busy)return;busy=true;request++;
+    try{
+      let result;
+      if(action==='app'){
+        if(await confirmStoreCodex('连接本机应用',['使用本机 ZCode 查询当前官方账号额度。'],'允许使用此应用',{target:'ZCode',path:'本机应用'})!=='confirm')return;
+        result=await api.zcodeConnection('app');
+        if(result?.status!=='app-authorized'){zcodeNotice=result?.status==='cancelled'?null:'请选择已安装的 ZCode.app。';return;}
+        const terms=[['本机连接','只读套餐额度，体验和付费来源分别展示。','沿用本机登录，不复制或展示凭据，可随时断开。'],['任务提醒','任务与动画分别授权，不自动发送模型消息。','官方套餐暂不能用于球球普通聊天。']];
+        if(await confirmStoreCodex('授权 ZCode 联动',[],'同意并选择目录',{terms})!=='confirm'){await api.zcodeConnection('cancel');return;}
+        result=await api.zcodeConnection('account');
+        if(result?.status!=='stored'){zcodeNotice=result?.status==='cancelled'?null:'请选择 ZCode 账号目录，保留系统预选的位置。';return;}
+        action='connect';
+      }else{
+        const copy={disconnect:['解除 ZCode 连接？',['停止额度查询、任务读取和动画提醒，撤销本地授权。'],'解除连接'],
+          'tasks-authorize':['授权 ZCode 本机任务',['复用已授权目录，只读任务名称、状态和更新时间。','这些是本机记录，不能按当前登录账号隔离。'],'同意读取任务'],
+          'tasks-revoke':['撤销任务授权？',['停止读取任务，额度查询和独立动画提醒保持。'],'撤销授权'],
+          'notifications-enable':['开启 ZCode 动画提醒',['在所选目录安装球球的事件脚本，备份原设置。','事件输入只在本机过滤，仅传任务标识和阶段。','不读取聊天正文；新建 ZCode 任务后生效。'],'同意并选择目录'],
+          'notifications-disable':['关闭动画提醒？',['停止接收事件，移除球球添加的 Hook，保留其他设置。'],'关闭提醒']}[action];
+        if(copy&&await confirmStoreCodex(...copy)!=='confirm')return;
+      }
+      result=await api.zcodeConnection(action);if(result?.snapshot)snapshot=result.snapshot;
+      zcodeNotice=['error','invalid-app','invalid-directory','needs-authorization','needs-connection'].includes(result?.status)?result.message||'连接未完成，请检查官方登录后重试。':null;
+    }catch(_){zcodeNotice='ZCode 操作未完成，请重试。';}
+    finally{busy=false;render();void refresh();}
   }
 
   const workbuddyLinkTerms = [
@@ -774,6 +840,7 @@
       const serialized = JSON.stringify(value);
       if (last !== serialized) { const reconnect = !snapshot && value.initialView === 'codex-reconnect', authorizeTasks = !snapshot && value.initialView === 'workbuddy-tasks-authorization', authorizeChat = !snapshot && value.initialView === 'workbuddy-chat-authorization'; if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
         else if (!snapshot && ['/codex-menu', 'codex-reconnect'].includes(value.initialView)) selected = '/codex-menu';
+        else if (!snapshot && value.initialView === '/zcode-menu') selected = '/zcode-menu';
         else if (!snapshot && ['workbuddy-settings','/workbuddy-enabled','workbuddy-tasks-authorization','workbuddy-chat-authorization'].includes(value.initialView)) selected = 'workbuddy-settings';
         else if (!snapshot && value.initialView === 'feedback') selected = 'feedback';
         else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
@@ -800,11 +867,11 @@
     }
     if (view === 'quota-cards') { selected = quotaCardsView(snapshot); quotaSectionRequested = true; apiSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); return; }
     if (view === '/api-balance-menu') { selected = view; apiSectionRequested = false; quotaSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); document.querySelector('main').scrollTop = 0; return; }
-    if (view !== '/codex-menu' && view !== 'shortcuts' && view !== 'feedback' && !isApiView(view)) return;
+    if (view !== '/codex-menu' && view !== '/zcode-menu' && view !== 'shortcuts' && view !== 'feedback' && !isApiView(view)) return;
     apiSectionRequested = isApiView(view); if (apiSectionRequested) codexTab = 'api';
     selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;
     $('search-toggle').setAttribute('aria-expanded', 'false');
-    render(); if (view === 'shortcuts' || view === '/codex-menu') document.querySelector('main').scrollTop = 0;
+    render(); if (view === 'shortcuts' || view === '/codex-menu' || view === '/zcode-menu') document.querySelector('main').scrollTop = 0;
   });
   function updateSleepStatus(badge) {
     const state = snapshot?.petSleepState;

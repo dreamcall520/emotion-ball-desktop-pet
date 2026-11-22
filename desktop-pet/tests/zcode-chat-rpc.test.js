@@ -177,3 +177,34 @@ test('weather context adds only bounded data before original ZCode user text', a
   assert.equal((content.match(/雨/g) || []).length, 1000); assert(content.endsWith('  带伞吗  '));
   await h.rpc.close();
 });
+
+function strictOfficialHarness({ kind = 'individual-coding-plan', balance = 100, personal, jwtToken = 'synthetic-jwt' } = {}) {
+  const requests = [], account = { accountKey: 'official-account', accountId: 'user', family: 'zai', jwtToken,
+    accessToken: 'synthetic-oauth', codingPlanApiKey: 'synthetic-plan-key', selection: { kind }, ...(personal ? { personal } : {}) };
+  const officialRelease = { revision: 1, config: { providerConfigRules: { providerRules: [
+    ...release.config.providerConfigRules.providerRules,
+    { providerId: 'account:zai-individual-coding-plan', config: { builtinModelIds: ['GLM-5.3-Flash'] } }
+  ] } } };
+  const rpc = createZcodeChatRpc({ workspaceDir: '/chat', officialOnly: true, strictOfficialSelection: true,
+    readAccount: () => account, resolveTeamAccount: async value => value,
+    fetchUsage: async () => ({ buckets: [{ source: 'zcode-plan', remaining: balance }], paidState: 'connected' }),
+    prepareRuntime: async () => ({ binary: '/selected/zcode.cjs', env: {}, release: officialRelease, builtinPath: '/builtin.json' }),
+    createProtocol: () => ({ start: async () => {}, close: async () => {}, request: async (method, params) => { requests.push({ method, params }); return {}; } }) });
+  return { rpc, requests };
+}
+test('MAS strict official selection keeps the chosen paid source even with trial balance', async () => {
+  const h = strictOfficialHarness(); await h.rpc.start();
+  const models = await h.rpc.listModels(); assert.ok(models.every(row => row.id.startsWith('zcode-individual-coding-plan-')));
+  assert.deepEqual(Object.keys(h.requests.find(row => row.method === 'provider/updateAccountConfig').params.providers), ['account:zai-individual-coding-plan']); await h.rpc.close();
+});
+test('MAS strict official source never falls back to paid quota or a configured custom catalog', async () => {
+  const personal = { hasConfigured: true, scope: 'custom', catalog: [{ id: 'custom-model' }], runtimeConfig: {} };
+  const h = strictOfficialHarness({ kind: 'start-plan', balance: 0, personal }); await h.rpc.start();
+  await assert.rejects(h.rpc.listModels(), { code: 'MODELS_UNAVAILABLE' });
+  assert.equal(h.requests.some(row => ['provider/updateAccountConfig', 'provider/refreshRegistry'].includes(row.method)), false); await h.rpc.close();
+});
+test('current official OAuth identity permits a zero-model runtime probe without claiming usable chat credentials', async () => {
+  const h = strictOfficialHarness({ jwtToken: null }); await h.rpc.start();
+  assert.equal((await h.rpc.readAccount()).authenticated, true);
+  assert.deepEqual(h.requests.map(row => row.method), ['runtime/capabilities']); await h.rpc.close();
+});

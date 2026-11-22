@@ -1688,6 +1688,30 @@ test('directional declarations clear when switching to an old skin or a built-in
 });
 
 const workbuddyCommand = overrides => ({command:'task',source:'workbuddy',alertId:1,generation:7,pageEpoch:1,motion:'hop',kind:'completed',...overrides});
+test('ZCode thinking aggregates with WorkBuddy and Codex without clearing their active turns', () => {
+  const r=createRenderer();
+  r.codexSettings({enabled:true,generation:2,activeTaskCount:1});
+  r.codexSettings({source:'workbuddy',enabled:true,generation:7,activeTaskCount:1});
+  r.codexSettings({source:'zcode',enabled:true,generation:9,activeTaskCount:1});
+  assert.equal(r.pet.dataset.codexActiveTasks,'3');
+  assert.equal(r.host.availability.at(-1).source,'zcode');
+  r.codexSettings({source:'zcode',enabled:false,generation:10,activeTaskCount:0});
+  assert.equal(r.pet.dataset.codexActiveTasks,'2');assert.equal(r.pet.dataset.codexWorking,'true');
+  r.windowEvents.beforeunload();
+});
+test('ZCode result motion preserves its identity across unrelated source cancellation and rejects failed turns', () => {
+  const r=createRenderer();r.codexSettings({enabled:true,generation:2});
+  r.codexSettings({source:'workbuddy',enabled:true,generation:7});r.codexSettings({source:'zcode',enabled:true,generation:9});
+  const packet={command:'task',source:'zcode',alertId:1,generation:9,pageEpoch:1,motion:'hop',kind:'completed'};
+  for(const kind of ['failed','interrupted','cancelled'])r.command({...packet,kind});
+  assert.equal(r.host.codexAcks.length,0);
+  r.command(packet);const ready=r.host.codexAcks.at(-1);assert.equal(ready.source,'zcode');
+  r.command({command:'task-cancel',...ready,source:'workbuddy',generation:7});
+  assert.equal(r.pet.dataset.motionOwner,'codex');
+  r.codexSettings({source:'workbuddy',enabled:false,generation:8});assert.equal(r.pet.dataset.motionOwner,'codex');
+  r.command({command:'task-cancel',...ready});assert.equal(r.pet.dataset.motionOwner,'none');
+  r.windowEvents.beforeunload();
+});
 test('WorkBuddy processing uses existing thinking cadence while Codex is disabled and both sources aggregate', () => {
   const r=createRenderer();
   r.codexSettings({enabled:false,generation:2});

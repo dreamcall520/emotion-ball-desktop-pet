@@ -13,7 +13,7 @@ function pointPayload(point) {
 }
 
 function validTaskSource(request) {
-  return request.source === undefined || request.source === 'codex' || request.source === 'workbuddy';
+  return request.source === undefined || request.source === 'codex' || request.source === 'workbuddy' || request.source === 'zcode';
 }
 
 function subscribe(channel, callback) {
@@ -63,7 +63,7 @@ contextBridge.exposeInMainWorld('petDesktop', {
       Number.isSafeInteger(request.alertId) && request.alertId > 0 && Number.isSafeInteger(request.generation) && request.generation > 0 &&
       Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0) {
       ipcRenderer.send('pet:codex-motion-ready', {
-        ...(request.source === 'workbuddy' ? { source: 'workbuddy' } : {}),
+        ...(['workbuddy','zcode'].includes(request.source) ? { source: request.source } : {}),
         token: request.token, action: request.action, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch,
         ...(Number.isInteger(request.durationMs) && request.durationMs >= 10 && request.durationMs <= 60000 ? { durationMs: request.durationMs } : {})
       });
@@ -75,14 +75,14 @@ contextBridge.exposeInMainWorld('petDesktop', {
         Number.isSafeInteger(request.alertId) && request.alertId > 0 &&
         Number.isSafeInteger(request.generation) && request.generation > 0 &&
         Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0) {
-      ipcRenderer.send('pet:codex-sprite-complete', { ...(request.source === 'workbuddy' ? { source: 'workbuddy' } : {}), token: request.token, action: request.action,
+      ipcRenderer.send('pet:codex-sprite-complete', { ...(['workbuddy','zcode'].includes(request.source) ? { source: request.source } : {}), token: request.token, action: request.action,
         spriteAction: request.spriteAction, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch });
     }
   },
   codexAvailability: request => {
     if (request && validTaskSource(request) && Number.isSafeInteger(request.generation) && request.generation > 0 &&
       Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0 && typeof request.available === 'boolean') {
-      ipcRenderer.send('pet:codex-availability', { ...(request.source === 'workbuddy' ? { source: 'workbuddy' } : {}), generation: request.generation, pageEpoch: request.pageEpoch, available: request.available });
+      ipcRenderer.send('pet:codex-availability', { ...(['workbuddy','zcode'].includes(request.source) ? { source: request.source } : {}), generation: request.generation, pageEpoch: request.pageEpoch, available: request.available });
     }
   },
   say: event => {

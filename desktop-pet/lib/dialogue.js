@@ -215,15 +215,15 @@ class DialogueDirector {
   }
 
   offerProviderTask(alert, nowMs, durationMs = 8000) {
-    if (!this.enabled || alert?.provider !== 'workbuddy' || !Number.isFinite(nowMs) ||
+    if (!this.enabled || !['workbuddy','zcode'].includes(alert?.provider) || !Number.isFinite(nowMs) ||
       !Number.isSafeInteger(alert.id) || !Number.isSafeInteger(alert.generation) ||
       !validCodexText(alert.text) || !Number.isFinite(durationMs) || durationMs <= 0) return null;
     this._expire(nowMs);
     if (this._current) return null;
     const id = this._nextId++;
     durationMs = Math.min(12000, durationMs);
-    const actions = [{ id: 'workbuddy-dismiss', label: '知道啦' }];
-    this._current = { id, event: 'provider-task', provider: 'workbuddy', sourceAlertId: alert.id,
+    const actions = [{ id: alert.provider + '-dismiss', label: '知道啦' }];
+    this._current = { id, event: 'provider-task', provider: alert.provider, sourceAlertId: alert.id,
       sourceGeneration: alert.generation, actions, priority: -1, expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
     return { id, text: alert.text, actions: actions.map(action => ({ ...action })), durationMs };

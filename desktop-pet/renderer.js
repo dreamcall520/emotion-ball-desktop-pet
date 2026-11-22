@@ -70,8 +70,8 @@
   let lastDoubleMotion = null;
   let codexEnabled = false;
   let focusQuiet = false;
-  const taskProviders = { codex: {enabled:false,generation:0,activeTaskCount:0,lastAlertId:0}, workbuddy: {enabled:false,generation:0,activeTaskCount:0,lastAlertId:0} };
-  const taskSource = packet => packet?.source === undefined ? 'codex' : ['codex','workbuddy'].includes(packet.source) ? packet.source : null;
+  const taskProviders = { codex: {enabled:false,generation:0,activeTaskCount:0,lastAlertId:0}, workbuddy: {enabled:false,generation:0,activeTaskCount:0,lastAlertId:0}, zcode: {enabled:false,generation:0,activeTaskCount:0,lastAlertId:0} };
+  const taskSource = packet => packet?.source === undefined ? 'codex' : ['codex','workbuddy','zcode'].includes(packet.source) ? packet.source : null;
   let codexPageEpoch = 0;
   let lastAvailability = null;
   let codexActiveTaskCount = 0;
@@ -163,7 +163,7 @@
     const signature = JSON.stringify([available,codexPageEpoch,providers.map(([source,state])=>[source,state.generation])]);
     if (signature === lastAvailability) return;
     lastAvailability = signature;
-    for (const [source,state] of providers) desktop.codexAvailability({ generation: state.generation, pageEpoch: codexPageEpoch, available, ...(source === 'workbuddy' ? {source} : {}) });
+    for (const [source,state] of providers) desktop.codexAvailability({ generation: state.generation, pageEpoch: codexPageEpoch, available, ...(source !== 'codex' ? {source} : {}) });
   }
 
   function stopCodexThinkingCadence() {
@@ -255,10 +255,10 @@
     const source = taskSource(request), provider = taskProviders[source];
     const motion = InteractionMotion.getMotion(request.motion);
     if (!provider?.enabled || !canShowCodex() || request.generation !== provider.generation || request.pageEpoch !== codexPageEpoch || !Number.isSafeInteger(request.alertId) ||
-      request.alertId <= provider.lastAlertId || !motion || source === 'workbuddy' && (request.kind !== 'completed' || !['hop','spin','bow'].includes(request.motion))) return;
+      request.alertId <= provider.lastAlertId || !motion || ['workbuddy','zcode'].includes(source) && (request.kind !== 'completed' || !['hop','spin','bow'].includes(request.motion))) return;
     provider.lastAlertId = request.alertId;
     const spriteAction=ball.getCodexSpriteAction?.(motion.id);
-    activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex', ...(source === 'workbuddy' ? {source} : {}), ...(spriteAction?{spriteAction}:{}),
+    activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex', ...(source !== 'codex' ? {source} : {}), ...(spriteAction?{spriteAction}:{}),
       alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch };
     if (spriteAction === 'spin') {
       const width = innerWidth, height = innerHeight, frameWidth = codexPet.sheets.spin.frameWidth || 192;
@@ -281,7 +281,7 @@
           : preparedBall.getActionDuration?.(motion.id, 'codex')) : undefined;
 
       desktop.codexMotionReady({ token: preparedMotion.token, action: motion.id,
-        alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch, ...(source === 'workbuddy' ? {source} : {}),
+        alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch, ...(source !== 'codex' ? {source} : {}),
         ...(Number.isInteger(durationMs) && durationMs >= 10 && durationMs <= 60000 ? { durationMs } : {}) });
     };
     // 完整原画先就绪，宿主再开始同长计时，首播慢加载也不会截断动作。
@@ -1176,8 +1176,8 @@
   }
 
   function runCommand(command) {
-    if (command?.command === 'task-cancel' && command.source === 'workbuddy') { cancelCodex(command); return; }
-    if (command?.command === 'task' && command.source === 'workbuddy') { startCodex(command); return; }
+    if (command?.command === 'task-cancel' && ['workbuddy','zcode'].includes(command.source)) { cancelCodex(command); return; }
+    if (command?.command === 'task' && ['workbuddy','zcode'].includes(command.source)) { startCodex(command); return; }
     if (command?.command === 'codex-cancel') { cancelCodex(command); return; }
     if (command?.command === 'codex') { startCodex(command); return; }
     if (command === 'stop') {

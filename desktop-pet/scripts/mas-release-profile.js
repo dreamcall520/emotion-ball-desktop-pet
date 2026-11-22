@@ -7,7 +7,7 @@ const resourceNames = config => isFirstRelease(config) ? [] : ['qiuqiu-codex', '
 const providerRuntimeMetadata=config=>({codexRuntime:isFirstRelease(config)?'user-installed':'bundled',bundled:!isFirstRelease(config),installedProviderAcceptance:false});
 function assertNoBundledProviders(appPath,config,io=fs){
  if(!isFirstRelease(config))return;
- for(const provider of ['qiuqiu-codex','qiuqiu-workbuddy'])if(io.existsSync(path.join(appPath,'Contents/Resources',provider)))throw Object.assign(Error('Unexpected bundled provider runtime'),{code:'MAS_FIRST_BUNDLED_RUNTIME_PRESENT'});
+ for(const provider of ['qiuqiu-codex','qiuqiu-workbuddy','qiuqiu-zcode','ZCode.app','glm'])if(io.existsSync(path.join(appPath,'Contents/Resources',provider)))throw Object.assign(Error('Unexpected bundled provider runtime'),{code:'MAS_FIRST_BUNDLED_RUNTIME_PRESENT'});
 }
 // Own native modules and native LoginItem/Electron helpers remain signed and
 // verified even when no vendor executable is bundled. Never follow symlinks.
@@ -50,8 +50,9 @@ function trimStaging(staging, config, io = fs) {
     'desktop-pet/store-connections-preload.js',
     'desktop-pet/assets/workbuddy-desktop-hook/.codebuddy-plugin',
     'desktop-pet/assets/workbuddy-desktop-hook/plugins/qiuqiu-task-events/.codebuddy-plugin',
-    'desktop-pet/assets/zcode-desktop-hook',
     'desktop-pet/vendor/workbuddy-cli',
+    'desktop-pet/vendor/zcode',
+    'desktop-pet/vendor/zcode-runtime',
     'desktop-pet/lib/mas-plugin-install-probe.js',
     'desktop-pet/lib/mas-helper-probe.js'
   ];
@@ -68,18 +69,17 @@ function trimStaging(staging, config, io = fs) {
   }
   // Global hooks need only the reviewed filter script and event declarations;
   // no marketplace/plugin registration assets or arbitrary sibling files ship.
-  const hookRoot = 'desktop-pet/assets/workbuddy-desktop-hook';
-  const hookFiles = ['plugins/qiuqiu-task-events/scripts/emit-metadata.sh', 'plugins/qiuqiu-task-events/hooks/hooks.json'];
-  function trimHook(directory, prefix = '') {
+  function trimHook(directory, hookFiles, prefix = '') {
     const full = path.join(staging, directory); if (!io.existsSync(full)) return;
     for (const name of io.readdirSync(full)) {
       const relative = prefix + name, target = path.posix.join(directory, name);
       if (hookFiles.includes(relative)) continue;
-      if (hookFiles.some(file => file.startsWith(relative + '/'))) trimHook(target, relative + '/');
+      if (hookFiles.some(file => file.startsWith(relative + '/'))) trimHook(target, hookFiles, relative + '/');
       else removed.push(target);
     }
   }
-  trimHook(hookRoot);
+  trimHook('desktop-pet/assets/workbuddy-desktop-hook', ['plugins/qiuqiu-task-events/scripts/emit-metadata.sh', 'plugins/qiuqiu-task-events/hooks/hooks.json']);
+  trimHook('desktop-pet/assets/zcode-desktop-hook', ['plugins/qiuqiu-zcode-task-events/scripts/emit-metadata.sh', 'plugins/qiuqiu-zcode-task-events/hooks/hooks.json']);
   for (const name of removed) io.rmSync(path.join(staging, name), { recursive: true, force: true });
   return removed;
 }

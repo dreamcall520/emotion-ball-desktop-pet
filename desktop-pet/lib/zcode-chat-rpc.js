@@ -22,9 +22,12 @@ function readJson(file) {
   if (!stat.isFile() || stat.size > 4 * 1024 * 1024 || stat.isSymbolicLink()) throw fail('UNSAFE_CONFIG');
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
-async function prepareZcodeRuntime({ workspaceDir, account, env = process.env, home = os.homedir() }) {
+async function prepareZcodeRuntime({ workspaceDir, account, env = process.env, home = os.homedir(), appDirectory, runtimeHome }) {
   if (!path.isAbsolute(workspaceDir) || workspaceDir.includes('\0')) throw fail('INVALID_INPUT');
-  const app = ['/Applications/ZCode.app', path.join(home, 'Applications/ZCode.app')].find(candidate =>
+  if (appDirectory !== undefined && (typeof appDirectory !== 'string' || !path.isAbsolute(appDirectory) || appDirectory.includes('\0'))) throw fail('INVALID_INPUT');
+  if (runtimeHome !== undefined && (typeof runtimeHome !== 'string' || !path.isAbsolute(runtimeHome) || runtimeHome.includes('\0') ||
+    !path.resolve(runtimeHome).startsWith(path.resolve(workspaceDir) + path.sep))) throw fail('UNSAFE_CONFIG');
+  const app = (appDirectory ? [appDirectory] : ['/Applications/ZCode.app', path.join(home, 'Applications/ZCode.app')]).find(candidate =>
     fs.existsSync(path.join(candidate, 'Contents/Resources/glm/zcode.cjs')));
   if (!app) throw fail('MISSING');
   const binary = path.join(app, 'Contents/Resources/glm/zcode.cjs');
@@ -43,12 +46,24 @@ async function prepareZcodeRuntime({ workspaceDir, account, env = process.env, h
     if (value.revision > release.revision) { release = value; builtinPath = candidate; }
   } catch {}
   // Hooks merge with OR in ZCode; a local false cannot disable enabled global hooks.
-  const globalConfig = path.join(home, '.zcode/cli/config.json');
-  if (fs.existsSync(globalConfig) && readJson(globalConfig).hooks?.enabled === true) throw fail('UNSAFE_CONFIG');
+  const globalConfig = path.join(runtimeHome || home, '.zcode/cli/config.json');
+  if (!runtimeHome && fs.existsSync(globalConfig) && readJson(globalConfig).hooks?.enabled === true) throw fail('UNSAFE_CONFIG');
   for (const target of [workspaceDir, path.join(workspaceDir, '.git'), path.join(workspaceDir, '.zcode'), path.join(workspaceDir, 'runtime'), path.join(workspaceDir, '.zcode/config.json'), path.join(workspaceDir, '.zcode/provider-config.json')]) {
     if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) throw fail('UNSAFE_CONFIG');
   }
   fs.mkdirSync(workspaceDir, { recursive: true, mode: 0o700 });
+  if (runtimeHome) {
+    // Current ZCode strips runtime controls from project config. Its independent
+    // user config must also disable plugins, MCP and hooks before session create.
+    const ancestors = path.relative(path.resolve(workspaceDir), path.resolve(runtimeHome)).split(path.sep)
+      .map((_, index, parts) => path.join(workspaceDir, ...parts.slice(0, index + 1)));
+    for (const target of [...ancestors, path.join(runtimeHome, '.zcode'), path.join(runtimeHome, '.zcode/cli'), globalConfig]) {
+      if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) throw fail('UNSAFE_CONFIG');
+    }
+    fs.mkdirSync(path.dirname(globalConfig), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(globalConfig, JSON.stringify(SAFE_CONFIG), { mode: 0o600 });
+    fs.chmodSync(globalConfig, 0o600);
+  }
   fs.mkdirSync(path.join(workspaceDir, '.git'), { recursive: true, mode: 0o700 });
   fs.mkdirSync(path.join(workspaceDir, '.zcode'), { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(workspaceDir, '.zcode/config.json'), JSON.stringify(SAFE_CONFIG), { mode: 0o600 });
@@ -63,6 +78,7 @@ async function prepareZcodeRuntime({ workspaceDir, account, env = process.env, h
     ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: builtinPath, ZCODE_PERSONAL_PROVIDER_CONFIG_FILE: personalPath,
     ZCODE_DYNAMIC_WORKFLOW_MODE: 'disabled', ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED: 'false',
     ZCODE_TELEMETRY_DEVICE_MID: account.deviceMid || '', ZCODE_APP_VERSION: appVersion });
+  if (runtimeHome) childEnv.HOME = runtimeHome;
   return { binary, release, builtinPath, personalPath, appVersion, env: childEnv };
 }
 function projectZcodeModels(release, { family, kind, modelIds }) {
@@ -95,7 +111,8 @@ function requiresVerification(config) { return !config || config.enabled !== fal
 function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir(), readAccount = readZcodeConnection,
   prepareRuntime = prepareZcodeRuntime, createProtocol = createZcodeProtocol, requestJson = requestOfficialJson,
   fetchUsage = fetchZcodeUsage, resolveTeamAccount = resolveZcodeTeamAccount,
-  getWeatherContext = () => '', onNotification = () => {}, onDisconnect = () => {}, ...transportOptions } = {}) {
+  getWeatherContext = () => '', onNotification = () => {}, onDisconnect = () => {}, officialOnly = false,
+  strictOfficialSelection = false, appDirectory, runtimeHome, ...transportOptions } = {}) {
   if (typeof workspaceDir !== 'string' || !path.isAbsolute(workspaceDir)) throw fail('INVALID_INPUT');
   let protocol, starting, account, runtime, catalog = [], threadId, activeTurn, revision = 0, closed = false;
   function clearPersonalConfig() {
@@ -129,7 +146,12 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     let latest;
     try {
       latest = await readAccount({ home, env, release: runtime?.release });
-      if (!latest?.accountKey || !(latest.personal?.hasConfigured || (isTeam(latest) ? latest.accessToken : latest.jwtToken))) throw fail('UNAUTHENTICATED');
+      if (officialOnly) {
+        if (!['zai', 'bigmodel'].includes(latest?.family)) throw fail('UNAUTHENTICATED');
+        const { personal: _personal, ...official } = latest; latest = official;
+      }
+      if (!latest?.accountKey || !(latest.personal?.hasConfigured || latest.jwtToken ||
+        (isTeam(latest) || officialOnly) && latest.accessToken)) throw fail('UNAUTHENTICATED');
     } catch (error) {
       clearPersonalConfig(); catalog = [];
       if (account) { account = null; emit('account/updated', {}); }
@@ -195,7 +217,8 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     if (starting) return starting;
     const operation = (async () => {
       clearPersonalConfig();
-      await currentAccount(); runtime = await prepareRuntime({ workspaceDir, account, env, home });
+      await currentAccount(); runtime = await prepareRuntime({ workspaceDir, account, env, home,
+        ...(appDirectory ? { appDirectory } : {}), ...(runtimeHome ? { runtimeHome } : {}) });
       if (closed) throw fail('CLOSED');
       protocol = createProtocol({ ...transportOptions, binary: runtime.binary, cwd: workspaceDir, env: runtime.env,
         onRequest: serverRequest, onNotification: notification, onDisconnect: code => { clearPersonalConfig(); onDisconnect(code); } });
@@ -236,8 +259,14 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
       if (closed) throw fail('CLOSED');
       if (!sameRuntimeAccount(selected, account)) throw fail('UNAUTHENTICATED');
       const hasBalance = usage.buckets?.some(row => row.source !== 'coding-plan' && row.remaining > 0);
-      const kind = isTeam(selected) ? selected.codingPlanApiKey && ['connected', 'empty'].includes(usage.paidState) ? 'team-coding-plan' : null
+      let kind = isTeam(selected) ? selected.codingPlanApiKey && ['connected', 'empty'].includes(usage.paidState) ? 'team-coding-plan' : null
         : hasBalance ? 'start-plan' : selected.codingPlanApiKey && usage.paidState === 'connected' ? 'individual-coding-plan' : null;
+      if (strictOfficialSelection) {
+        const current = selected.selection?.kind;
+        kind = current === 'start-plan' && !isTeam(selected) && hasBalance ? current
+          : current === 'individual-coding-plan' && !isTeam(selected) && selected.codingPlanApiKey && usage.paidState === 'connected' ? current
+            : current === 'team-coding-plan' && isTeam(selected) && selected.codingPlanApiKey && ['connected', 'empty'].includes(usage.paidState) ? current : null;
+      }
       if (!kind) throw fail('MODELS_UNAVAILABLE');
       official = projectZcodeModels(runtime.release, { family: account.family, kind, ...(kind === 'start-plan' ? { modelIds: usage.modelIds } : {}) });
       const providerId = official[0]?.providerId;

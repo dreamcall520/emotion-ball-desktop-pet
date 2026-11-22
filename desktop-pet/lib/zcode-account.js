@@ -19,6 +19,10 @@ function readJson(fs, filePath, optional = false) {
 }
 function decryptCredential(value, secret) {
   if (typeof value !== 'string' || !value.length || value.length > MAX_BYTES) return null;
+  // Current official installations protect v2 material with the OS credential
+  // store. Ciphertext must never be mistaken for an OAuth token or identity.
+  if (value.startsWith('enc:v2:')) throw fail('ZCODE_CREDENTIAL_SECURE_STORAGE_REQUIRED');
+  if (value.startsWith('enc:') && !value.startsWith('enc:v1:')) throw fail('ZCODE_CREDENTIAL_DECRYPT_FAILED');
   if (!value.startsWith('enc:v1:')) return value;
   try {
     const pieces = value.slice(7).split('.');
@@ -31,7 +35,7 @@ function decryptCredential(value, secret) {
   } catch (_error) { throw fail('ZCODE_CREDENTIAL_DECRYPT_FAILED'); }
 }
 // Matches the installed ZCode credential cipher; never mutate or repair its credential store.
-function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeFs } = {}) {
+function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeFs, requireScopedApiKey = false } = {}) {
   const base = env.ZCODE_DATA_BASE_DIR?.trim() || home;
   const dir = path.join(base === '~' ? home : base.startsWith('~/') ? path.join(home, base.slice(2)) : base, '.zcode', 'v2');
   const credentialsPath = path.join(dir, 'credentials.json');
@@ -46,7 +50,11 @@ function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeF
   const jwtToken = family === activeFamily ? load('zcodejwttoken') : null;
   const accessToken = load(`oauth:${family}:access_token`);
   if (!jwtToken && !accessToken) throw fail('ZCODE_LOGIN_REQUIRED');
-  let user = {}; try { user = JSON.parse(load(`oauth:${family}:user_info`) || '{}'); } catch (_ignored) {}
+  const storedUser = load(`oauth:${family}:user_info`);
+  let user = {}; try {
+    const value = JSON.parse(storedUser || '{}');
+    if (value && typeof value === 'object' && !Array.isArray(value)) user = value;
+  } catch (_ignored) {}
   const accountId = String(user.user_id || user.id || user.sub || '');
   const storedSelection = settings.providerFamilyConnectionSelections?.[family];
   const kind = ['start-plan', 'individual-coding-plan', 'team-coding-plan', 'api-key'].includes(storedSelection?.kind)
@@ -63,7 +71,9 @@ function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeF
   const telemetry = readJson(fs, path.join(dir, 'telemetry-state.json'), true);
   const deviceMid = typeof telemetry.deviceMid === 'string' && /^[^\r\n]{1,256}$/.test(telemetry.deviceMid) ? telemetry.deviceMid : null;
   // Only use an actual configured Coding Plan key. OAuth/project key IDs are not API keys.
-  const config = readJson(fs, path.join(dir, 'config.json'), true);
+  // The MAS reader cannot attribute an unscoped config key to the signed-in
+  // account. In that mode only the exact account-provider credential is used.
+  const config = requireScopedApiKey ? {} : readJson(fs, path.join(dir, 'config.json'), true);
   const provider = config.provider?.[`builtin:${family}-coding-plan`];
   const expectedBase = family === 'zai' ? 'https://api.z.ai/api/anthropic' : 'https://open.bigmodel.cn/api/anthropic';
   const configuredKey = provider?.options?.apiKey;

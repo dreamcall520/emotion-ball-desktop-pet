@@ -23,7 +23,8 @@ function fixture(t, { team = false, encrypted = false, key = true, fetch, creden
   const parts = team ? ['team', `account:${family}-${kind}`, 'product', 'organization', 'project'].map(encodeURIComponent).join(':')
     : `coding-plan:account:${family}-${kind}`;
   if (key) raw[`account-provider:${parts}:account:synthetic-user:api-key`] = 'synthetic-plan-key';
-  const secret = `zcode-credential-fallback:${os.platform()}:${home}:${os.userInfo().username}`;
+  credentialContext ||= { home };
+  const secret = credentialContext.secret || `zcode-credential-fallback:${credentialContext.platform || os.platform()}:${credentialContext.home || os.userInfo().homedir}:${credentialContext.username || os.userInfo().username}`;
   const writeCredentials = value => fs.writeFileSync(path.join(v2, 'credentials.json'), JSON.stringify(encrypted
     ? Object.fromEntries(Object.entries(value).map(([name, material]) => [name, encrypt(material, secret)])) : value));
   writeCredentials(raw);
@@ -63,7 +64,7 @@ function makeRuntime(file) {
   db.close();
 }
 
-test('使用明确选择的.zcode读取加密账户，以来源父路径作为cipher上下文且不修改文件', async t => {
+test('使用明确选择的.zcode读取加密账户，以显式真实主目录作为cipher上下文且不修改文件', async t => {
   const f = fixture(t, { encrypted: true });
   const before = fs.readFileSync(path.join(f.v2, 'credentials.json'));
   const account = await f.provider.readAccount();
@@ -75,6 +76,42 @@ test('使用明确选择的.zcode读取加密账户，以来源父路径作为ci
   await assert.rejects(f.provider.readAccount(), { code: 'ZCODE_DIRECTORY_REQUIRED' });
 });
 
+test('自定义数据目录不替代真实用户主目录，沙盒读取只在授权目录内', async t => {
+  const credentialContext = { home: '/Users/fixture-real-user', username: 'fixture-user', platform: 'darwin' };
+  const f = fixture(t, { encrypted: true, credentialContext });
+  assert.notEqual(path.dirname(f.root), credentialContext.home);
+  const account = await f.provider.readAccount();
+  assert.equal(account.codingPlanApiKey, 'synthetic-plan-key');
+  assert.deepEqual(f.scopes, ['start', 'stop']);
+});
+
+test('默认cipher上下文取OS用户主目录，不取授权目录父路径或容器HOME', async t => {
+  const f = fixture(t, { encrypted: true, credentialContext: {
+    home: os.userInfo().homedir, username: os.userInfo().username, platform: os.platform()
+  } });
+  const provider = createMasZcodeProvider({ directoryAccess: { withAccess: (_provider, operation) => operation(f.root) } });
+  assert.notEqual(path.dirname(f.root), os.userInfo().homedir);
+  assert.equal((await provider.readAccount()).codingPlanApiKey, 'synthetic-plan-key');
+});
+
+test('MAS不借用未绑定账户的config key，旧账户切换和损坏config都不污染当前身份', async t => {
+  const f = fixture(t, { key: false });
+  fs.writeFileSync(path.join(f.v2, 'config.json'), JSON.stringify({ provider: {
+    'builtin:bigmodel-coding-plan': { enabled: true, options: {
+      apiKey: 'previous-personal-key', baseURL: 'https://open.bigmodel.cn/api/anthropic'
+    } }
+  } }));
+  const before = await f.provider.readAccount();
+  assert.equal(before.codingPlanApiKey, null);
+  f.raw['oauth:bigmodel:user_info'] = JSON.stringify({ user_id: 'new-user' }); f.writeCredentials(f.raw);
+  const switched = await f.provider.readAccount();
+  assert.notEqual(switched.accountKey, before.accountKey); assert.equal(switched.codingPlanApiKey, null);
+  await assert.rejects(f.provider.fetchUsage(switched), { code: 'ZCODE_USAGE_UNAVAILABLE' });
+  assert.equal(f.requests.length, 0);
+  fs.writeFileSync(path.join(f.v2, 'config.json'), '{broken');
+  assert.equal((await f.provider.readAccount()).accountKey, switched.accountKey);
+});
+
 test('个人quota仅GET，复用已有套餐key，不触发新模型或付费API', async t => {
   const f = fixture(t);
   const account = await f.provider.readAccount();
@@ -84,6 +121,69 @@ test('个人quota仅GET，复用已有套餐key，不触发新模型或付费API
   assert.equal(f.requests[0].url, 'https://open.bigmodel.cn/api/monitor/usage/quota/limit');
   assert.equal(f.requests[0].init.method, 'GET');
   assert.equal(f.requests[0].init.headers.Authorization, 'Bearer synthetic-plan-key');
+});
+
+function appFixture(f, version = '3.18.2') {
+  const directory = path.join(f.home, 'ZCode.app'); fs.mkdirSync(path.join(directory, 'Contents'), { recursive: true });
+  const file = path.join(directory, 'Contents/Info.plist');
+  const writeVersion = value => fs.writeFileSync(file, `<plist><dict><key>CFBundleShortVersionString</key><string>${value}</string></dict></plist>`);
+  writeVersion(version);
+  return { directory: fs.realpathSync(directory), file, writeVersion };
+}
+
+test('额度按已授权官方App的当前版本查询，持有两项scope且每轮重读版本', async t => {
+  const f = fixture(t, { key: false }), app = appFixture(f), events = [], urls = [];
+  fs.writeFileSync(path.join(f.v2, 'telemetry-state.json'), JSON.stringify({ deviceMid: 'synthetic-mid' }));
+  const access = (label, directory) => ({ acquire: async provider => {
+    assert.equal(provider, 'zcode'); events.push(`${label}:start`);
+    return { directory, isCurrent: () => true, release: () => events.push(`${label}:stop`) };
+  } });
+  const provider = createMasZcodeProvider({ directoryAccess: access('account', f.root), installedAppAccess: access('app', app.directory),
+    credentialContext: { home: f.home }, now: () => NOW, fetch: async url => {
+      events.push('fetch'); urls.push(url);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ code: 0, data: { balances: [], plans: [] } }) };
+    } });
+  const account = await provider.readAccount(); events.length = 0;
+  await provider.fetchUsage(account, { appVersion: '1.0.0' });
+  assert.match(urls[0], /\?app_version=3\.18\.2$/);
+  assert.deepEqual(events, ['account:start', 'app:start', 'fetch', 'app:stop', 'account:stop']);
+  app.writeVersion('3.18.3'); await provider.fetchUsage(account);
+  assert.match(urls[1], /\?app_version=3\.18\.3$/);
+});
+
+test('App或账号scope在GET中被撤销时丢弃迟到结果并释放scope', async t => {
+  for (const revoked of ['app', 'account']) {
+    const f = fixture(t), app = appFixture(f), released = [];
+    const current = { app: true, account: true }; let finish;
+    const access = (label, directory) => ({ acquire: async () => ({ directory,
+      isCurrent: () => current[label], release: () => released.push(label) }) });
+    const provider = createMasZcodeProvider({ directoryAccess: access('account', f.root), installedAppAccess: access('app', app.directory),
+      credentialContext: { home: f.home }, now: () => NOW, fetch: () => new Promise(resolve => { finish = resolve; }) });
+    const account = await provider.readAccount(); released.length = 0;
+    const pending = provider.fetchUsage(account); await new Promise(resolve => setImmediate(resolve));
+    current[revoked] = false;
+    finish({ ok: true, status: 200, text: async () => JSON.stringify({ success: true, code: 200, data: { limits: [] } }) });
+    await assert.rejects(pending, { code: 'DISCONNECTED' });
+    assert.deepEqual(released, ['app', 'account']);
+  }
+});
+
+test('取消或无效App版本不发送额度请求，App目录外的plist不能供应版本', async t => {
+  const f = fixture(t), app = appFixture(f, 'invalid'), controller = new AbortController();
+  let acquisitions = 0, released = 0, requests = 0;
+  const provider = createMasZcodeProvider({ directoryAccess: { withAccess: (_provider, operation) => operation(f.root) },
+    installedAppAccess: { acquire: async () => { acquisitions++; return { directory: app.directory, release: () => released++ }; } },
+    credentialContext: { home: f.home }, fetch: () => { requests++; } });
+  const account = await provider.readAccount(); controller.abort();
+  await assert.rejects(provider.fetchUsage(account, { signal: controller.signal }), { code: 'DISCONNECTED' });
+  assert.equal(acquisitions, 0);
+  await assert.rejects(provider.fetchUsage(account), { code: 'ZCODE_APP_VERSION_UNAVAILABLE' });
+  assert.equal(released, 1); assert.equal(requests, 0);
+  const outside = path.join(f.home, 'outside.plist');
+  fs.writeFileSync(outside, '<key>CFBundleShortVersionString</key><string>3.18.2</string>');
+  fs.unlinkSync(app.file); fs.symlinkSync(outside, app.file);
+  await assert.rejects(provider.fetchUsage(account), { code: 'ZCODE_APP_VERSION_UNAVAILABLE' });
+  assert.equal(released, 2); assert.equal(requests, 0);
 });
 
 test('团队quota保留组织/项目和团队套餐key，缺key不降级个人也不mint token', async t => {
@@ -145,6 +245,56 @@ test('账户切换使旧请求失效，拒绝复用旧account查询新身份', a
   f.raw['oauth:bigmodel:user_info'] = JSON.stringify({ user_id: 'another-user' }); f.writeCredentials(f.raw);
   await assert.rejects(f.provider.fetchUsage(first), { code: 'ZCODE_LOGIN_REQUIRED' });
   assert.equal(f.requests.length, 0);
+});
+
+test('GET发出后切换官方账号，不返回旧账户额度', async t => {
+  let finish;
+  const f = fixture(t, { fetch: () => new Promise(resolve => { finish = resolve; }) });
+  const account = await f.provider.readAccount();
+  const pending = f.provider.fetchUsage(account); await new Promise(resolve => setImmediate(resolve));
+  f.raw['oauth:bigmodel:user_info'] = JSON.stringify({ user_id: 'another-user' }); f.writeCredentials(f.raw);
+  finish({ ok: true, status: 200, text: async () => JSON.stringify({ success: true, code: 200, data: { limits: [] } }) });
+  await assert.rejects(pending, { code: 'ZCODE_LOGIN_REQUIRED' });
+});
+
+test('v2官方runner只回安全账号和额度投影，provider不读取或透传原始凭据', async t => {
+  const f = fixture(t), accountKey = 'a'.repeat(64), calls = [];
+  fs.writeFileSync(path.join(f.v2, 'credentials.json'), JSON.stringify({ 'oauth:active_provider': 'enc:v2:os:synthetic' }));
+  const account = { accountKey, family: 'zai', selection: { kind: 'individual-coding-plan', scope: 'personal' },
+    hasJwtToken: true, accessToken: 'must-never-leave-runner' };
+  const bucket = { sourceId: 'zcode', source: 'coding-plan', id: 'zcode:paid:CREDIT_LIMIT:3:5', bucketId: 'zcode:paid:CREDIT_LIMIT:3:5',
+    label: 'Coding Plan 积分', planName: 'Fixture', remaining: 80, resetsAt: NOW + 3600000,
+    periodStart: NOW - 4 * 3600000, windowMinutes: 300, periodKind: 'rolling', total: 100, remainingUnits: 80,
+    unit: 'credits', privateKey: 'must-never-leave-runner' };
+  const provider = createMasZcodeProvider({ directoryAccess: { withAccess: (_provider, operation) => operation(f.root) },
+    now: () => NOW, run: async (operation, payload) => {
+      calls.push(operation);
+      if (operation === 'account-check') return account;
+      assert.equal(operation, 'usage'); assert.deepEqual(payload, { expectedAccountKey: accountKey });
+      return { accountKey, state: 'connected', buckets: [bucket], updatedAt: NOW, modelIds: [],
+        balanceState: 'unavailable', paidState: 'connected', jwtToken: 'must-never-leave-runner' };
+    } });
+  const safeAccount = await provider.readAccount(), quota = await provider.fetchUsage(safeAccount);
+  assert.equal(safeAccount.hasJwtToken, true); assert.equal(safeAccount.accessToken, undefined);
+  assert.equal(quota.buckets[0].remaining, 80); assert.equal(quota.buckets[0].privateKey, undefined);
+  assert.equal(JSON.stringify({ safeAccount, quota }).includes('must-never-leave-runner'), false);
+  assert.deepEqual(calls, ['account-check', 'account-check', 'usage', 'account-check']);
+  const tasks = await provider.readTasks({ account: safeAccount });
+  assert.equal(tasks.state, 'unknown'); assert.equal(tasks.accountAttributionVerified, false);
+});
+
+test('官方runner迟到额度或任务缓存期间切账号都被丢弃', async t => {
+  const f = fixture(t); let accountKey = 'a'.repeat(64), finish;
+  const account = () => ({ accountKey, family: 'zai', selection: { kind: 'individual-coding-plan', scope: 'personal' } });
+  const provider = createMasZcodeProvider({ directoryAccess: { withAccess: (_provider, operation) => {
+    accountKey = 'b'.repeat(64); return operation(f.root);
+  } }, run: async operation => operation === 'account-check' ? account() : new Promise(resolve => { finish = resolve; }) });
+  const first = await provider.readAccount(), pending = provider.fetchUsage(first);
+  await new Promise(resolve => setImmediate(resolve)); accountKey = 'b'.repeat(64);
+  finish({ accountKey: first.accountKey, state: 'connected', buckets: [], updatedAt: NOW });
+  await assert.rejects(pending, { code: 'ZCODE_LOGIN_REQUIRED' });
+  accountKey = first.accountKey;
+  await assert.rejects(provider.readTasks({ account: first }), { code: 'ZCODE_LOGIN_REQUIRED' });
 });
 
 test('对接真实createZcodeCompanion契约，unknown任务保持runningCount=null，聊天明确未打通', async t => {

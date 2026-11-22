@@ -538,7 +538,9 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[data-action=\"/workbuddy-quota-visible\"]')!==null"),true);
     assert.doesNotMatch(await run("document.querySelector('#content').textContent"),/趣味|游戏/);
     await run("snapshot.firstReleaseWorkbuddyConnection.tasks={status:'needs-authorization',message:'尚未授权任务同步',authorized:false};snapshot.version='wb-task-access';window.dispatchEvent(new Event('focus'))");
-    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    // Native dialog cancellation and the settings refresh settle separately.
+    // Observe the resulting task control rather than assuming a 30ms schedule.
+    await run("new Promise((resolve,reject)=>{const deadline=Date.now()+3000;const check=()=>{if(document.querySelector('[data-action=store-workbuddy-tasks]'))resolve();else if(Date.now()>=deadline)reject(Error('task authorization control did not render'));else setTimeout(check,20)};check()})");
     assert.equal(await run("document.querySelector('[data-action=store-workbuddy-tasks]').textContent"),'授权任务');
     assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/查看 WorkBuddy 任务和未读结果。/);
     assert.match(await run("document.querySelector('[data-workbuddy-tasks]').textContent"),/只看任务名称、状态和是否已读，不读取聊天内容。/);

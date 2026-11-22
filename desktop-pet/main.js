@@ -115,7 +115,7 @@ const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
 const IS_STORE_BUILD = process.mas === true || ACCEPTANCE_KIND === 'mas' || process.argv.includes('--mas-candidate');
 const FIRST_RELEASE = IS_STORE_BUILD && require('../package.json').qiuqiuReleaseProfile === 'mas-first';
-const STORE_PROVIDERS = FIRST_RELEASE ? ['codex','workbuddy'] : ['codex','zcode','workbuddy'];
+const STORE_PROVIDERS = ['codex','zcode','workbuddy'];
 const STORE_CONNECTIONS_PAGE = 'store-connections.html';
 const FirstRelease = require('./lib/mas-first-release');
 const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek','bubble','feedback','mas'].includes(ACCEPTANCE_KIND) || (IS_STORE_BUILD && process.mas !== true);
@@ -165,6 +165,9 @@ let workbuddyChat = null;
 let workbuddyQuota = null;
 let workbuddyInstalledAccess = null, workbuddyTaskAccess = null, workbuddyQuotaConnection = null;
 let workbuddyChatConnection = null;
+let zcodeInstalledAccess = null, zcodeRun = null, masZcodeProvider = null, zcodeQuotaConnection = null, zcodeNotifications = null;
+let zcodeNotificationTimer = null, zcodeRenderer = null, zcodeSentSettings = null, zcodePresentation = null;
+let zcodeAlertQueue = [], zcodePresentationTimer = null, zcodeValidationPhase = "";
 let workbuddyVerifiedAccountKey = null;
 let workbuddyNotifications = null, workbuddyNotificationTimer = null;
 let workbuddyRenderer = null, workbuddySentSettings = null, workbuddyPresentation = null;
@@ -592,7 +595,7 @@ function globalSettingsSnapshot() {
     ...(notificationState ? { notifications: { enabled: notificationState.enabled, connected: notificationState.connected,
       status: notificationState.status, generation: notificationState.generation, activeCount: notificationState.activeCount,
       message: notificationState.message } } : {}) } : null;
-  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, firstReleaseWorkbuddyConnection, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
+  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, firstReleaseWorkbuddyConnection, firstReleaseZcodeConnection: FIRST_RELEASE ? { ...zcodeQuotaConnection?.getState(), notifications: zcodeNotifications?.getState() } : null, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -600,7 +603,7 @@ function globalSettingsSnapshot() {
       { label: 'ZCode 联动', value: zcodeLink?.isEnabled() ? '已启用' : '未启用' },
       { label: 'API 统计', value: apiUsage?.getState().connected ? '已连接' : '未连接' },
       { label: '界面外观', value: { system: '跟随系统', light: '浅色', dark: '深色' }[settings.codexQuotaAppearance] }
-    ].filter(item=>!FIRST_RELEASE||!['ZCode 联动','API 统计'].includes(item.label)) };
+    ].filter(item=>!FIRST_RELEASE||!['API 统计'].includes(item.label)) };
 }
 
 function fromGlobalSettings(event, requireVisible = true) {
@@ -610,7 +613,7 @@ function fromGlobalSettings(event, requireVisible = true) {
 }
 
 function openGlobalSettings(view) {
-  const target = ['/codex-menu', 'workbuddy-settings', 'workbuddy-tasks-authorization', 'workbuddy-chat-authorization', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
+  const target = ['/codex-menu', '/zcode-menu', 'workbuddy-settings', 'workbuddy-tasks-authorization', 'workbuddy-chat-authorization', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     positionFunctionWindow(globalSettingsWindow);
@@ -645,7 +648,7 @@ function openGlobalSettings(view) {
   win.on('closed', () => {
     if (globalSettingsWindow !== win) return;
     globalSettingsWindow = null;
-    if (FIRST_RELEASE) { storeRuntime?.clearPendingInstalledCodexApp(); workbuddyQuotaConnection?.cancel(); }
+    if (FIRST_RELEASE) { storeRuntime?.clearPendingInstalledCodexApp(); workbuddyQuotaConnection?.cancel(); zcodeQuotaConnection?.cancel(); }
   });
   win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) { positionFunctionWindow(win); win.show(); } });
   void win.loadFile(path.join(__dirname, 'global-settings.html')).catch(error => {
@@ -742,7 +745,7 @@ function notifyStoreConnections() {
 }
 function openStoreConnections(provider) {
   if (!IS_STORE_BUILD || !storeRuntime || isQuitting || screenLocked) return null;
-  if (FIRST_RELEASE) return openGlobalSettings(provider === 'workbuddy' ? 'workbuddy-chat-authorization' : '/codex-menu');
+  if (FIRST_RELEASE) return openGlobalSettings(provider === 'zcode' ? '/zcode-menu' : provider === 'workbuddy' ? 'workbuddy-chat-authorization' : '/codex-menu');
   if (storeConnectionsWindow && !storeConnectionsWindow.isDestroyed()) { storeConnectionsWindow.show(); storeConnectionsWindow.focus(); if(['codex','zcode','workbuddy'].includes(provider))storeConnectionsWindow.webContents.send('pet:store-focus-provider',provider); return storeConnectionsWindow; }
   const win = new BrowserWindow({ width: 840, height: 880, minWidth: 640, minHeight: 560,
     title: '球球 · 工具连接', show: false, backgroundColor: '#EDF4FC',
@@ -1094,9 +1097,10 @@ function finishStoreChatRestore() {
 function chatSnapshot(state = activeChat()?.getState()) {
   const storeInfo=IS_STORE_BUILD ? {
     sources:STORE_PROVIDERS.map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
-      ...(FIRST_RELEASE ? { needsAuthorization: id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized !== true
+      ...(FIRST_RELEASE && id==='zcode' ? {scopeUnavailable:true,message:'官方套餐尚不能用于球球普通聊天；请在 ZCode 中使用。'} : {}),
+      ...(FIRST_RELEASE ? { needsAuthorization: id === 'zcode' ? true : id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized !== true
         : !storeRuntime?.isChatEnabled(id) || storeEnableFlow?.getState()[id]?.chat.status === 'needs-data-authorization' } : {}),
-      enabled: FIRST_RELEASE && id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized === true
+      enabled: FIRST_RELEASE && id === 'zcode' ? false : FIRST_RELEASE && id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized === true
         : storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
         ['ready','needs-new-chat'].includes(storeEnableFlow?.getState()[id]?.chat.status)||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready')})),
     sourceNote:state?.source==='codex'?(FIRST_RELEASE?'聊天使用你在本机 Codex 登录的账号。':'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。')
@@ -1583,7 +1587,7 @@ function codexHostAvailable() {
 }
 
 function canPresentCodex() {
-  return Boolean(settings?.codexEnabled && codexHostAvailable() && codexRenderer?.available === true &&
+  return Boolean(!workbuddyPresentation && !zcodePresentation && settings?.codexEnabled && codexHostAvailable() && codexRenderer?.available === true &&
     codexRenderer.generation === codexCompanion?.getSnapshot().generation && codexRenderer.pageEpoch === codexPageEpoch);
 }
 
@@ -1638,8 +1642,8 @@ function dogCodexSpriteClip(action) {
 }
 
 function finishCodexSpriteMotion(request, timedOut = false) {
-  const owner = request.source === 'workbuddy' ? 'workbuddy' : 'codex';
-  const state = hostMotion, presentation = owner === 'workbuddy' ? workbuddyPresentation : codexPresentation;
+  const owner = ['workbuddy','zcode'].includes(request.source) ? request.source : 'codex';
+  const state = hostMotion, presentation = owner === 'workbuddy' ? workbuddyPresentation : owner === 'zcode' ? zcodePresentation : codexPresentation;
   if (state?.owner !== owner || !state.spriteAction || state.token !== request.token ||
       state.action !== request.action || state.spriteAction !== request.spriteAction ||
       presentation?.token !== request.token || presentation.id !== request.alertId ||
@@ -1649,6 +1653,7 @@ function finishCodexSpriteMotion(request, timedOut = false) {
   restoreDogSpriteBounds();
   if (timedOut) writeError('小白任务庆祝', {code:'ACTION_TIMEOUT'});
   if (owner === 'workbuddy') recordWorkBuddyReminder('animation-finished', { timedOut });
+  if (owner === 'zcode') recordZcodeReminder('animation-finished', { timedOut });
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('pet:motion-frame', { token: state.token, action: state.action, frame: { done: true } });
   }
@@ -1656,7 +1661,7 @@ function finishCodexSpriteMotion(request, timedOut = false) {
 }
 
 function clearCodexPresentation() {
-  if (hostMotion?.owner !== 'workbuddy') { clearSpriteMotionTimer(); restoreDogSpriteBounds(); }
+  if (!['workbuddy','zcode'].includes(hostMotion?.owner)) { clearSpriteMotionTimer(); restoreDogSpriteBounds(); }
   const previous = codexPresentation;
   codexPresentation = null;
   if (hostMotion?.owner === 'codex') {
@@ -1717,7 +1722,7 @@ function quotaExpandedStackPlan() {
     quotaCardVisualInk:currentSheepCapsuleInk()||currentSheepSettledInk(),sheepInk:sheepQuotaInk,sheepTheme:SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()),facing:PetFacing.resolve(pet,area)},quotaObstacleBounds());
 }
 function quotaLayoutPresentation() { const p=edgeTuck?.getPresentation(); return p?.dragging||dragState?.moved ? {...p,mode:'free',side:null}:p; }
-function quotaCardConfig() { const value=normalizeQuotaCards({order:settings?.quotaCardOrder,pinned:settings?.quotaCardPinned});return FIRST_RELEASE?{...value,order:value.order.filter(id=>['codex','workbuddy','weather'].includes(id)),pinned:value.pinned.filter(id=>['codex','workbuddy','weather'].includes(id))}:value; }
+function quotaCardConfig() { const value=normalizeQuotaCards({order:settings?.quotaCardOrder,pinned:settings?.quotaCardPinned});return FIRST_RELEASE?{...value,order:value.order.filter(id=>['codex','zcode','workbuddy','weather'].includes(id)),pinned:value.pinned.filter(id=>['codex','zcode','workbuddy','weather'].includes(id))}:value; }
 function quotaCardGroupInput() {
   const display=quotaDisplayConfig();
   return {config:quotaCardConfig(),eligible:[
@@ -2247,6 +2252,7 @@ function invalidateCodexPage() {
   dismissCodexPresentation();
   clearWorkBuddyPresentation();
   workbuddyRenderer = null;
+  clearZcodePresentation();zcodeRenderer=null;
 }
 
 function recordWorkBuddyReminder(phase, details = {}) {
@@ -2264,7 +2270,7 @@ function recordWorkBuddyReminder(phase, details = {}) {
 
 function workBuddyActiveCount() { return workbuddyNotifications?.getState().activeCount || 0; }
 function anyCompanionTaskActive() {
-  return workBuddyActiveCount() > 0 || Boolean(codexCompanion?.getSnapshot().tasks?.items.some(task => task.state === 'active'));
+  return workBuddyActiveCount() > 0 || (zcodeNotifications?.getState().activeCount || 0) > 0 || Boolean(codexCompanion?.getSnapshot().tasks?.items.some(task => task.state === 'active'));
 }
 function syncWorkBuddyAnimationSettings(force = false) {
   const state = workbuddyNotifications?.getState();
@@ -2305,7 +2311,7 @@ function enqueueWorkBuddyAlert(alert) {
 function pumpWorkBuddyPresentation() {
   const state = workbuddyNotifications?.getState();
   workbuddyAlertQueue = workbuddyAlertQueue.filter(alert => alert.expiresAt > Date.now() && alert.generation === state?.generation);
-  if (workbuddyPresentation || !workbuddyAlertQueue.length || !state?.connected || !codexHostAvailable() ||
+  if (workbuddyPresentation || zcodePresentation || codexPresentation || !workbuddyAlertQueue.length || !state?.connected || !codexHostAvailable() ||
     workbuddyRenderer?.available !== true || workbuddyRenderer.generation !== state.generation || workbuddyRenderer.pageEpoch !== codexPageEpoch) return;
   const alert = workbuddyAlertQueue.shift();
   workbuddyPresentation = { ...alert, pageEpoch: codexPageEpoch };
@@ -2313,6 +2319,103 @@ function pumpWorkBuddyPresentation() {
     pageEpoch: codexPageEpoch, motion: alert.motion, kind: alert.kind });
   workbuddyPresentationTimer = setTimeout(clearWorkBuddyPresentation, 12000);
   workbuddyPresentationTimer.unref?.();
+}
+
+function recordZcodeReminder(phase, details = {}) {
+  if (process.qiuqiuMasDevelopmentCandidate !== true) return;
+  // Candidate validation contains phases/counts only, never session, prompt,
+  // account, pairing capability, or source payload.
+  const record = { at: new Date().toISOString(), phase,
+    ...(Number.isSafeInteger(details.activeCount) ? { activeCount: details.activeCount } : {}),
+    ...(typeof details.timedOut === 'boolean' ? { timedOut: details.timedOut } : {}) };
+  const signature = JSON.stringify({ phase, ...details });
+  if (signature === zcodeValidationPhase) return;
+  zcodeValidationPhase = signature;
+  process.stderr.write('ZCODE_REMINDER ' + JSON.stringify(record) + '\n');
+}
+
+function syncZcodeAnimationSettings(force = false) {
+  const state = zcodeNotifications?.getState();
+  if (!state) return;
+  const next = { source: 'zcode', enabled: state.connected === true, generation: state.generation,
+    pageEpoch: codexPageEpoch, activeTaskCount: state.activeCount };
+  if (zcodeSentSettings && zcodeSentSettings.generation !== next.generation) {
+    clearZcodePresentation(); zcodeAlertQueue = []; zcodeRenderer = null;
+  }
+  if (!anyCompanionTaskActive()) thoughts?.hide();
+  if (!codexPageReady || !petWindow || petWindow.isDestroyed()) return;
+  if (!force && JSON.stringify(zcodeSentSettings) === JSON.stringify(next)) return;
+  zcodeSentSettings = next;
+  petWindow.webContents.send('pet:codex-settings', next);
+  recordZcodeReminder(next.enabled ? (state.activeCount ? 'processing' : 'listening') : 'disabled', { activeCount: state.activeCount });
+}
+
+function clearZcodePresentation() {
+  clearTimeout(zcodePresentationTimer); zcodePresentationTimer = null;
+  const previous = zcodePresentation; zcodePresentation = null;
+  if (hostMotion?.owner === 'zcode') {
+    clearSpriteMotionTimer(); restoreDogSpriteBounds(); windowMotion?.stop(); hostMotion = null;
+  }
+  if (previous) sendCodexCommand({ command: 'task-cancel', source: 'zcode', alertId: previous.id,
+    generation: previous.generation, pageEpoch: previous.pageEpoch, ...(previous.token ? { token: previous.token } : {}) });
+  if (dialogue?.dismissProviderTask('zcode')) hideBubble();
+}
+
+function enqueueZcodeAlert(alert) {
+  recordZcodeReminder(alert.kind);
+  if (alert.kind !== 'completed') return;
+  zcodeAlertQueue.push({ id: alert.id, generation: alert.epoch, kind: 'completed', motion: 'hop',
+    text: 'ZCode 有新结果', expiresAt: Date.now() + 30000 });
+  zcodeAlertQueue = zcodeAlertQueue.slice(-16);
+  pumpZcodePresentation();
+}
+
+function pumpZcodePresentation() {
+  const state = zcodeNotifications?.getState();
+  zcodeAlertQueue = zcodeAlertQueue.filter(alert => alert.expiresAt > Date.now() && alert.generation === state?.generation);
+  if (zcodePresentation || workbuddyPresentation || codexPresentation || !zcodeAlertQueue.length || !state?.connected || !codexHostAvailable() ||
+    zcodeRenderer?.available !== true || zcodeRenderer.generation !== state.generation || zcodeRenderer.pageEpoch !== codexPageEpoch) return;
+  const alert = zcodeAlertQueue.shift();
+  zcodePresentation = { ...alert, pageEpoch: codexPageEpoch };
+  sendCodexCommand({ command: 'task', source: 'zcode', alertId: alert.id, generation: alert.generation,
+    pageEpoch: codexPageEpoch, motion: alert.motion, kind: alert.kind });
+  zcodePresentationTimer = setTimeout(clearZcodePresentation, 12000);
+  zcodePresentationTimer.unref?.();
+}
+
+function acceptZcodeMotionReady(event, request) {
+  const alert = zcodePresentation, state = zcodeNotifications?.getState();
+  if (!fromPetWindow(event) || event.senderFrame !== event.sender.mainFrame || !alert || !state?.connected ||
+    !Number.isSafeInteger(request?.token) || request.token <= 0 || request.action !== alert.motion ||
+    request.alertId !== alert.id || request.generation !== alert.generation || request.generation !== state.generation ||
+    request.pageEpoch !== codexPageEpoch || alert.pageEpoch !== codexPageEpoch || !codexHostAvailable()) return;
+  if (alert.token) return;
+  const spriteClip = dogCodexSpriteClip(request.action);
+  if (spriteClip && request.durationMs !== spriteClip.durationMs) {
+    clearZcodePresentation(); return;
+  }
+  alert.token = request.token; thoughts?.hide();
+  const show = () => { const payload = dialogue.offerProviderTask({ ...alert, provider: 'zcode' }, performance.now()); if (payload) showBubble(payload); };
+  recordZcodeReminder('animation-ready');
+  if (spriteClip) {
+    windowMotion.stop({ notify: false }); prepareDogSpriteBounds(spriteClip);
+    hostMotion = { owner: 'zcode', token: request.token, action: request.action, spriteAction: spriteClip.id, anchor: petWindow.getBounds() };
+    clearSpriteMotionTimer();
+    const epoch = spriteMotionEpoch, completion = { ...request, source: 'zcode', spriteAction: spriteClip.id };
+    spriteMotionTimer = setTimeout(() => { if (epoch === spriteMotionEpoch) finishCodexSpriteMotion(completion, true); }, spriteClip.durationMs + 2000);
+    spriteMotionTimer.unref?.(); show(); return;
+  }
+  hostMotion = { owner: 'zcode', token: request.token, action: request.action, anchor: petWindow.getBounds() };
+  const bounds = petWindow.getBounds(), appearance = effectiveCustomization(settings.customization).appearance;
+  // The renderer resolves the current skin's task action. Keep the same bounded
+  // duration contract as Codex, including its known sheep bridge paths.
+  const durationMs = taskSkinMotionDuration(request);
+  if (!windowMotion.start({ token: request.token, action: request.action, durationMs: appearance.shape === 'soft-orb'
+    ? SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action, 'codex', 'completed')) : durationMs,
+    visualOnly: appearance.shape === 'soft-orb', side: PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea) })) {
+    clearZcodePresentation(); return;
+  }
+  show();
 }
 
 function taskSkinMotionDuration(request) {
@@ -2391,7 +2494,7 @@ function syncCodexSettings(snapshot, force = false) {
     : 0;
   const next = { enabled: snapshot.enabled, generation: snapshot.generation,
     pageEpoch: codexPageEpoch, activeTaskCount };
-  if ((!next.enabled || activeTaskCount === 0) && workBuddyActiveCount() === 0) thoughts?.hide();
+  if ((!next.enabled || activeTaskCount === 0) && workBuddyActiveCount() === 0 && (zcodeNotifications?.getState().activeCount || 0) === 0) thoughts?.hide();
   if (codexNotice?.generation !== next.generation) codexNotice = null;
   // 导航清理会同步触发状态更新；新页面代次只能在新页面 ready 后发送。
   if (!codexPageReady || !petWindow || petWindow.isDestroyed()) return;
@@ -2838,6 +2941,7 @@ function stopMotion({ restore = true, notify = true, notifyRenderer = true } = {
   clearSpriteMotionTimer();
   dismissCodexPresentation();
   clearWorkBuddyPresentation();
+  clearZcodePresentation();
   stopWindowBounce(restore);
   windowMotion.stop({ restore, notify });
   hostMotion = null;
@@ -3263,7 +3367,12 @@ function menuTemplate() {
         click: item => setCompanionSetting('bubblesEnabled', item.checked) }
     ] },
     codexMenu(),
-    ...(zcodeLink ? [zcodeLink.menu()] : []),
+    ...(zcodeLink ? [(() => {
+      const item = zcodeLink.menu();
+      if (FIRST_RELEASE) item.submenu = item.submenu.map(entry => entry.id === 'zcode-enabled'
+        ? { ...entry, click: checkbox => { checkbox.checked = zcodeLink.isEnabled(); openGlobalSettings('/zcode-menu'); } } : entry);
+      return item;
+    })()] : []),
     { label: '贴边与显示', submenu: [
       { id: 'edge-left', label: '靠左收起', click: () => dockPet('left') },
       { id: 'edge-right', label: '靠右收起', click: () => dockPet('right') },
@@ -4063,6 +4172,7 @@ function createPetWindow() {
     if (!isCurrentPetWindow()) return;
     syncCodexSettings(codexCompanion?.getSnapshot(), true);
     syncWorkBuddyAnimationSettings(true);
+    syncZcodeAnimationSettings(true);
     if (!isCurrentPetWindow()) return;
     activityMonitor.start();
     if (!isCurrentPetWindow()) return;
@@ -4261,6 +4371,28 @@ function registerIpc() {
     } catch (_) { return { status: 'error', message: 'WorkBuddy 连接未完成，请重试。', snapshot: globalSettingsSnapshot() }; }
     finally { owner.removeListener('closed', abort); owner.removeListener('hide', abort); globalSettingsBusy = false; }
   });
+  ipcMain.handle('pet:global-zcode-connection', async(event,action)=>{
+    if(!FIRST_RELEASE||!zcodeQuotaConnection||!fromGlobalSettings(event)||event.sender.getURL()!==pathToFileURL(path.join(__dirname,'global-settings.html')).href||globalSettingsBusy||
+      !['app','account','connect','disconnect','cancel','tasks-authorize','tasks-revoke','notifications-enable','notifications-disable'].includes(action))return{status:'busy'};
+    globalSettingsBusy=true;const owner=globalSettingsWindow,controller=new AbortController(),abort=()=>controller.abort();owner.once('closed',abort);owner.once('hide',abort);
+    try{
+      let result;
+      if(action==='app'||action==='account')result=await zcodeQuotaConnection.authorize(action,controller.signal);
+      else if(action==='cancel')result=zcodeQuotaConnection.cancel();
+      else if(action==='disconnect'){
+        try { await zcodeNotifications.disable(); }
+        finally { result=await zcodeQuotaConnection.disconnect(); }
+      }
+      else if(action==='tasks-authorize')result=await zcodeQuotaConnection.authorizeTasks(controller.signal);
+      else if(action==='tasks-revoke')result=await zcodeQuotaConnection.revokeTasks();
+      else if(action==='notifications-enable')result=await zcodeNotifications.enable(controller.signal);
+      else if(action==='notifications-disable')result=await zcodeNotifications.disable();
+      else result=await zcodeQuotaConnection.connect(controller.signal);
+      if(controller.signal.aborted)return{status:'cancelled'};
+      return{...result,snapshot:globalSettingsSnapshot()};
+    }catch(error){return{status:'error',message:['ZCODE_CREDENTIAL_SECURE_STORAGE_REQUIRED','ZCODE_CREDENTIAL_DECRYPT_FAILED'].includes(error.code)?'当前 ZCode 凭据格式尚未接通，已有登录保持。':'ZCode 连接未完成，请检查官方登录后重试。',snapshot:globalSettingsSnapshot()};}
+    finally{owner.removeListener('closed',abort);owner.removeListener('hide',abort);globalSettingsBusy=false;}
+  });
   ipcMain.handle('pet:global-codex-connection', async (event, action) => {
     if (!FIRST_RELEASE || !storeEnableFlow || !fromGlobalSettings(event) ||
       event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'global-settings.html')).href ||
@@ -4305,6 +4437,7 @@ function registerIpc() {
     if (!item || (item.type === 'checkbox' && typeof checked !== 'boolean')) return { error: '该选项暂不可用，请刷新后重试。' };
     globalSettingsBusy = true;
     try {
+      if(FIRST_RELEASE&&item.id==='zcode-enabled'){openGlobalSettings('/zcode-menu');return{snapshot:globalSettingsSnapshot(),message:'请在 ZCode 设置中管理本机授权。'};}
       if(FIRST_RELEASE&&item.id==='workbuddy-enabled'){openGlobalSettings('workbuddy-settings');return{snapshot:globalSettingsSnapshot(),message:'请在 WorkBuddy 设置中管理本机授权。'};}
       if(IS_STORE_BUILD&&['codex-enabled','zcode-enabled','workbuddy-enabled'].includes(item.id)){openStoreConnections(item.id.replace('-enabled',''));return{snapshot:globalSettingsSnapshot(),message:'请在统一连接引导中管理该工具的授权。'};}
       // Await consent instead of reporting success while its window is still open.
@@ -4663,6 +4796,7 @@ function registerIpc() {
     if (action?.command === 'app-update') {
       if (action.open && availableUpdate?.latestVersion === action.version) void showUpdateResult(availableUpdate);
     } else if (action?.command === 'codex') void routeCodexAction(action.descriptor);
+    else if(action?.command==='provider-task'&&action.provider==='zcode'){if(zcodePresentation?.id===action.alertId&&zcodePresentation.generation===action.generation)clearZcodePresentation();}
     else if (action?.command === 'provider-task' && action.provider === 'workbuddy') {
       if (workbuddyPresentation?.id === action.alertId && workbuddyPresentation.generation === action.generation) clearWorkBuddyPresentation();
     }
@@ -4751,6 +4885,7 @@ function registerIpc() {
     thoughts?.hide();
     dismissCodexPresentation();
     clearWorkBuddyPresentation();
+    clearZcodePresentation();
     stopWindowBounce();
     hostMotion = { owner: 'user', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     const bounds = petWindow.getBounds();
@@ -4776,6 +4911,11 @@ function registerIpc() {
   });
 
   ipcMain.on('pet:codex-availability', (event, packet) => {
+    if(packet?.source==='zcode'){
+      const state=zcodeNotifications?.getState();
+      if(!fromPetWindow(event)||!codexPageReady||!state?.connected||packet.generation!==state.generation||packet.pageEpoch!==codexPageEpoch||typeof packet.available!=='boolean')return;
+      zcodeRenderer={generation:packet.generation,pageEpoch:packet.pageEpoch,available:packet.available};pumpZcodePresentation();return;
+    }
     if (packet?.source === 'workbuddy') {
       const state = workbuddyNotifications?.getState();
       if (!fromPetWindow(event) || !codexPageReady || !state?.connected || packet.generation !== state.generation ||
@@ -4793,6 +4933,7 @@ function registerIpc() {
     if(fromPetWindow(event)&&event.senderFrame===event.sender.mainFrame&&request&&['hop','spin','bow'].includes(request.action)&&['jump','spin','happy'].includes(request.spriteAction))finishCodexSpriteMotion(request);
   });
   ipcMain.on('pet:codex-motion-ready', (event, request) => {
+    if(request?.source==='zcode'){acceptZcodeMotionReady(event,request);return;}
     if (request?.source === 'workbuddy') { acceptWorkBuddyMotionReady(event, request); return; }
     if (!fromPetWindow(event) || !Number.isSafeInteger(request?.token) || request.token <= 0 ||
       !Number.isSafeInteger(request.alertId) || !Number.isSafeInteger(request.generation) ||
@@ -5054,6 +5195,28 @@ async function bootstrap() {
   const { runWorkBuddy } = require('./lib/workbuddy-client');
   if (FIRST_RELEASE) {
     const { createDirectoryStorage } = require('./lib/mas-provider-runtime');
+    const nativeZcodeDialog = { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed()
+      ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) };
+    zcodeInstalledAccess = require('./lib/mas-installed-zcode-access').createMasInstalledZcodeAccess({app,dialog:nativeZcodeDialog,
+      storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-installed-zcode-grants'))});
+    zcodeRun = require('./lib/mas-installed-zcode').createMasInstalledZcodeRunner({access:zcodeInstalledAccess});
+    masZcodeProvider = require('./lib/mas-zcode-provider').createMasZcodeProvider({run:zcodeRun,directoryAccess:zcodeInstalledAccess.directoryAccess,
+      installedAppAccess:zcodeInstalledAccess.installedAppAccess, credentialContext:{home:require('node:os').userInfo().homedir,username:require('node:os').userInfo().username},
+      fetch:(url,options)=>net.fetch(url,options)});
+    zcodeQuotaConnection = require('./lib/mas-zcode-quota-connection').createMasZcodeQuotaConnection({access:zcodeInstalledAccess,readAccount:()=>masZcodeProvider.readAccount(),
+      storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-zcode-purpose')),
+      link:{getSnapshot:()=>zcodeLink?.getSnapshot(),suspend:()=>zcodeLink?.suspend(),setEnabled:value=>value&&zcodeLink?.isEnabled()?zcodeLink.start():zcodeLink?.setEnabled(value),refresh:()=>zcodeLink?.refresh()},
+      onAccountChanged:()=>{void zcodeNotifications?.disable();clearZcodePresentation();},
+      onChange:()=>{notifyStoreConnections();zcodeLink?.sync();syncQuotaCardGroup();}});
+    const zcodeInstaller = require('./lib/mas-zcode-event-installation').createMasZcodeEventInstallation({app,dialog:nativeZcodeDialog,
+      storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-zcode-event-grants')),assetRoot:path.join(__dirname,'assets/zcode-desktop-hook')});
+    zcodeNotifications = require('./lib/mas-zcode-task-notifications').createMasZcodeTaskNotifications({installer:zcodeInstaller,
+      storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-zcode-event-pairing')),
+      getAccountKey:()=>zcodeQuotaConnection.getAccountKey(),verifyAccount:async(_expected,signal)=>({accountKey:await zcodeQuotaConnection.verifyAccount({signal})}),
+      readTurnStatus:require('./lib/mas-zcode-turn-status').createMasZcodeTurnStatusReader({directoryAccess:zcodeInstalledAccess.directoryAccess}),
+      onChange:()=>syncZcodeAnimationSettings(),onAlert:enqueueZcodeAlert,onClear:()=>syncZcodeAnimationSettings()});
+    zcodeNotificationTimer=setInterval(()=>{void zcodeQuotaConnection.refreshAccount();void zcodeNotifications.refreshAccount();pumpZcodePresentation();},3000);
+    zcodeNotificationTimer.unref?.();
     workbuddyInstalledAccess = require('./lib/mas-installed-workbuddy-access').createMasInstalledWorkBuddyAccess({ app,
       dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed() ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
       storage: createDirectoryStorage(path.join(app.getPath('userData'), 'store-installed-workbuddy-grants')) });
@@ -5345,8 +5508,15 @@ async function bootstrap() {
   zcodeConsent = createZcodeConsentWindow({ BrowserWindow, ipcMain,
     getInfo: codexConsentInfo, position: positionFunctionWindow, getAppearance: getNotesAppearance,
     isBlocked: () => isQuitting || screenLocked, onError: error => writeError('ZCode 授权窗口', {code:error?.code || 'CONSENT_UNAVAILABLE'}) });
+  }
   zcodeLink = createZcodeLink({ BrowserWindow, screen, ipcMain,
-    ...(IS_STORE_BUILD ? { createCompanion: options => require('./lib/zcode-companion').createZcodeCompanion({ ...options, ...storeRuntime.zcode.companionOptions }) } : {}),
+    ...(IS_STORE_BUILD ? { createCompanion: options => {
+      const provider = FIRST_RELEASE ? masZcodeProvider : storeRuntime.zcode;
+      const service = require('./lib/zcode-companion').createZcodeCompanion({ ...options, ...provider.companionOptions,
+        ...(FIRST_RELEASE ? { readTasks: args => zcodeQuotaConnection?.isTasksAuthorized() ? provider.readTasks(args)
+          : Promise.resolve({state:'unknown',items:[],results:[],activity:{runningCount:null,unreadCount:null}}) } : {}) });
+      return FIRST_RELEASE ? { ...service, getSnapshot: () => require('./lib/mas-zcode-quota-connection').projectMasZcodeSnapshot(service.getSnapshot(), zcodeQuotaConnection?.isTasksAuthorized(), zcodeQuotaConnection?.getAccountKey()) } : service;
+    } } : {}),
     getSettings: () => settings,
     save: patch => { settings = saveSettings(settingsFile, { ...settings, ...patch }); },
     filePath: path.join(app.getPath('userData'), 'zcode-status-history.json'),
@@ -5367,9 +5537,9 @@ async function bootstrap() {
       if (!enabled) await chat?.zcodeDisabled();
       else chat?.sourceChanged(settings.chatSource);
     },
-    requestConsent: () => IS_STORE_BUILD ? storeRuntime.ensureAuthorized('zcode') : IS_SMOKE_TEST && process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1'
+    requestConsent: () => FIRST_RELEASE ? zcodeInstalledAccess.ensure({interactive:false}).then(value=>value.status==='stored') : IS_STORE_BUILD ? storeRuntime.ensureAuthorized('zcode') : IS_SMOKE_TEST && process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1'
       ? Promise.resolve(true) : zcodeConsent.open(),
-    cancelConsent: () => zcodeConsent.cancel(),
+    cancelConsent: () => { if(FIRST_RELEASE)zcodeInstalledAccess.clearPendingApp();else zcodeConsent.cancel(); },
     openTask: async id => {
       if (IS_STORE_BUILD) { await shell.openExternal('zcode://'); return; }
       const result = await require('./lib/zcode-tasks').openZcodeTask(id);
@@ -5380,7 +5550,6 @@ async function bootstrap() {
       if (choice.response === 0 && !screenLocked && !isQuitting) await shell.openPath('/Applications/ZCode.app');
     },
     onError: error => writeError('ZCode 联动', {code:error?.code || 'ZCODE_UNAVAILABLE'}) });
-  }
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), ...(IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' ? { random: () => 0 } : {}), onChange: payload => {
@@ -5517,7 +5686,11 @@ async function bootstrap() {
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
-  void zcodeLink?.start();
+  if(FIRST_RELEASE) void (async()=>{
+    await zcodeQuotaConnection.restore(settings.zcodeEnabled);
+    if(zcodeQuotaConnection.getState().connected) await zcodeNotifications.restore();
+  })().catch(()=>writeError('ZCode 恢复',{code:'ZCODE_RESTORE_FAILED'}));
+  else void zcodeLink?.start();
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -5580,6 +5753,8 @@ if (!hasSingleInstanceLock) {
     void workbuddyNotifications?.close();
     workbuddyChatConnection?.close();
     workbuddyQuotaConnection?.close();
+    if(zcodeNotificationTimer!==null)clearInterval(zcodeNotificationTimer);
+    zcodeNotificationTimer=null;void zcodeNotifications?.close();zcodeQuotaConnection?.close();clearZcodePresentation();
     workbuddyUsage?.close();
     workbuddyQuota?.close();
     apiBalance?.close(); apiBalanceLabel?.destroy(); apiBalanceDetails?.destroy();

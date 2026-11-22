@@ -91,12 +91,14 @@ function normalizeCodingPlanQuota(payload, now = Date.now()) {
 }
 async function fetchZcodeUsage(account, options = {}) {
   const now = typeof options.now === 'function' ? options.now() : options.now ?? Date.now();
+  const appVersion = options.appVersion === undefined ? '3.16.3' : options.appVersion;
+  if (typeof appVersion !== 'string' || !/^\d{1,4}(?:\.\d{1,4}){1,3}$/.test(appVersion)) throw fail('ZCODE_INVALID_APP_VERSION');
   const team = isTeam(account);
   if (team) account = await (options.resolveTeamAccount || resolveZcodeTeamAccount)(account, options);
   const buckets = []; let balanceState = 'unavailable'; let paidState = 'unavailable'; let firstError = null;
   if (!team && account?.jwtToken && account?.deviceMid) {
     try {
-      const payload = await requestOfficialJson('https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.16.3',
+      const payload = await requestOfficialJson(`https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=${encodeURIComponent(appVersion)}`,
         { ...options, headers: { Authorization: `Bearer ${account.jwtToken}`, 'x-device-mid': account.deviceMid } });
       if (![undefined, 0, 200].includes(payload.code)) throw fail('ZCODE_BILLING_ERROR');
       const data = payload?.data || payload;

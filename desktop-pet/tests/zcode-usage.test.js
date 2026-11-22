@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { readZcodeAccount } = require('../lib/zcode-account');
+const { readZcodeAccount, decryptCredential } = require('../lib/zcode-account');
 const { normalizeZcodeBalance, normalizeCodingPlanQuota, fetchZcodeUsage, requestOfficialJson } = require('../lib/zcode-usage');
 const fixture = require('./fixtures/zcode-balance.json');
 const now = fixture.server_time * 1000;
@@ -28,6 +28,20 @@ test('native encrypted credentials stay read only and account key remains stable
   assert.equal(readZcodeAccount({ home, env }).accountKey, account.accountKey);
   assert.throws(() => readZcodeAccount({ home, env: { ZCODE_CREDENTIAL_SECRET: 'wrong' } }), /ZCODE_CREDENTIAL_DECRYPT_FAILED/);
   fs.rmSync(home, { recursive: true });
+});
+test('OS-protected v2 and unknown encrypted credentials never become plaintext tokens', () => {
+  assert.throws(() => decryptCredential('enc:v2:os:synthetic-fingerprint:synthetic-payload', 'legacy-secret'),
+    { code: 'ZCODE_CREDENTIAL_SECURE_STORAGE_REQUIRED' });
+  assert.throws(() => decryptCredential('enc:v3:synthetic-payload', 'legacy-secret'),
+    { code: 'ZCODE_CREDENTIAL_DECRYPT_FAILED' });
+  assert.equal(decryptCredential('synthetic-plain-token', 'legacy-secret'), 'synthetic-plain-token');
+});
+test('a mixed credential migration cannot hide protected identity material behind token-based attribution', t => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zcode-v2-identity-')), dir = path.join(home, '.zcode/v2');
+  t.after(() => fs.rmSync(home, { recursive: true, force: true })); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'credentials.json'), JSON.stringify({ 'oauth:active_provider': 'zai',
+    'oauth:zai:access_token': 'synthetic-plain-oauth', 'oauth:zai:user_info': 'enc:v2:os:synthetic' }));
+  assert.throws(() => readZcodeAccount({ home, env: {} }), { code: 'ZCODE_CREDENTIAL_SECURE_STORAGE_REQUIRED' });
 });
 test('balance normalizes each actual bucket independently, expiry is never called reset', () => {
   const buckets = normalizeZcodeBalance(fixture, now);
@@ -56,6 +70,18 @@ test('billing endpoint uses native device and jwt only, returns no credentials',
   } });
   assert.equal(response.buckets.length, 4); assert.deepEqual(response.modelIds, ['glm-5.3', 'glm-5.3-flash']);
   assert.equal(JSON.stringify(response).includes('secret-jwt'), false);
+});
+test('billing uses an explicitly supplied installed version and rejects invalid version before sending', async () => {
+  const account = { jwtToken: 'synthetic-jwt', deviceMid: 'synthetic-mid' }; let calls = 0;
+  const response = await fetchZcodeUsage(account, { now, appVersion: '3.18.2', fetch: async url => {
+    calls++; assert.equal(url, 'https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.18.2');
+    return { ok: true, status: 200, text: async () => JSON.stringify({ code: 0, data: fixture }) };
+  } });
+  assert.equal(response.buckets.length, 4);
+  for (const appVersion of ['3.18.2&token=invalid', '', null, 'current']) {
+    await assert.rejects(fetchZcodeUsage(account, { appVersion, fetch: () => { calls++; } }), { code: 'ZCODE_INVALID_APP_VERSION' });
+  }
+  assert.equal(calls, 1);
 });
 test('paid windows use server spans, MCP remains separate and missing windows stay missing', () => {
   const buckets = normalizeCodingPlanQuota({ data: { limits: [
@@ -89,6 +115,20 @@ test('native scoped paid credentials follow the exact selected account and team,
   fs.writeFileSync(path.join(dir, 'credentials.json'), JSON.stringify(raw));
   assert.equal(readZcodeAccount({ home, env }).codingPlanApiKey, null);
   assert.notEqual(readZcodeAccount({ home, env }).accountKey, account.accountKey); fs.rmSync(home, { recursive: true });
+});
+test('strict account reads only account-scoped paid keys while the existing website config fallback stays compatible', t => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zcode-strict-account-')), dir = path.join(home, '.zcode/v2');
+  t.after(() => fs.rmSync(home, { recursive: true, force: true })); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'credentials.json'), JSON.stringify({ 'oauth:active_provider': 'zai',
+    zcodejwttoken: 'synthetic-jwt', 'oauth:zai:user_info': JSON.stringify({ user_id: 'current-user' }) }));
+  fs.writeFileSync(path.join(dir, 'setting.json'), JSON.stringify({ providerFamilyDomain: 'zai',
+    providerFamilyConnectionSelections: { zai: { kind: 'individual-coding-plan' } } }));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ provider: { 'builtin:zai-coding-plan': {
+    enabled: true, options: { apiKey: 'unscoped-previous-key', baseURL: 'https://api.z.ai/api/anthropic' }
+  } } }));
+  const normal = readZcodeAccount({ home, env: {} }), strict = readZcodeAccount({ home, env: {}, requireScopedApiKey: true });
+  assert.equal(normal.codingPlanApiKey, 'unscoped-previous-key'); assert.equal(strict.codingPlanApiKey, null);
+  assert.equal(strict.accountKey, normal.accountKey);
 });
 test('paid team quota sends only selected scope to the corresponding official host', async () => {
   const response = await fetchZcodeUsage({ family: 'bigmodel', codingPlanApiKey: 'paid-key', jwtToken: 'personal-jwt', deviceMid: 'mid',

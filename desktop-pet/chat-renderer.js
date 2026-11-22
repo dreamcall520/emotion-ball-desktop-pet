@@ -94,7 +94,10 @@
         option.setAttribute('role', 'menuitemradio');
         const check = document.createElement('span'); check.className = 'model-option-check'; check.setAttribute('aria-hidden', 'true');
         const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = item.id === 'zcode' ? 'ZCode' : item.id === 'workbuddy' ? 'WorkBuddy' : 'Codex';
-        if (item.enabled !== true || sourceNeedsAuthorization(item)) {
+        if (item.scopeUnavailable === true) {
+          label.textContent += ' 暂不可用'; option.title = item.message || '当前来源暂不可用于球球聊天。';
+          option.setAttribute('aria-label', option.title); option.disabled = true;
+        } else if (item.enabled !== true || sourceNeedsAuthorization(item)) {
           const name = label.textContent;
           label.textContent = `连接 ${name}…`;
           option.title = `尚未连接 ${name}，前往连接页。`;
