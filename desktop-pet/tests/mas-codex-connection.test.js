@@ -45,6 +45,12 @@ test('quota成功先报告账户再报告剩余额度，保留窗口跨度/重�
   assert.equal(values(f.events, 'quota').length, 2);
   f.connection.close();
 });
+test('同源余额与重置机会从托管reader完整传入companion，不泄漏原响应字段',async t=>{
+ const {projectManagedCodexQuota}=require('../lib/managed-codex-quota-reader');
+ const snapshot={...projectManagedCodexQuota({rateLimits:{primary:{usedPercent:100,windowDurationMins:10080,resetsAt:2000000000},credits:{hasCredits:true,unlimited:false,balance:'53489.1547310000',token:'SECRET'},spendControlReached:true},rateLimitResetCredits:{availableCount:1,credits:[{id:'reset-a',status:'available',resetType:'codexRateLimits',grantedAt:1800000000,expiresAt:1801000000}]}},NOW),accountKey:ACCOUNT_A};
+ const f=harness({readUsage:async()=>snapshot});t.after(()=>f.connection.close());await f.connection.start();const q=values(f.events,'quota')[0];assert.deepEqual(q.credits,{hasCredits:true,unlimited:false,balance:'53489.1547310000'});assert.equal(q.spendControlReached,true);assert.equal(q.resetCreditsAvailable,1);assert.equal(q.resetOpportunities[0].expiresAt,1801000000000);assert.equal(q.resetDetailsPartial,false);assert.equal(q.scopes,undefined);assert.equal(q.accountKey,undefined);assert.equal(JSON.stringify(q).includes('SECRET'),false);
+ const {createCodexCompanion}=require('../lib/codex-companion');const companion=createCodexCompanion({now:()=>NOW,createConnection:callbacks=>createMasCodexConnection({...callbacks,readUsage:async()=>snapshot,createTasks:()=>({read:async()=>[]})})});t.after(()=>companion.close());await companion.setEnabled(true);const copied=companion.getSnapshot().quota;assert.equal(copied.credits.balance,'53489.1547310000');assert.equal(copied.resetCreditsAvailable,1);assert.equal(copied.resetOpportunities.length,1);
+});
 
 test('缺失窗口不生成默认0，缺百分比保持null，空窗口报告unsupported', async () => {
   let current = usage({ windows: [{ id: 'codex:primary', usedPercent: null, windowMinutes: null, resetsAt: null }] });

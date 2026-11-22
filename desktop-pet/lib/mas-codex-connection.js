@@ -1,5 +1,6 @@
 'use strict';
 const { readCodexAccountUsage } = require('./codex-account-usage');
+const { quotaCreditDetails, quotaResetDetails } = require('./codex-state');
 
 function statusCode(error) {
   if (['DIRECTORY_ACCESS_REQUIRED', 'AUTH_UNAVAILABLE'].includes(error?.code)) return ['missing', 'MISSING'];
@@ -31,7 +32,7 @@ function createMasCodexConnection({ directoryAccess, fetch, readUsage = readCode
         const windows = snapshot.windows.map(window => ({ id: window.id, label: 'Codex',
           windowMinutes: window.windowMinutes, remaining: window.usedPercent === null ? null : 100 - window.usedPercent,
           resetsAt: window.resetsAt }));
-        onQuota({ windows, updatedAt: snapshot.updatedAt, source: snapshot.source });
+        onQuota({ windows, ...quotaCreditDetails(snapshot), ...quotaResetDetails(snapshot), updatedAt: snapshot.updatedAt, source: snapshot.source });
         report(channel, windows.length ? 'connected' : 'unsupported', windows.length ? null : 'UNSUPPORTED');
       } else {
         const result = await tasks.read({ signal: controller.signal });

@@ -96,9 +96,11 @@ test('重置未知与明确0区分，历史默认折叠且空态不按count造�
   const h = harness('codex-details-renderer.js',detailIds,'petCodexDetails');
   const base = {action:'opportunities',items:[item(300)],period:300,resetOpportunities:null};
   h.receive(base);
-  assert.match(h.nodes['details-content'].textContent,/当前可用暂未提供.*到期明细暂未提供/);
+  assert.match(h.nodes['details-content'].textContent,/可用次数暂未提供.*不代表没有重置机会/);
+  assert.equal(h.nodes['details-content'].querySelector('.reset-summary'),null);
+  assert.doesNotMatch(h.nodes['details-content'].textContent,/到期明细暂未提供/);
   assert.equal(h.nodes['details-content'].querySelector('.opportunity-history').open,false);
-  assert.match(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/账户历史 · 未同步.*账户历史暂未同步/);
+  assert.match(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/账户历史.*历史尚未同步，不能据此判断没有记录/);
   h.receive({...base,resetCreditsAvailable:0,resetOpportunities:[],resetHistory:[{state:'expired',status:'available',expiresAt:NOW-60000}]});
   assert.match(h.nodes['details-content'].textContent,/暂无重置机会/);
   assert.equal(h.nodes['details-content'].querySelector('.opportunity-history').open,false);

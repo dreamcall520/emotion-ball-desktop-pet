@@ -210,8 +210,8 @@ html[data-resolved-appearance="dark"] #details-panel[data-source="zcode"] .trend
 .zcode-quota-list { display: grid; gap: 10px; list-style: none; padding: 0; margin: 0; }
 .zcode-quota-bucket { border: 1px solid var(--detail-line); border-radius: 12px; overflow: hidden; background: color-mix(in srgb,var(--detail-blue) 4%,transparent); }
 .zcode-quota-row { display: block; width: 100%; padding: 12px 13px 11px; text-align: left; }
-.zcode-quota-row:hover,.zcode-quota-row:focus-visible { border-radius: inherit; background: linear-gradient(135deg,rgba(255,255,255,.58),rgba(204,225,252,.22)); box-shadow: inset 0 0 0 1px rgba(99,144,205,.20),inset 0 1px 0 rgba(255,255,255,.70); }
-:root[data-resolved-appearance="dark"] .zcode-quota-row:hover,:root[data-resolved-appearance="dark"] .zcode-quota-row:focus-visible { background: linear-gradient(135deg,rgba(118,164,222,.12),rgba(66,112,171,.06)); box-shadow: inset 0 0 0 1px rgba(155,192,241,.22),inset 0 1px 0 rgba(210,229,255,.09); }
+.zcode-quota-row:hover,.zcode-quota-row:focus-visible { border-radius: inherit; background: linear-gradient(135deg,rgba(218,234,255,.75),rgba(194,218,249,.58)); box-shadow: inset 0 0 0 1px rgba(76,125,192,.55),inset 0 1px 0 rgba(255,255,255,.70); }
+:root[data-resolved-appearance="dark"] .zcode-quota-row:hover,:root[data-resolved-appearance="dark"] .zcode-quota-row:focus-visible { background: linear-gradient(135deg,rgba(118,164,222,.22),rgba(66,112,171,.14)); box-shadow: inset 0 0 0 1px rgba(155,192,241,.40),inset 0 1px 0 rgba(210,229,255,.12); }
 :root[data-color-mode="accessible"] .zcode-quota-row:hover,:root[data-color-mode="accessible"] .zcode-quota-row:focus-visible { background: var(--detail-count); box-shadow: inset 0 0 0 1px var(--detail-blue); }
 .zcode-quota-heading { display: flex; align-items: center; gap: 7px; font-size: 12px; line-height: 18px; }
 .zcode-quota-heading b { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
@@ -227,3 +227,9 @@ html[data-resolved-appearance="dark"] #details-panel[data-source="zcode"] .trend
 .zcode-quota-values > span:last-child { font-size: 10px; }
 .chart-help-body ul { margin: 0; padding-left: 16px; }
 .chart-help-body li + li { margin-top: 5px; }
+.reset-unavailable { display: flex; align-items: center; gap: 10px; padding: 14px; margin-top: 14px; border: 1px solid var(--detail-line); border-radius: 12px; background: var(--detail-count); }
+.reset-unavailable-icon { flex: none; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.3; color: var(--detail-muted); }
+.reset-unavailable-copy { min-width: 0; }
+.reset-unavailable-title { display: block; font-size: 12px; font-weight: 600; line-height: 18px; }
+.reset-unavailable-description { margin: 4px 0 0; color: var(--detail-muted); font-size: 11px; line-height: 18px; }
+.opportunity-history-note { margin: 8px 0 0; color: var(--detail-muted); font-size: 11px; line-height: 18px; }

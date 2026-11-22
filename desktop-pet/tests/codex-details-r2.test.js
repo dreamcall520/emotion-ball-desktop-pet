@@ -269,9 +269,9 @@ test('同周期刷新保留图表说明展开及键盘焦点',() => {
   assert.equal(summary.ownerDocument.activeElement,next);
 });
 
-test('R2 正重置次数的xx次加蓝色状态，标签、0与未知保持中性',() => {
+test('R2 正重置次数的xx次加蓝色状态，标签与0保持中性',() => {
   const h = renderer();
-  for (const [value,text,positive] of [[2,'2',true],[0,'0',false],[undefined,'暂未提供',false]]) {
+  for (const [value,text,positive] of [[2,'2',true],[0,'0',false]]) {
     h.receive({action:'opportunities',resetCreditsAvailable:value,resetOpportunities:null});
     const summary = h.nodes['details-content'].querySelector('.reset-summary');
     assert.equal(summary.querySelector('strong').textContent,text);
@@ -279,6 +279,53 @@ test('R2 正重置次数的xx次加蓝色状态，标签、0与未知保持中�
     assert.equal(summary.children[0].className,'');
     if (value !== undefined) assert.equal(summary.children.at(-1).className,positive ? 'positive-count' : '');
   }
+});
+
+test('重置次数未知用紧凑说明而非巨字或零次，未知明细与历史不重复堆叠',() => {
+  const h = renderer(), content = h.nodes['details-content'];
+  for (const value of [undefined,null,-1]) {
+    h.receive({action:'opportunities',resetCreditsAvailable:value,resetOpportunities:null});
+    const summary = content.querySelector('.reset-unavailable'), history = content.querySelector('.opportunity-history');
+    assert(summary);
+    assert.equal(summary.querySelector('.reset-unavailable-title').textContent,'可用次数暂未提供');
+    assert.equal(summary.querySelector('.reset-unavailable-description').textContent,'不代表没有重置机会。');
+    assert.equal(summary.querySelector('strong'),null);
+    assert.equal(summary.querySelector('.reset-unavailable-icon').getAttribute('aria-hidden'),'true');
+    assert.equal(content.querySelector('.reset-summary'),null);
+    assert.equal(content.querySelectorAll('.empty-state').length,0);
+    assert.equal(history.querySelector('summary').textContent,'账户历史');
+    assert.equal(history.querySelectorAll('.opportunity-history-note').length,1);
+    assert.equal(history.querySelector('.opportunity-history-note').textContent,'历史尚未同步，不能据此判断没有记录。');
+    assert.doesNotMatch(content.textContent,/到期明细暂未提供|账户历史暂未同步|暂无重置机会|0次|重试|网络|登录/);
+  }
+  h.receive({action:'opportunities',resetCreditsAvailable:0,resetOpportunities:[]});
+  assert.equal(content.querySelector('.reset-unavailable'),null);
+  assert.equal(content.querySelector('.reset-summary strong').textContent,'0');
+  assert.match(content.textContent,/暂无重置机会/);
+});
+
+test('未知总次数仍保留真实到期与账户、本机记录，账户历史刷新保留折叠选择',() => {
+  const h = renderer(), content = h.nodes['details-content'], at = Date.now();
+  const model = {action:'opportunities',resetCreditsAvailable:null,resetDetailsPartial:true,
+    resetOpportunities:[{status:'available',expiresAt:at+60000}],
+    accountResetHistory:{state:'partial',events:[{kind:'granted',occurredAt:at-1000},{kind:'redeemed',occurredAt:at}]},
+    resetHistory:[{state:'expired',expiresAt:at-2000}]};
+  h.receive(model);
+  assert.equal(content.querySelector('.opportunity-history').open,undefined);
+  assert.equal(content.querySelector('.opportunity-list').querySelectorAll('li').length,2,'one actual opportunity plus its header');
+  assert.match(content.textContent,/仅返回部分到期明细/);
+  assert.match(content.querySelector('.opportunity-history').textContent,/过去 30 天 · 2 条（部分）.*已获得.*已使用/);
+  assert.match(content.querySelector('.local-opportunity-history').textContent,/本机观察记录 · 1.*已过期/);
+  assert.doesNotMatch(content.textContent,/机会总数以当前可用数量为准|重试/);
+  content.querySelector('.opportunity-history').open = true;
+  h.receive(model);
+  assert.equal(content.querySelector('.opportunity-history').open,true);
+  content.querySelector('.opportunity-history').open = false;
+  h.receive(model);
+  assert.notEqual(content.querySelector('.opportunity-history').open,true);
+  h.receive({...model,resetOpportunities:null,resetHistory:[],accountResetHistory:{state:'ready',events:[]}});
+  assert.match(content.querySelector('.opportunity-history').textContent,/过去 30 天 · 0 条.*过去 30 天暂无获得或使用记录/);
+  assert.equal(content.querySelector('.opportunity-history-note'),null,'a genuine empty synchronized history remains distinct');
 });
 
 test('R2 余额使用共享格式器，保留精确title及两位小数层级，不显示原始长小数或费用语义',() => {

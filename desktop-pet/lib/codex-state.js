@@ -342,5 +342,5 @@ function applyTaskPatches(previous, patches) {
 }
 
 module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, quotaCreditDetails, quotaResetDetails,
-  normalizeResetHistoryPage, accountResetHistoryDetails, MAX_RESET_HISTORY_EVENTS, normalizeThreadList,
+  normalizeResetCredits, normalizeResetHistoryPage, accountResetHistoryDetails, MAX_RESET_HISTORY_EVENTS, normalizeThreadList,
   normalizeTask, projectTask, taskFromProjection, applyTaskPatches };

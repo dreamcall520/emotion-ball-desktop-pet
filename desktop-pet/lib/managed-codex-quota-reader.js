@@ -1,4 +1,5 @@
 'use strict';
+const { quotaCreditDetails, normalizeResetCredits } = require('./codex-state');
 const SOURCE = 'managed-codex-chat-account-quota';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const validDate = value => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000;
@@ -22,19 +23,14 @@ function projectManagedCodexQuota(raw, at = Date.now()) {
         usedPercent: Number.isFinite(window.usedPercent) && window.usedPercent >= 0 && window.usedPercent <= 100 ? window.usedPercent : null,
         resetsAt: Number.isSafeInteger(window.resetsAt) && window.resetsAt > 0 && validDate(window.resetsAt * 1000) ? window.resetsAt * 1000 : null });
     }
-    const value = { id, windows };
-    if (object(group.credits)) value.credits = {
-      hasCredits: typeof group.credits.hasCredits === 'boolean' ? group.credits.hasCredits : null,
-      unlimited: typeof group.credits.unlimited === 'boolean' ? group.credits.unlimited : null,
-      balance: typeof group.credits.balance === 'string' && group.credits.balance.length <= 128 && /^\d+(?:\.\d+)?$/.test(group.credits.balance) ? group.credits.balance : null
-    };
+    const value = { id, windows, ...quotaCreditDetails(group) };
     scopes.push(value);
   }
   // The main card is Codex's bucket only. Other metered pools stay separate.
   const codex = scopes.find(scope => scope.id === 'codex'), windows = codex?.windows || [];
   return { source: SOURCE, billingScope: 'same-chat-login', state: !windows.length ? 'unavailable'
     : windows.every(window => window.windowMinutes !== null && window.usedPercent !== null && window.resetsAt !== null) ? 'ready' : 'partial',
-    windows, scopes, ...(codex?.credits ? { credits: codex.credits } : {}), updatedAt: at };
+    windows, scopes, ...quotaCreditDetails(codex), ...normalizeResetCredits(raw.rateLimitResetCredits), updatedAt: at };
 }
 async function readManagedCodexQuota({ createRpc, signal, now = Date.now } = {}) {
   if (typeof createRpc !== 'function' || typeof now !== 'function') throw new TypeError('createRpc and now required');

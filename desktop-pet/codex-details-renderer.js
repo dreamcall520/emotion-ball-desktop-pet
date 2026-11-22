@@ -251,17 +251,25 @@
   }
   function renderOpportunities(model) {
     setTitle('重置机会');
-    const summary = node('div','reset-summary');
-    summary.replaceChildren(node('span','','当前可用'),node('strong',model.resetCreditsAvailable > 0 ? 'positive-count' : '',model.resetCreditsAvailable === null ? '暂未提供' : String(model.resetCreditsAvailable)),...(model.resetCreditsAvailable === null ? [] : [node('span',model.resetCreditsAvailable > 0 ? 'positive-count' : '','次')]));
+    const unknown = model.resetCreditsAvailable === null;
+    const summary = node('div',unknown ? 'reset-unavailable' : 'reset-summary');
+    if (unknown) {
+      const clock = svgNode('svg',{class:'reset-unavailable-icon',viewBox:'0 0 16 16','aria-hidden':'true'});
+      clock.append(svgNode('circle',{cx:8,cy:8,r:5.5}),svgNode('path',{d:'M8 4.5V8L10.5 9.5'}));
+      const copy = node('div','reset-unavailable-copy');
+      copy.replaceChildren(node('b','reset-unavailable-title','可用次数暂未提供'),node('p','reset-unavailable-description','不代表没有重置机会。'));
+      summary.replaceChildren(clock,copy);
+    } else summary.replaceChildren(node('span','','当前可用'),node('strong',model.resetCreditsAvailable > 0 ? 'positive-count' : '',String(model.resetCreditsAvailable)),node('span',model.resetCreditsAvailable > 0 ? 'positive-count' : '','次'));
     const nodes = [summary];
     if (model.resetCreditsAvailable === 0) nodes.push(node('p','empty-state','暂无重置机会'));
     else if (model.resetOpportunities?.length) {
       nodes.push(opportunityRows(model.resetOpportunities));
-      if (model.resetDetailsPartial) nodes.push(note('仅返回部分明细，机会总数以当前可用数量为准。'));
-    } else nodes.push(node('p','empty-state','到期明细暂未提供'));
+      if (model.resetDetailsPartial) nodes.push(note(unknown ? '仅返回部分到期明细。' : '仅返回部分明细，机会总数以当前可用数量为准。'));
+    } else if (!unknown) nodes.push(node('p','empty-state','到期明细暂未提供'));
     const history = node('details','opportunity-history');
     const account = model.accountResetHistory, synced = ['ready','partial'].includes(account.state);
-    const historyLabel = synced && (account.state === 'ready' || account.events.length) ? `账户历史 · 过去 30 天 · ${account.events.length} 条${account.state === 'partial' ? '（部分）' : ''}`
+    const historyLabel = unknown && !account.events.length && account.state !== 'ready' ? '账户历史'
+      : synced && (account.state === 'ready' || account.events.length) ? `账户历史 · 过去 30 天 · ${account.events.length} 条${account.state === 'partial' ? '（部分）' : ''}`
       : account.events.length ? `账户历史 · ${account.events.length} 条（未更新）` : '账户历史 · 未同步';
     const historyContent = [];
     if (account.events.length) {
@@ -273,8 +281,12 @@
         return li;
       }));
       historyContent.push(list);
-    } else historyContent.push(node('p','empty-state',account.state === 'ready' ? '过去 30 天暂无获得或使用记录' : '账户历史暂未同步'));
-    if (!synced) historyContent.push(note('历史查询未完成，不代表账户没有记录。稍后会自动重试。'));
+    } else if (unknown && account.state !== 'ready') historyContent.push(node('p','opportunity-history-note',synced ? '历史记录尚不完整，不能据此判断没有记录。' : '历史尚未同步，不能据此判断没有记录。'));
+    else historyContent.push(node('p','empty-state',account.state === 'ready' ? '过去 30 天暂无获得或使用记录' : '账户历史暂未同步'));
+    if (unknown) {
+      if (account.events.length && !synced) historyContent.push(node('p','opportunity-history-note','历史查询未完成，记录可能不完整。'));
+      else if (account.events.length && account.state === 'partial') historyContent.push(node('p','opportunity-history-note','仅显示已同步的部分记录。'));
+    } else if (!synced) historyContent.push(note('历史查询未完成，不代表账户没有记录。稍后会自动重试。'));
     else if (account.state === 'partial') historyContent.push(note('仅显示已同步的部分记录，稍后会自动重试。'));
     history.replaceChildren(node('summary','',historyLabel),...historyContent);
     history.addEventListener('toggle',resize); nodes.push(history);

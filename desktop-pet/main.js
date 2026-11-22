@@ -1556,7 +1556,7 @@ function tickEdgeNotice(force = false) {
     appearance: settings?.codexQuotaAppearance,
     quotaModel: visible && quotaEnabled && presentation?.mode === 'tucked'
       ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact',
-        showExtraCredits: !FIRST_RELEASE && settings.codexShowExtraCredits }, codexNow()) : null,
+        showExtraCredits: settings.codexShowExtraCredits }, codexNow()) : null,
     zcodeQuotaModel: visible && !screenLocked && zcodeQuotaEnabled && presentation?.mode === 'tucked'
       ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: 'compact' }) : null
   });
@@ -2208,7 +2208,7 @@ function quotaLabelModel(snapshot = codexCompanion?.getSnapshot()) {
   const model = buildQuotaLabelModel(snapshot, {
     period: display.style === 'card' ? settings.codexQuotaPeriod : 'auto',
     size: display.style === 'card' ? settings.codexQuotaLabelSize : 'compact',
-    showExtraCredits: !FIRST_RELEASE && display.style === 'card' && settings.codexShowExtraCredits
+    showExtraCredits: display.style === 'card' && settings.codexShowExtraCredits
   }, codexNow());
   model.codexIconPreference = FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system');
   model.codexIconDark = codexIconSystemDark();
@@ -2595,7 +2595,7 @@ function initializeCodexCompanion(options = {}) {
 
 function codexDetailModel(snapshot, action, period) {
   const card = buildQuotaLabelModel(snapshot, { period: quotaDisplayConfig().style === 'card' ? settings?.codexQuotaPeriod : 'auto',
-    size: settings?.codexQuotaLabelSize, showExtraCredits: !FIRST_RELEASE && settings?.codexShowExtraCredits }, codexNow());
+    size: settings?.codexQuotaLabelSize, showExtraCredits: settings?.codexShowExtraCredits }, codexNow());
   const selected = card.items.find(item => item.windowMinutes === period) || card.items[0];
   const model = buildCodexDetailsModel(snapshot, { action, period: selected?.windowMinutes || period,
     appearance: settings?.codexQuotaAppearance }, codexNow());
@@ -2743,7 +2743,7 @@ function setCodexPreference(name, value) {
   if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
   const allowed = new Set([
     'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod', 'codexQuotaLabelSize',
-    ...(!FIRST_RELEASE ? ['codexShowExtraCredits'] : []), 'codexQuotaFunEnabled'
+    'codexShowExtraCredits', 'codexQuotaFunEnabled'
   ]);
   if (!allowed.has(name)) return false;
   const previous = settings[name];
@@ -3287,12 +3287,12 @@ function codexMenu() {
           setCodexPreference('codexQuotaFunEnabled', enabled); }
       }] : []),
       { id: 'codex-quota-settings', label: '经典额度卡设置', enabled: cardSettingsEnabled, submenu: [
-        ...(!FIRST_RELEASE ? [{
+        {
           id: 'codex-extra-credits', label: '显示额外点数', type: 'checkbox',
           enabled: cardSettingsEnabled, checked: settings.codexShowExtraCredits !== false,
           click: item => { const enabled = item.checked; item.checked = settings.codexShowExtraCredits !== false;
             setCodexPreference('codexShowExtraCredits', enabled); }
-        }] : []),
+        },
         {
           id: 'codex-quota-period', label: '额度周期', enabled: cardSettingsEnabled,
           submenu: [
