@@ -44,7 +44,7 @@ function createZcodeProtocol({ binary, cwd, env = process.env, executable = proc
         try { result = await onRequest(packet.method, packet.params); } catch (error) {
           write({ id: packet.id, error: { code: -32601, message: 'Unavailable in companion chat' } });
           const code = error?.code, authRequest = packet.method === 'interaction/requestProviderRuntimeHeaders';
-          shutdown(authRequest && ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_LOGIN_REQUIRED'].includes(code) ? code
+          shutdown(authRequest && ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_LOGIN_REQUIRED', 'ZCODE_PERSONAL_KEY_MISSING', 'ZCODE_PERSONAL_PROJECT_UNAVAILABLE', 'ZCODE_PLAN_ACCESS_DENIED'].includes(code) ? code
             : authRequest && ['ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_INVALID_RESPONSE'].includes(code) ? 'DISCONNECTED'
               : ['VERIFICATION_REQUIRED', 'UNAUTHENTICATED', 'TIMEOUT', 'DISCONNECTED'].includes(code) ? code : 'TOOL_BLOCKED'); return;
         }

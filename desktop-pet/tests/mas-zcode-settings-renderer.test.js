@@ -9,13 +9,13 @@ if (process.versions.electron && process.argv.includes('--zcode-settings-child')
     await win.loadFile(path.join(__dirname, '../global-settings.html'));
     const run = code => win.webContents.executeJavaScript(code);
     await run(`window.zcodeActions=[];window.zcodeSnapshot={firstRelease:true,version:'zcode-settings',initialView:'/zcode-menu',
-      firstReleaseZcodeConnection:{enabled:false,connected:false,status:'disconnected',chat:{message:'官方套餐尚不能用于球球普通聊天；请在 ZCode 中使用。'},tasks:{authorized:false},notifications:{enabled:false}},
+      firstReleaseZcodeConnection:{enabled:false,connected:false,status:'disconnected',chat:{authorized:false,message:'聊天需完成当前官方账号的连接授权。'},tasks:{authorized:false},notifications:{enabled:false}},
       entries:[{id:'/zcode-menu',label:'ZCode 联动',children:[{id:'/zcode-menu/zcode-enabled',label:'启用 ZCode 联动',type:'checkbox',checked:false,enabled:true,actionable:true},
         {id:'/zcode-menu/zcode-quota-visible',label:'显示 ZCode 额度',type:'checkbox',checked:true,enabled:true,actionable:true}]}]};
       window.qiuqiuSettings={get:async()=>structuredClone(zcodeSnapshot),onNavigate:callback=>window.zcodeNavigate=callback,
         zcodeConnection:async action=>{zcodeActions.push(action);const state=zcodeSnapshot.firstReleaseZcodeConnection;
-          if(action==='connect')Object.assign(state,{enabled:true,connected:true,status:'ready'});
-          if(action==='disconnect')Object.assign(state,{enabled:false,connected:false,status:'disconnected'});
+          if(action==='connect'){Object.assign(state,{enabled:true,connected:true,status:'ready'});state.chat={authorized:true,message:'已同意使用当前 ZCode 账号聊天。'}}
+          if(action==='disconnect'){Object.assign(state,{enabled:false,connected:false,status:'disconnected'});state.chat.authorized=false;}
           if(action==='tasks-authorize')state.tasks.authorized=true;if(action==='tasks-revoke')state.tasks.authorized=false;
           if(action==='notifications-enable')state.notifications.enabled=true;if(action==='notifications-disable')state.notifications.enabled=false;
           return {status:action==='app'?'app-authorized':action==='account'?'stored':action==='disconnect'?'disconnected':'ready',snapshot:structuredClone(zcodeSnapshot)}}};true`);
@@ -42,7 +42,7 @@ if (process.versions.electron && process.argv.includes('--zcode-settings-child')
     await until(`document.querySelector('[data-zcode-tasks]')`);
     assert.deepEqual(await run('zcodeActions'), ['app', 'account', 'connect']);
     assert.equal(await run(`document.querySelector('#content > section').classList.contains('store-connected-group')`), true);
-    assert.match(await run(`document.querySelector('#content').textContent`), /官方套餐尚不能用于球球普通聊天/);
+    assert.match(await run(`document.querySelector('#content').textContent`), /已同意使用当前 ZCode 账号聊天/);
     await click('[data-action=store-zcode-tasks]');
     await click('dialog[open] button[value=cancel]');
     await until(`!document.querySelector('dialog[open]')&&document.querySelector('[data-action=store-zcode-connection]')!==window.zcodePriorConnection`);

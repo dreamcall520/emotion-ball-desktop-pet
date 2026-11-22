@@ -37,7 +37,7 @@ function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
         status: !connected ? 'needs-connection' : tasksAuthorized ? 'ready' : 'needs-authorization',
         message: '仅显示授权目录中的本机任务，不代表当前账号的全部任务。' },
       chat: { enabled: false, authorized: false, status: 'scope-unavailable',
-        message: '官方套餐尚不能用于球球普通聊天；请在 ZCode 中使用。' } };
+        message: '聊天需完成当前官方账号的连接授权。' } };
   }
   function invalidate() {
     ++epoch; ++taskEpoch; authorized = tasksAuthorized = false; accountKey = null;

@@ -68,13 +68,15 @@ test('unselected or unsafe components cannot discover another installation', asy
     assert.deepEqual(f.events.slice(-2), ['release:account', 'release:app']);
   }
 });
-test('official runtime never sends unsupported Coding Plan or unverified Start Plan chat', async t => {
+test('official runtime permits selected official plans without a blanket chat ban or custom fallback', async t => {
   for (const kind of ['start-plan', 'individual-coding-plan', 'team-coding-plan']) {
     const f = await fixture(t); f.switchAccount({ selection: { kind } }); let sent = 0;
     f.options.createRpc = () => ({ close: async () => {}, startTurn: async () => { sent++; } });
-    const rpc = await createInstalledZcodeChatRpc(f.options), code = kind === 'start-plan' ? 'ZCODE_START_PLAN_SCOPE_UNVERIFIED' : 'CODING_PLAN_SCOPE_UNSUPPORTED';
-    assert.deepEqual((await rpc.getChatScope()).available, false); assert.equal((await rpc.getChatScope()).code, code);
-    await assert.rejects(rpc.startTurn('session', 'synthetic', {}), { code }); assert.equal(sent, 0); await rpc.close();
+    const rpc = await createInstalledZcodeChatRpc(f.options);
+    assert.deepEqual((await rpc.getChatScope()).available, true);
+    await rpc.startTurn('session', 'synthetic', {}); assert.equal(sent, 1);
+    f.switchAccount({selection:{kind:'api-key'}});await assert.rejects(rpc.startTurn('session','synthetic',{}),{code:'ZCODE_OFFICIAL_SELECTION_REQUIRED'});
+    assert.equal(sent,1);await rpc.close();
   }
 });
 test('isolated runtime puts safety controls in user config and never writes original account', async t => {
@@ -117,4 +119,30 @@ test('read-only bridge abort retains scopes until actual exit and drops stale ac
   await new Promise(resolve => setTimeout(resolve, 5)); controller.abort(); await rejected;
   assert.equal(f.events.some(e => e.startsWith('release:')), false); f.child.emit('close', 1);
   assert.equal(f.events.filter(e => e === 'release:account').length, 1);
+});
+test('Electron virtual ASAR directory uses physical file validation before launching the original component', async t => {
+  const f = await fixture(t), vm = require('node:vm');
+  const moduleFile = require.resolve('../lib/mas-installed-zcode'), archive = path.join(f.app, 'Contents/Resources/app.asar');
+  let virtualArchiveReads = 0, physicalArchiveReads = 0;
+  const patchedFs = { ...fs, promises: { ...fs.promises, lstat: async file => {
+    if (file === archive) { virtualArchiveReads++; return { isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false }; }
+    return fs.promises.lstat(file);
+  } } };
+  const originalFs = { ...fs, promises: { ...fs.promises, lstat: async file => {
+    if (file === archive) physicalArchiveReads++; return fs.promises.lstat(file);
+  } } };
+  const localRequire = require('node:module').createRequire(moduleFile), module = { exports: {} };
+  vm.runInNewContext('(function(require,module,exports,process,__dirname){' + fs.readFileSync(moduleFile, 'utf8') + '\n})', { Buffer, setTimeout, clearTimeout })(
+    name => name === 'node:fs' ? patchedFs : name === 'original-fs' ? originalFs : localRequire(name), module, module.exports,
+    { versions: { electron: '43' }, env: {} }, path.dirname(moduleFile));
+  for (const name of ['stdin','stdout','stderr']) f.child[name] = new PassThrough();
+  const run = module.exports.createMasInstalledZcodeRunner({ access: { installedAppAccess: f.options.installedAppAccess, directoryAccess: f.options.directoryAccess },
+    spawnProcess: () => { setImmediate(() => {
+      f.child.stdout.end(JSON.stringify({ type: 'result', result: { accountKey: 'a'.repeat(64), family: 'zai', selection: { kind: 'start-plan', scope: 'personal' }, hasJwtToken: true, hasAccessToken: true, hasCodingPlanKey: false, hasDeviceMid: true } }) + '\n');
+      f.child.emit('close', 0);
+    }); return f.child; } });
+  assert.equal((await run('account-check')).family, 'zai');
+  assert.equal(virtualArchiveReads, 0); assert.equal(physicalArchiveReads, 1);
+  await fs.promises.unlink(archive); await fs.promises.mkdir(archive);
+  await assert.rejects(run('account-check'), { code: 'DIRECTORY_ACCESS_REQUIRED' });
 });

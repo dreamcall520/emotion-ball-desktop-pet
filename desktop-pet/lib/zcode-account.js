@@ -35,7 +35,7 @@ function decryptCredential(value, secret) {
   } catch (_error) { throw fail('ZCODE_CREDENTIAL_DECRYPT_FAILED'); }
 }
 // Matches the installed ZCode credential cipher; never mutate or repair its credential store.
-function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeFs, requireScopedApiKey = false } = {}) {
+function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeFs, requireScopedApiKey = false, currentSessionOnly = requireScopedApiKey } = {}) {
   const base = env.ZCODE_DATA_BASE_DIR?.trim() || home;
   const dir = path.join(base === '~' ? home : base.startsWith('~/') ? path.join(home, base.slice(2)) : base, '.zcode', 'v2');
   const credentialsPath = path.join(dir, 'credentials.json');
@@ -45,20 +45,36 @@ function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeF
   const load = key => decryptCredential(raw[key], secret);
   const settings = readJson(fs, path.join(dir, 'setting.json'), true);
   const activeFamily = load('oauth:active_provider');
-  const family = ['zai', 'bigmodel'].includes(settings.providerFamilyDomain) ? settings.providerFamilyDomain : activeFamily;
+  const family = ['zai', 'bigmodel'].includes(settings.providerFamilyDomain) ? settings.providerFamilyDomain : activeFamily === 'zai_cn' ? 'bigmodel' : activeFamily;
   if (!['zai', 'bigmodel'].includes(family)) throw fail('ZCODE_PROVIDER_UNSUPPORTED');
-  const jwtToken = family === activeFamily ? load('zcodejwttoken') : null;
-  const accessToken = load(`oauth:${family}:access_token`);
-  if (!jwtToken && !accessToken) throw fail('ZCODE_LOGIN_REQUIRED');
-  const storedUser = load(`oauth:${family}:user_info`);
-  let user = {}; try {
-    const value = JSON.parse(storedUser || '{}');
-    if (value && typeof value === 'object' && !Array.isArray(value)) user = value;
-  } catch (_ignored) {}
-  const accountId = String(user.user_id || user.id || user.sub || '');
   const storedSelection = settings.providerFamilyConnectionSelections?.[family];
   const kind = ['start-plan', 'individual-coding-plan', 'team-coding-plan', 'api-key'].includes(storedSelection?.kind)
     ? storedSelection.kind : null;
+  const parseObject = value => { try { const parsed = JSON.parse(value || '{}'); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } };
+  const loginProvider = currentSessionOnly ? activeFamily : family;
+  if (currentSessionOnly && !['zai', 'bigmodel', 'zai_cn'].includes(loginProvider)) throw fail('ZCODE_LOGIN_REQUIRED');
+  const user = parseObject(load(`oauth:${loginProvider}:user_info`));
+  const zcodeUserId = String(user.user_id || user.id || user.sub || '');
+  let accountId = zcodeUserId;
+  let jwtToken = currentSessionOnly || family === activeFamily ? load('zcodejwttoken') : null;
+  let accessToken = load(`oauth:${loginProvider}:access_token`);
+  if (currentSessionOnly) {
+    // ZCode's current OAuth repo only lends another family its explicitly
+    // linked material. Cached credentials from a previous login are not proof.
+    if (!accountId || !accessToken) throw fail('ZCODE_LOGIN_REQUIRED');
+    if (family !== activeFamily) {
+      const linked = family === 'bigmodel' ? parseObject(load('oauth:linked_bigmodel')) : {};
+      if (linked.userId === zcodeUserId && typeof linked.customerId === 'string' && linked.customerId.trim()
+        && typeof linked.accessToken === 'string' && linked.accessToken.trim()) {
+        accountId = linked.customerId; accessToken = linked.accessToken;
+      } else if (kind === 'start-plan' && activeFamily === 'zai_cn' && family === 'bigmodel' && jwtToken) {
+        accessToken = null;
+      } else throw fail('ZCODE_LOGIN_REQUIRED');
+    }
+    if (family === 'bigmodel' && accessToken && accessToken === jwtToken) throw fail('ZCODE_LOGIN_REQUIRED');
+  }
+  if (!jwtToken && !accessToken) throw fail('ZCODE_LOGIN_REQUIRED');
+  const sessionRevision = load('oauth:session_revision') || null;
   const providerId = kind ? `account:${family}-${kind}` : null;
   const selection = { ...(storedSelection && typeof storedSelection === 'object' ? storedSelection : {}),
     family, providerId, scope: kind === 'team-coding-plan' ? 'team' : 'personal', kind,
@@ -88,7 +104,8 @@ function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeF
   }
   const candidate = scopedKey || configuredApiKey;
   const codingPlanApiKey = typeof candidate === 'string' && /^[^\r\n]{10,4096}$/.test(candidate) && !/^(?:__|\$|<)/.test(candidate) ? candidate : null;
-  return { accountKey, accountId, family, credentialsPath, jwtToken, accessToken, deviceMid,
+  return { accountKey, accountId, accountIdentity: accountId, zcodeUserId, loginProvider: currentSessionOnly ? activeFamily : family,
+    sessionRevision, family, credentialsPath, jwtToken, accessToken, deviceMid,
     selection, codingPlanApiKey, baseDir: base };
 }
 function readZcodeConnection(options = {}) {

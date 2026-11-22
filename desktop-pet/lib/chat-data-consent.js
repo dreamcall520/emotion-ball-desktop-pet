@@ -75,6 +75,12 @@ function workbuddyLinkContext(accountKey) {
   return { provider: 'workbuddy', channel: 'workbuddy-installed-chat', recipientOrigin: 'https://copilot.tencent.com',
     billing: '使用当前本机 WorkBuddy 账号积分', accountKey };
 }
+function zcodeLinkContext(accountKey, origin) {
+  if (!['https://api.z.ai', 'https://open.bigmodel.cn', 'https://zcode.z.ai', 'https://zcode.bigmodel.cn'].includes(origin)) throw failure('CONSENT_CONTEXT');
+  return { provider: 'zcode', channel: 'zcode-installed-official-chat',
+    recipientOrigin: origin,
+    billing: '使用当前本机 ZCode 官方账号套餐额度，不自动切换自定义 API', accountKey };
+}
 function createChatDataConsent({ store, request } = {}) {
   if (!store || typeof store.read !== 'function' || typeof store.write !== 'function' || typeof request !== 'function') throw new TypeError('consent store and request required');
   let pending = false, closed = false;
@@ -113,6 +119,11 @@ function createChatDataConsent({ store, request } = {}) {
   return { run, revoke, hasCodexLink: accountKey => has(context(codexLinkContext(accountKey))),
     grantCodexLink: accountKey => grant(context(codexLinkContext(accountKey))),
     hasWorkBuddyLink: accountKey => has(context(workbuddyLinkContext(accountKey))),
-    grantWorkBuddyLink: accountKey => grant(context(workbuddyLinkContext(accountKey))), close() { closed = true; } };
+    grantWorkBuddyLink: accountKey => grant(context(workbuddyLinkContext(accountKey))),
+    hasZcodeLink: (accountKey, origin) => has(context(zcodeLinkContext(accountKey, origin))),
+    grantZcodeLink: (accountKey, family) => {
+      if (!['zai','bigmodel'].includes(family)) throw failure('CONSENT_CONTEXT');
+      for (const origin of family === 'zai' ? ['https://api.z.ai','https://zcode.z.ai'] : ['https://open.bigmodel.cn','https://zcode.z.ai']) grant(context(zcodeLinkContext(accountKey, origin)));
+    }, close() { closed = true; } };
 }
-module.exports = { createChatDataConsent, createChatDataConsentStore, codexLinkContext, workbuddyLinkContext, VERSION };
+module.exports = { createChatDataConsent, createChatDataConsentStore, codexLinkContext, workbuddyLinkContext, zcodeLinkContext, VERSION };

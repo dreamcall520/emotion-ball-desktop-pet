@@ -208,3 +208,27 @@ test('current official OAuth identity permits a zero-model runtime probe without
   assert.equal((await h.rpc.readAccount()).authenticated, true);
   assert.deepEqual(h.requests.map(row => row.method), ['runtime/capabilities']); await h.rpc.close();
 });
+
+test('current official personal OAuth forwards project-token rejection scope and returns scoped runtime auth', async () => {
+  const { officialAccountScope } = require('../lib/zcode-team-auth');
+  let account = { accountKey: 'personal-current', accountId: 'member', family: 'zai', accessToken: 'synthetic-oauth',
+    sessionRevision: 'first', selection: { kind: 'individual-coding-plan' } };
+  let protocolOptions; const resolutions = [];
+  const rpc = createZcodeChatRpc({ workspaceDir: '/chat', officialOnly: true, strictOfficialSelection: true, readAccount: () => account,
+    prepareRuntime: async () => ({ binary: '/selected/zcode.cjs', env: {}, builtinPath: '/builtin.json', appVersion: '3.18.2',
+      release: { revision: 1, config: { providerConfigRules: { providerRules: [{ providerId: 'account:zai-individual-coding-plan', config: { builtinModelIds: ['GLM-5.3'] } }] } } } }),
+    resolveTeamAccount: async (value, options) => { resolutions.push(options); return { ...value, codingPlanApiKey: 'synthetic-short-token',
+      codingPlanApiKeyId: 'existing-key-id', codingPlanAccountScope: officialAccountScope(value), codingPlanProjectToken: true }; },
+    fetchUsage: async () => ({ buckets: [], paidState: 'connected' }),
+    createProtocol: options => { protocolOptions = options; return { start: async () => {}, close: async () => {}, request: async method =>
+      method === 'session/create' ? { session: { sessionId: 'personal', workspace: { workspacePath: '/chat' } }, settings: { permission: { mode: 'guarded' } }, runtime: {} } : {} }; } });
+  await rpc.start(); await rpc.listModels(); await rpc.startThread();
+  const scope = officialAccountScope(account), rejectedProjectTokenFingerprint = 'b'.repeat(64);
+  const input = { sessionId: 'personal', providerId: 'account:zai-individual-coding-plan', expectedAccountScope: scope, rejectedProjectTokenFingerprint };
+  const auth = await protocolOptions.onRequest('interaction/requestProviderRuntimeHeaders', input);
+  assert.equal(resolutions.at(-1).expectedAccountScope, scope); assert.equal(resolutions.at(-1).rejectedProjectTokenFingerprint, rejectedProjectTokenFingerprint);
+  assert.equal(auth.requestAuth.accountScope, scope); assert.equal(auth.requestAuth.apiKeyId, 'existing-key-id'); assert.equal(auth.requestAuth.apiKey, 'synthetic-short-token');
+  account = { ...account, sessionRevision: 'second' };
+  await assert.rejects(protocolOptions.onRequest('interaction/requestProviderRuntimeHeaders', input), { code: 'UNAUTHENTICATED' });
+  await rpc.close();
+});

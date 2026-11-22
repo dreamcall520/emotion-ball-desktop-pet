@@ -118,4 +118,115 @@ function createZcodeTeamAuth(requestJson, { now = Date.now } = {}) {
   };
   return resolveTeamAccount;
 }
-module.exports = { createZcodeTeamAuth, teamContext, teamAccountScope, isTeam };
+// Current ZCode 3.18.x binds paid requests to the OAuth session as well as the
+// selected family/project. This scope is separate from stable quota history.
+function officialAccountScope(account) {
+  const kind = account?.selection?.kind;
+  if (!['zai', 'bigmodel'].includes(account?.family) || !['individual-coding-plan', 'team-coding-plan'].includes(kind)) throw fail('ZCODE_LOGIN_REQUIRED');
+  if (isTeam(account)) teamContext(account);
+  const oauth = account?.accessToken;
+  if (typeof oauth !== 'string' || !valid(oauth.replace(/^Bearer\s+/i, '').trim()) || !valid(account.accountIdentity || account.accountId)
+    || account.jwtToken != null && typeof account.jwtToken !== 'string' || account.family === 'bigmodel' && oauth.trim() === account.jwtToken?.trim()) throw fail('ZCODE_LOGIN_REQUIRED');
+  return fingerprint(JSON.stringify([account.family, kind, isTeam(account)
+    ? [account.selection.organizationId, account.selection.projectId, account.selection.productId] : null,
+  oauth.trim(), account.jwtToken?.trim() ?? null, account.sessionRevision ?? null,
+  account.accountIdentity ?? account.accountId ?? null, account.zcodeUserId ?? account.accountId ?? null]));
+}
+
+// Existing long-lived key IDs are discovered with GET. The sole mutation is
+// the official short-lived session-token exchange; this reader never creates,
+// deletes, or persists an API key, a project, or credentials.
+function createZcodeOfficialAccountAuth(requestJson, { now = Date.now } = {}) {
+  let cached;
+  async function resolveOfficialAccount(account, options = {}) {
+    if (!['individual-coding-plan', 'team-coding-plan'].includes(account?.selection?.kind)) return account;
+    const scope = officialAccountScope(account), team = isTeam(account), oauth = account.accessToken.trim().replace(/^Bearer\s+/i, '');
+    const { expectedAccountScope, rejectedProjectTokenFingerprint, readAccount, ...requestOptions } = options;
+    if (expectedAccountScope !== undefined && (!validFingerprint(expectedAccountScope) || expectedAccountScope !== scope)
+      || rejectedProjectTokenFingerprint !== undefined && (!validFingerprint(rejectedProjectTokenFingerprint) || expectedAccountScope === undefined)) throw fail('ZCODE_LOGIN_REQUIRED');
+    if (options.signal?.aborted) throw fail('DISCONNECTED');
+    if (cached?.scope !== scope) { cached?.controller?.abort(); cached = { scope }; }
+    const entry = cached;
+    if (!entry.flight && entry.controller?.signal.aborted) { entry.controller = null; entry.token = null; entry.expiresAt = 0; }
+    const assertCurrent = async () => {
+      if (cached !== entry) throw fail('ZCODE_LOGIN_REQUIRED');
+      if (options.signal?.aborted || entry.controller?.signal.aborted) throw fail('DISCONNECTED');
+      if (typeof readAccount === 'function') {
+        const latest = await readAccount();
+        if (cached !== entry || officialAccountScope(latest) !== scope || account.accountKey && latest.accountKey !== account.accountKey) throw fail('ZCODE_LOGIN_REQUIRED');
+        if (options.signal?.aborted) throw fail('DISCONNECTED');
+      }
+    };
+    await assertCurrent();
+    if (entry.token && rejectedProjectTokenFingerprint === fingerprint(entry.token)) { entry.token = null; entry.expiresAt = 0; }
+    const material = async () => {
+      await assertCurrent();
+      if (!entry.token || !entry.location || entry.expiresAt <= now()) throw fail('ZCODE_LOGIN_REQUIRED');
+      return { ...account, codingPlanApiKey: entry.token, codingPlanApiKeyId: entry.location.apiKeyId,
+        codingPlanAccountScope: scope, codingPlanProjectToken: true,
+        codingPlanQuotaOrigin: account.family === 'zai' ? 'https://api.z.ai' : 'https://open.bigmodel.cn' };
+    };
+    if (entry.token && entry.expiresAt > now() + 120000) return material();
+    if (entry.flight) { await waitForFlight(entry.flight, options.signal); return material(); }
+    entry.controller = new AbortController();
+    const signal = options.signal ? AbortSignal.any([options.signal, entry.controller.signal]) : entry.controller.signal;
+    const origin = account.family === 'zai' ? 'https://api.z.ai' : 'https://bigmodel.cn';
+    const request = async (url, init) => {
+      await assertCurrent();
+      const payload = await requestJson(url, { ...requestOptions, ...init, signal });
+      await assertCurrent(); return dataOf(payload);
+    };
+    entry.flight = (async () => {
+      if (!entry.location) {
+        const info = await request(`${origin}/api/biz/customer/getCustomerInfo`, { headers: { Authorization: oauth, 'Content-Type': 'application/json' } });
+        if (!Array.isArray(info?.organizations)) throw fail('ZCODE_INVALID_RESPONSE');
+        let selected;
+        if (team) {
+          const org = info.organizations.find(row => row?.organizationId === account.selection.organizationId);
+          if (!Array.isArray(org?.projects) || !org.projects.some(row => row?.projectId === account.selection.projectId && String(row.projectType).trim() === '2')) throw fail('ZCODE_TEAM_ACCESS_DENIED');
+          selected = { organizationId: account.selection.organizationId, projectId: account.selection.projectId };
+          const entitlement = await request(`${origin}/api/biz/team/subscribe/product/querySubscribeDetail`, { headers: {
+            Authorization: account.family === 'zai' ? `Bearer ${oauth}` : oauth,
+            'Bigmodel-Organization': selected.organizationId, 'Bigmodel-Project': selected.projectId } });
+          if (entitlement.hasSubscription === false || entitlement.status === 'EXPIRED' || entitlement.memberGrantStatus === 'UNASSIGNED') throw fail('ZCODE_TEAM_ACCESS_DENIED');
+          if (entitlement.hasSubscription !== true || entitlement.status !== 'EFFECTIVE' || entitlement.memberGrantStatus !== 'VALID') throw fail('ZCODE_INVALID_RESPONSE');
+        } else {
+          const organizations = info.organizations.filter(row => valid(row?.organizationId) && Array.isArray(row.projects))
+            .map(row => ({ ...row, projects: row.projects.filter(project => valid(project?.projectId) && String(project.projectType ?? '').trim() !== '2') }))
+            .filter(row => row.projects.length);
+          const org = organizations.find(row => typeof row.organizationName === 'string' && row.organizationName.includes('默认机构')) || organizations[0];
+          const project = org?.projects.find(row => typeof row.projectName === 'string' && row.projectName.includes('默认项目')) || org?.projects[0];
+          if (!org || !project) throw fail('ZCODE_PERSONAL_PROJECT_UNAVAILABLE');
+          selected = { organizationId: org.organizationId, projectId: project.projectId };
+        }
+        const base = `${origin}/api/biz/v1/organization/${encodeURIComponent(selected.organizationId)}/projects/${encodeURIComponent(selected.projectId)}/api_keys`;
+        const keys = await request(base, { headers: { Authorization: team || account.family === 'bigmodel' ? oauth : `Bearer ${oauth}`,
+          'Content-Type': 'application/json', ...(team ? { 'Bigmodel-Organization': selected.organizationId, 'Bigmodel-Project': selected.projectId } : {}) } });
+        if (!Array.isArray(keys)) throw fail('ZCODE_INVALID_RESPONSE');
+        const key = keys.find(row => row?.name === (team ? 'zcode-team-api-key' : 'zcode-api-key') && (!team || row.keyType === 2) && valid(row.apiKey));
+        if (!key) throw fail(team ? 'ZCODE_TEAM_KEY_MISSING' : 'ZCODE_PERSONAL_KEY_MISSING');
+        entry.location = { ...selected, apiKeyId: key.apiKey };
+      }
+      const appVersion = options.appVersion || '3.18.2';
+      if (typeof appVersion !== 'string' || !/^\d{1,4}(?:\.\d{1,4}){1,3}$/.test(appVersion)) throw fail('ZCODE_INVALID_APP_VERSION');
+      const location = entry.location, started = now();
+      const token = await request(`${origin}/api/biz/v1/organization/${encodeURIComponent(location.organizationId)}/projects/${encodeURIComponent(location.projectId)}/api_keys/${encodeURIComponent(location.apiKeyId)}/access_tokens`, {
+        method: 'POST', headers: { Authorization: `Bearer ${oauth}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientType: 'zcode', clientVersion: appVersion }) });
+      if (token.enable === false) throw fail(team ? 'ZCODE_TEAM_ACCESS_DENIED' : 'ZCODE_PLAN_ACCESS_DENIED');
+      if (token.enable !== undefined && token.enable !== true) throw fail('ZCODE_INVALID_RESPONSE');
+      const expiresAt = Math.min(token.expiresAt * 1000, started + token.expiresIn * 1000);
+      if (!valid(token.accessToken) || token.tokenType !== 'Bearer' || !Number.isFinite(token.expiresIn) || token.expiresIn <= 0
+        || !Number.isFinite(token.expiresAt) || !Number.isSafeInteger(expiresAt) || expiresAt <= now()) throw fail('ZCODE_INVALID_RESPONSE');
+      entry.token = token.accessToken; entry.expiresAt = expiresAt;
+    })().catch(error => { entry.token = null; entry.expiresAt = 0; throw error; }).finally(() => { entry.flight = null; });
+    await waitForFlight(entry.flight, options.signal); return material();
+  }
+  resolveOfficialAccount.invalidate = account => {
+    if (cached?.scope === officialAccountScope(account) && account.codingPlanApiKey === cached.token) {
+      cached.controller?.abort(); cached = null;
+    }
+  };
+  return resolveOfficialAccount;
+}
+module.exports = { createZcodeTeamAuth, teamContext, teamAccountScope, isTeam, officialAccountScope, createZcodeOfficialAccountAuth };

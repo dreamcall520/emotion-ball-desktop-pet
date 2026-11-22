@@ -4,8 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { createHash, createDecipheriv } = require('node:crypto');
 const { readZcodeAccount, decryptCredential } = require('./zcode-account');
-const { fetchZcodeUsage } = require('./zcode-usage');
-const { isTeam } = require('./zcode-team-auth');
+const { fetchZcodeUsage, requestOfficialJson } = require('./zcode-usage');
+const { createZcodeOfficialAccountAuth } = require('./zcode-team-auth');
 const fail = code => Object.assign(new Error(code), { code });
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
 const validHash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -76,6 +76,30 @@ function projectAccount(account) {
     hasCodingPlanKey: typeof account.codingPlanApiKey === 'string' && !!account.codingPlanApiKey && !account.codingPlanApiKey.startsWith('enc:'),
     hasDeviceMid: !!account.deviceMid };
 }
+// This boundary permits quota reads and the official existing-key short-lived
+// project-token exchange. It never permits creating/deleting a long-lived key.
+function createOfficialFetch(fetchImpl = globalThis.fetch) {
+  return (url, init = {}) => {
+    let endpoint; try { endpoint = new URL(url); } catch { throw fail('ZCODE_UNTRUSTED_ENDPOINT'); }
+    const method = init.method || 'GET', host = endpoint.hostname, route = endpoint.pathname;
+    if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.port || endpoint.hash) throw fail('ZCODE_UNTRUSTED_ENDPOINT');
+    const discovery = ['api.z.ai', 'bigmodel.cn'].includes(host), quota = ['api.z.ai', 'open.bigmodel.cn'].includes(host);
+    let allowed = method === 'GET' && (
+      host === 'zcode.z.ai' && ['/api/v1/zcode-plan/billing/balance', '/api/v1/client/configs'].includes(route) ||
+      discovery && !endpoint.search && (route === '/api/biz/customer/getCustomerInfo' ||
+        route === '/api/biz/team/subscribe/product/querySubscribeDetail' || /^\/api\/biz\/v1\/organization\/[^/]+\/projects\/[^/]+\/api_keys$/.test(route)) ||
+      quota && (route === '/api/biz/subscription/list' && !endpoint.search ||
+        route === '/api/monitor/usage/quota/limit' && ['', '?type=2'].includes(endpoint.search)));
+    if (method === 'POST' && discovery && !endpoint.search &&
+      /^\/api\/biz\/v1\/organization\/[^/]+\/projects\/[^/]+\/api_keys\/[^/]+\/access_tokens$/.test(route)) {
+      let body; try { body = JSON.parse(init.body); } catch { throw fail('ZCODE_UNTRUSTED_ENDPOINT'); }
+      allowed = body && Object.keys(body).length === 2 && body.clientType === 'zcode' &&
+        typeof body.clientVersion === 'string' && /^\d{1,4}(?:\.\d{1,4}){1,3}$/.test(body.clientVersion);
+    }
+    if (!allowed) throw fail('ZCODE_UNTRUSTED_ENDPOINT');
+    return fetchImpl(endpoint.href, { ...init, redirect: 'error' });
+  };
+}
 async function runOperation(operation, payload, { reader, appVersion, fetch: fetchImpl = globalThis.fetch, now = Date.now() } = {}) {
   if (!['account-check', 'usage'].includes(operation) || !payload || typeof payload !== 'object' || Array.isArray(payload) ||
     Object.keys(payload).some(key => key !== 'expectedAccountKey') || payload.expectedAccountKey !== undefined && !validHash(payload.expectedAccountKey) ||
@@ -83,9 +107,10 @@ async function runOperation(operation, payload, { reader, appVersion, fetch: fet
   const account = await reader.read(), projected = projectAccount(account);
   if (payload.expectedAccountKey !== undefined && projected.accountKey !== payload.expectedAccountKey) throw fail('ZCODE_ACCOUNT_CHANGED');
   if (operation === 'account-check') return projected;
-  const quota = await fetchZcodeUsage(account, { appVersion, now,
-    fetch: (url, init = {}) => { if ((init.method || 'GET') !== 'GET') throw fail('ZCODE_MAS_READ_ONLY'); return fetchImpl(url, init); },
-    resolveTeamAccount: async selected => { if (isTeam(selected) && !selected.codingPlanApiKey) throw fail('ZCODE_TEAM_KEY_MISSING'); return selected; } });
+  const officialFetch = createOfficialFetch(fetchImpl);
+  const resolveAccount = createZcodeOfficialAccountAuth((url, init = {}) => requestOfficialJson(url, { ...init, fetch: officialFetch }));
+  const quota = await fetchZcodeUsage(account, { appVersion, now, fetch: officialFetch,
+    readAccount: () => reader.read(), resolveOfficialAccount: resolveAccount, resolveTeamAccount: resolveAccount });
   const latest = await reader.read();
   if (latest.accountKey !== account.accountKey || latest.jwtToken !== account.jwtToken || latest.accessToken !== account.accessToken || latest.codingPlanApiKey !== account.codingPlanApiKey) throw fail('ZCODE_ACCOUNT_CHANGED');
   return { accountKey: account.accountKey, ...quota };
@@ -93,7 +118,8 @@ async function runOperation(operation, payload, { reader, appVersion, fetch: fet
 const SAFE_ERRORS = new Set(['INVALID_REQUEST', 'DIRECTORY_ACCESS_REQUIRED', 'ZCODE_ACCOUNT_CHANGED', 'ZCODE_OUTSIDE_AUTHORIZED_DIRECTORY',
   'ZCODE_ACCOUNT_MISSING', 'ZCODE_INVALID_ACCOUNT_FILE', 'ZCODE_CREDENTIAL_SECURE_STORAGE_REQUIRED', 'ZCODE_CREDENTIAL_DECRYPT_FAILED',
   'ZCODE_PROVIDER_UNSUPPORTED', 'ZCODE_LOGIN_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_INVALID_RESPONSE',
-  'ZCODE_USAGE_UNAVAILABLE', 'ZCODE_BILLING_ERROR', 'ZCODE_MAS_READ_ONLY']);
+  'ZCODE_USAGE_UNAVAILABLE', 'ZCODE_BILLING_ERROR', 'ZCODE_MAS_READ_ONLY', 'ZCODE_UNTRUSTED_ENDPOINT',
+  'ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_PERSONAL_KEY_MISSING', 'ZCODE_PERSONAL_PROJECT_UNAVAILABLE', 'ZCODE_PLAN_ACCESS_DENIED']);
 async function main() {
   let reader;
   try {
@@ -111,4 +137,4 @@ async function main() {
   finally { reader?.close(); }
 }
 if (require.main === module) void main();
-module.exports = { createAccountReader, projectAccount, runOperation };
+module.exports = { createAccountReader, projectAccount, runOperation, createOfficialFetch };

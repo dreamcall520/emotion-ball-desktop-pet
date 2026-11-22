@@ -153,11 +153,12 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     if(process.env.PET_SETTINGS_MEASUREMENTS)process.stdout.write('NAV_ART_BASELINE '+JSON.stringify(await run(`[...document.querySelectorAll('#navigation img.nav-icon')].filter(img=>getComputedStyle(img).display!=='none').map(measureIcon)`))+'\n');
 
     const nav = await run("[...document.querySelectorAll('#navigation button')].map(n=>n.textContent)");
-    for (const name of ['Codex','WorkBuddy','API 余额','快捷键','常规设置']) assert(nav.includes(name), name);
+    for (const name of ['Codex','WorkBuddy','ZCode','API 余额','快捷键','常规设置']) assert(nav.includes(name), name);
+    assert(!nav.includes('ZCode 联动')); assert(nav.indexOf('WorkBuddy') < nav.indexOf('ZCode')); assert(nav.indexOf('ZCode') < nav.indexOf('联动样式管理'));
     assert(!nav.includes('OpenAI API')); assert(!nav.includes('API 费用与用量')); assert(!nav.includes('Codex 与 API'));
     await run(`Promise.all([...document.querySelectorAll('#navigation img.nav-icon')].map(img=>img.complete?Promise.resolve():new Promise((resolve,reject)=>{img.onload=()=>resolve();img.onerror=()=>reject(Error(img.src));})))`);
     const integrationIcons = await run(`[...document.querySelectorAll('#navigation img.nav-icon')].map(img=>({file:img.getAttribute('src'),complete:img.complete,width:img.naturalWidth,alt:img.alt,decorative:img.getAttribute('aria-hidden')}))`);
-    assert.deepEqual(integrationIcons.map(icon=>icon.file),['assets/integrations/codex.png','assets/integrations/codex-dark.png','assets/integrations/zcode.png','assets/integrations/workbuddy.png']);
+    assert.deepEqual(integrationIcons.map(icon=>icon.file),['assets/integrations/codex.png','assets/integrations/codex-dark.png','assets/integrations/workbuddy.png','assets/integrations/zcode.png']);
     assert(integrationIcons.every(icon=>icon.complete&&icon.width===256&&icon.alt===''&&icon.decorative==='true'),JSON.stringify(integrationIcons));
     for (const appearance of ['light','dark','light']) {
       await run(`document.documentElement.dataset.appearance=${JSON.stringify(appearance)}`);
@@ -225,7 +226,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run(`document.querySelector('[data-action="/codex-menu/openai-api-menu/openai-api-usage"]').click()`);
     await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal((await run('calls.at(-1).id')), '/codex-menu/openai-api-menu/openai-api-usage');
-    await run("[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='ZCode 联动').click()");
+    await run("[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='ZCode').click()");
     assert.deepEqual(await run("[...document.querySelectorAll('#content > section > h3')].map(n=>n.textContent)"), ['启用联动', '额度显示', '额度趣味互动', '额度与任务信息']);
     assert.equal(await run("[...document.querySelectorAll('#content > section:first-child [data-action]')].every(n=>/zcode-enabled$/.test(n.dataset.action))"), true);
     assert.equal(await run("document.querySelectorAll('#content > section:last-child [data-action]').length"), 4);
@@ -236,7 +237,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('.status-tasks').textContent"), '本机最近任务 · 处理中 待更新 · 待确认 待更新');
     assert.equal(await run("document.querySelectorAll('.codex-status dd')[1].textContent"), '待更新');
     // Provider settings never reveal downstream controls before actual authorization.
-    for (const [label,id] of [['Codex','/codex-menu/codex-enabled'],['ZCode 联动','/zcode-menu/zcode-enabled'],['WorkBuddy','/workbuddy-enabled']]) {
+    for (const [label,id] of [['Codex','/codex-menu/codex-enabled'],['ZCode','/zcode-menu/zcode-enabled'],['WorkBuddy','/workbuddy-enabled']]) {
       await run(`[...document.querySelectorAll('#navigation button')].find(n=>n.textContent===${JSON.stringify(label)}).click();actMode='apply';`);
       if (await run(`findEntry(${JSON.stringify(id)}).checked===true`)) {
         await run(`document.querySelector('[data-action="${id}"]').click()`); await run('new Promise(resolve=>setTimeout(resolve,10))');
@@ -426,7 +427,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('.store-connected-group')"),null);
     await run("document.querySelector('[data-action=store-codex-connection]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
-    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await run(`new Promise((resolve,reject)=>{const end=Date.now()+3000;const check=()=>{if(document.querySelector('dialog[open] .store-codex-terms'))resolve();else if(Date.now()>end)reject(Error('directory terms did not open'));else setTimeout(check,10)};check()})`);
     const directory = await run("document.querySelector('dialog[open]').textContent");
     assert.match(directory,/查看额度.*发送消息.*同意并选择目录/s);
     assert.equal(await run("document.querySelectorAll('.store-codex-terms > div:last-child dd p').length"),1);

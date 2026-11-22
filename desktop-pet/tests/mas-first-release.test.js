@@ -4,17 +4,18 @@ const {settingsForFirstRelease,filterMenu}=require('../lib/mas-first-release');
 test('商店保留已启用的WorkBuddy额度和卡片顺序，仍关闭其他多家/费用能力',()=>{
  const source={codexEnabled:true,workbuddyEnabled:true,zcodeEnabled:true,apiBalanceEnabled:true,chatSource:'zcode',quotaCardOrder:['workbuddy','codex','api','weather'],quotaCardPinned:['api','weather'],customization:{appearance:{shape:'dog'}},notesDefaultTab:'note'};
  const value=settingsForFirstRelease(source);
- assert.equal(value.chatSource,'codex');assert.equal(value.chatProvider,'codex');assert.equal(value.workbuddyEnabled,true);assert.equal(value.apiBalanceEnabled,false);assert.equal(value.codexEnabled,true);assert.deepEqual(value.quotaCardOrder,['workbuddy','codex','weather']);assert.deepEqual(value.quotaCardPinned,['weather']);assert.equal(value.customization,source.customization);assert.equal(source.workbuddyEnabled,true);
+ assert.equal(value.chatSource,'zcode');assert.equal(value.chatProvider,'zcode');assert.equal(value.workbuddyEnabled,true);assert.equal(value.apiBalanceEnabled,false);assert.equal(value.codexEnabled,true);assert.deepEqual(value.quotaCardOrder,['workbuddy','codex','weather']);assert.deepEqual(value.quotaCardPinned,['weather']);assert.equal(value.customization,source.customization);assert.equal(source.workbuddyEnabled,true);
  assert.equal(settingsForFirstRelease({}).workbuddyEnabled,false);
 });
 test('首发商城不注册旧工具连接命令', () => {
  const source = require('node:fs').readFileSync(require.resolve('../main.js'), 'utf8');
  assert.match(source, /if \(IS_STORE_BUILD && !FIRST_RELEASE\) registerStoreConnections\(\)/);
 });
-test('商店仅保留Codex和WorkBuddy聊天来源偏好，不借用其他provider', () => {
+test('商店保留三种官方聊天来源偏好，不借用其他provider', () => {
   assert.equal(settingsForFirstRelease({chatSource:'workbuddy'}).chatSource,'workbuddy');
   assert.equal(settingsForFirstRelease({chatSource:'workbuddy'}).chatProvider,'workbuddy');
-  for (const chatSource of ['codex','zcode','unknown',undefined]) {
+  assert.equal(settingsForFirstRelease({chatSource:'zcode'}).chatSource,'zcode');
+  for (const chatSource of ['codex','unknown',undefined]) {
     const value=settingsForFirstRelease({chatSource,chatProvider:'workbuddy'});
     assert.equal(value.chatSource,'codex');assert.equal(value.chatProvider,'codex');
   }

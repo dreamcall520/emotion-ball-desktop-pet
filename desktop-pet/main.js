@@ -160,12 +160,12 @@ let codexDetailReturn = null;
 let codexThreadOpener = url => shell.openExternal(url);
 let storeRuntime = null, storeConnectionsWindow = null, storeEnableFlow = null;
 let chat = null;
-let storeChatRestorePending = FIRST_RELEASE ? 2 : 0, storeChatDefaultFlight = null;
+let storeChatRestorePending = FIRST_RELEASE ? 3 : 0, storeChatDefaultFlight = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
 let workbuddyInstalledAccess = null, workbuddyTaskAccess = null, workbuddyQuotaConnection = null;
 let workbuddyChatConnection = null;
-let zcodeInstalledAccess = null, zcodeRun = null, masZcodeProvider = null, zcodeQuotaConnection = null, zcodeNotifications = null;
+let zcodeInstalledAccess = null, zcodeRun = null, masZcodeProvider = null, zcodeQuotaConnection = null, zcodeNotifications = null, zcodeChatConnection = null;
 let zcodeNotificationTimer = null, zcodeRenderer = null, zcodeSentSettings = null, zcodePresentation = null;
 let zcodeAlertQueue = [], zcodePresentationTimer = null, zcodeValidationPhase = "";
 let workbuddyVerifiedAccountKey = null;
@@ -595,7 +595,7 @@ function globalSettingsSnapshot() {
     ...(notificationState ? { notifications: { enabled: notificationState.enabled, connected: notificationState.connected,
       status: notificationState.status, generation: notificationState.generation, activeCount: notificationState.activeCount,
       message: notificationState.message } } : {}) } : null;
-  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, firstReleaseWorkbuddyConnection, firstReleaseZcodeConnection: FIRST_RELEASE ? { ...zcodeQuotaConnection?.getState(), notifications: zcodeNotifications?.getState() } : null, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
+  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, firstReleaseWorkbuddyConnection, firstReleaseZcodeConnection: FIRST_RELEASE ? { ...zcodeQuotaConnection?.getState(), chat: zcodeChatConnection?.getState(), notifications: zcodeNotifications?.getState() } : null, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -982,7 +982,8 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
     event.sender === owner.webContents && event.senderFrame === event.sender.mainFrame &&
     event.sender.getURL() === pathToFileURL(path.join(__dirname, tools ? 'store-connections.html' : 'chat.html')).href &&
     (!FIRST_RELEASE || (!tools && (provider === 'codex' && storeRuntime.isChatEnabled('codex') ||
-      provider === 'workbuddy' && workbuddyChatConnection?.getState().authorized === true))) &&
+      provider === 'workbuddy' && workbuddyChatConnection?.getState().authorized === true ||
+      provider === 'zcode' && zcodeChatConnection?.getState().authorized === true))) &&
     (tools || chatWindow?.getWindow() === owner && !chatProviderChanging && activeChat() === controller && controller?.getState().source === provider);
   if (typeof content !== 'string' || !content.trim() || content.length > (tools ? 8000 : 2000) || content.includes('\0')) return { accepted: false, error: '请输入有效消息，消息未发送。' };
   const result = await storeChatDataConsent().run({ isCurrent: owns, requireExisting: FIRST_RELEASE,
@@ -1008,12 +1009,13 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
       }
       const conversation = require('node:crypto').createHash('sha256').update(JSON.stringify([state.activeChatId || null, state.anchorMessageId || null, state.messages || []])).digest('hex');
       const scope = FIRST_RELEASE
-        ? (provider === 'workbuddy' ? require('./lib/chat-data-consent').workbuddyLinkContext(identity.accountKey)
+        ? (provider === 'zcode' ? require('./lib/chat-data-consent').zcodeLinkContext(identity.accountKey, identity.recipientOrigin)
+          : provider === 'workbuddy' ? require('./lib/chat-data-consent').workbuddyLinkContext(identity.accountKey)
           : require('./lib/chat-data-consent').codexLinkContext(identity.accountKey))
         : { provider, channel, recipientOrigin, billing, accountKey: identity.accountKey };
       return { ...scope, conversationKey: identity.conversationKey, revision: [identity.revision, conversation] };
     }, send });
-  if (result?.needsLinkConsent && owns()) openGlobalSettings(provider === 'workbuddy' ? 'workbuddy-chat-authorization' : 'codex-reconnect');
+  if (result?.needsLinkConsent && owns()) openGlobalSettings(provider === 'zcode' ? '/zcode-menu' : provider === 'workbuddy' ? 'workbuddy-chat-authorization' : 'codex-reconnect');
   return result;
 }
 
@@ -1067,6 +1069,29 @@ async function completeStoreWorkBuddyConnection(signal) {
     }
   }
 }
+async function completeStoreZcodeConnection(signal) {
+  const connected = await zcodeQuotaConnection.connect(signal);
+  if (signal.aborted || !connected.connected) return connected;
+  let granted = false;
+  try {
+    const identity = await zcodeRun('account-check', {}, { signal });
+    if (signal.aborted || identity.accountKey !== zcodeQuotaConnection.getAccountKey()) return { status: 'cancelled' };
+    const result = await zcodeChatConnection.enable();
+    if (!result.authorized) return result;
+    await zcodeRun('account-check', { expectedAccountKey: identity.accountKey }, { signal });
+    if (signal.aborted || zcodeChatConnection.getAuthorizedAccountKey() !== identity.accountKey) return { status: 'cancelled' };
+    storeChatDataConsent().grantZcodeLink(identity.accountKey, identity.family);
+    granted = true;
+    let message;
+    try { await chat.connectSource('zcode'); }
+    catch { message = '已连接，聊天模型暂未读取成功，可在聊天中重试。'; }
+    return { ...result, ...(message ? { message } : {}) };
+  } finally {
+    if (!granted || signal.aborted) await Promise.allSettled([
+      Promise.resolve().then(() => storeChatDataConsent().revoke('zcode')), zcodeChatConnection.disable()
+    ]);
+  }
+}
 function syncWorkBuddyChatConnection() {
   if (!chat?.getSourceState) return;
   void selectDefaultStoreChatSource();
@@ -1083,7 +1108,7 @@ function selectDefaultStoreChatSource() {
     const provider = chat.getSourceState(source.id);
     return !provider?.accountMismatch && provider?.connection !== 'error';
   }).map(source => source.id);
-  const target = [settings.chatSource, state.source, 'codex', 'workbuddy'].find(source => available.includes(source));
+  const target = [settings.chatSource, state.source, 'codex', 'workbuddy', 'zcode'].find(source => available.includes(source));
   if (!target || target === state.source) return Promise.resolve(false);
   const pending = Promise.resolve().then(() => chat.selectSource(target)).then(result => result?.accepted === true).catch(() => false);
   storeChatDefaultFlight = pending;
@@ -1097,10 +1122,9 @@ function finishStoreChatRestore() {
 function chatSnapshot(state = activeChat()?.getState()) {
   const storeInfo=IS_STORE_BUILD ? {
     sources:STORE_PROVIDERS.map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
-      ...(FIRST_RELEASE && id==='zcode' ? {scopeUnavailable:true,message:'官方套餐尚不能用于球球普通聊天；请在 ZCode 中使用。'} : {}),
-      ...(FIRST_RELEASE ? { needsAuthorization: id === 'zcode' ? true : id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized !== true
+      ...(FIRST_RELEASE ? { needsAuthorization: id === 'zcode' ? zcodeChatConnection?.getState().authorized !== true : id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized !== true
         : !storeRuntime?.isChatEnabled(id) || storeEnableFlow?.getState()[id]?.chat.status === 'needs-data-authorization' } : {}),
-      enabled: FIRST_RELEASE && id === 'zcode' ? false : FIRST_RELEASE && id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized === true
+      enabled: FIRST_RELEASE && id === 'zcode' ? zcodeChatConnection?.getState().authorized === true : FIRST_RELEASE && id === 'workbuddy' ? workbuddyChatConnection?.getState().authorized === true
         : storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
         ['ready','needs-new-chat'].includes(storeEnableFlow?.getState()[id]?.chat.status)||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready')})),
     sourceNote:state?.source==='codex'?(FIRST_RELEASE?'聊天使用你在本机 Codex 登录的账号。':'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。')
@@ -4380,17 +4404,19 @@ function registerIpc() {
       if(action==='app'||action==='account')result=await zcodeQuotaConnection.authorize(action,controller.signal);
       else if(action==='cancel')result=zcodeQuotaConnection.cancel();
       else if(action==='disconnect'){
-        try { await zcodeNotifications.disable(); }
+        let cleanup;
+        try { cleanup=await Promise.allSettled([()=>zcodeNotifications.disable(),()=>zcodeChatConnection.disable(),()=>storeChatDataConsent().revoke('zcode')].map(run=>Promise.resolve().then(run))); }
         finally { result=await zcodeQuotaConnection.disconnect(); }
+        if(cleanup?.some(value=>value.status==='rejected'))throw Object.assign(new Error('ZCODE_REMINDER_CLEANUP_FAILED'),{code:'ZCODE_REMINDER_CLEANUP_FAILED'});
       }
       else if(action==='tasks-authorize')result=await zcodeQuotaConnection.authorizeTasks(controller.signal);
       else if(action==='tasks-revoke')result=await zcodeQuotaConnection.revokeTasks();
       else if(action==='notifications-enable')result=await zcodeNotifications.enable(controller.signal);
       else if(action==='notifications-disable')result=await zcodeNotifications.disable();
-      else result=await zcodeQuotaConnection.connect(controller.signal);
+      else result=await completeStoreZcodeConnection(controller.signal);
       if(controller.signal.aborted)return{status:'cancelled'};
       return{...result,snapshot:globalSettingsSnapshot()};
-    }catch(error){return{status:'error',message:['ZCODE_CREDENTIAL_SECURE_STORAGE_REQUIRED','ZCODE_CREDENTIAL_DECRYPT_FAILED'].includes(error.code)?'当前 ZCode 凭据格式尚未接通，已有登录保持。':'ZCode 连接未完成，请检查官方登录后重试。',snapshot:globalSettingsSnapshot()};}
+    }catch(error){const safe=require('./lib/mas-zcode-errors').zcodeConnectionError(error);writeError('ZCode 联动',{action,code:safe.code});return{status:'error',...safe,snapshot:globalSettingsSnapshot()};}
     finally{owner.removeListener('closed',abort);owner.removeListener('hide',abort);globalSettingsBusy=false;}
   });
   ipcMain.handle('pet:global-codex-connection', async (event, action) => {
@@ -5206,8 +5232,13 @@ async function bootstrap() {
     zcodeQuotaConnection = require('./lib/mas-zcode-quota-connection').createMasZcodeQuotaConnection({access:zcodeInstalledAccess,readAccount:()=>masZcodeProvider.readAccount(),
       storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-zcode-purpose')),
       link:{getSnapshot:()=>zcodeLink?.getSnapshot(),suspend:()=>zcodeLink?.suspend(),setEnabled:value=>value&&zcodeLink?.isEnabled()?zcodeLink.start():zcodeLink?.setEnabled(value),refresh:()=>zcodeLink?.refresh()},
-      onAccountChanged:()=>{void zcodeNotifications?.disable();clearZcodePresentation();},
+      onAccountChanged:()=>{void zcodeNotifications?.disable();void zcodeChatConnection?.disable();clearZcodePresentation();},
       onChange:()=>{notifyStoreConnections();zcodeLink?.sync();syncQuotaCardGroup();}});
+    zcodeChatConnection = require('./lib/mas-zcode-chat-connection').createMasZcodeChatConnection({
+      storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-zcode-chat-consent')),
+      getAccountKey:()=>zcodeQuotaConnection.getAccountKey(),
+      onChange:()=>{void selectDefaultStoreChatSource();notifyStoreConnections();if(!screenLocked)chatWindow?.update(chatSnapshot());},
+      onDisable:()=>{if(!isQuitting&&chat?.zcodeDisabled)void chat.zcodeDisabled().catch(()=>{});}});
     const zcodeInstaller = require('./lib/mas-zcode-event-installation').createMasZcodeEventInstallation({app,dialog:nativeZcodeDialog,
       storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-zcode-event-grants')),assetRoot:path.join(__dirname,'assets/zcode-desktop-hook')});
     zcodeNotifications = require('./lib/mas-zcode-task-notifications').createMasZcodeTaskNotifications({installer:zcodeInstaller,
@@ -5215,7 +5246,7 @@ async function bootstrap() {
       getAccountKey:()=>zcodeQuotaConnection.getAccountKey(),verifyAccount:async(_expected,signal)=>({accountKey:await zcodeQuotaConnection.verifyAccount({signal})}),
       readTurnStatus:require('./lib/mas-zcode-turn-status').createMasZcodeTurnStatusReader({directoryAccess:zcodeInstalledAccess.directoryAccess}),
       onChange:()=>syncZcodeAnimationSettings(),onAlert:enqueueZcodeAlert,onClear:()=>syncZcodeAnimationSettings()});
-    zcodeNotificationTimer=setInterval(()=>{void zcodeQuotaConnection.refreshAccount();void zcodeNotifications.refreshAccount();pumpZcodePresentation();},3000);
+    zcodeNotificationTimer=setInterval(()=>{void zcodeQuotaConnection.refreshAccount();void zcodeChatConnection.refreshAccount();void zcodeNotifications.refreshAccount();pumpZcodePresentation();void selectDefaultStoreChatSource();},3000);
     zcodeNotificationTimer.unref?.();
     workbuddyInstalledAccess = require('./lib/mas-installed-workbuddy-access').createMasInstalledWorkBuddyAccess({ app,
       dialog: { showOpenDialog: options => globalSettingsWindow && !globalSettingsWindow.isDestroyed() ? dialog.showOpenDialog(globalSettingsWindow, options) : dialog.showOpenDialog(options) },
@@ -5347,7 +5378,7 @@ async function bootstrap() {
     isWorkbuddyEnabled: () => FIRST_RELEASE ? workbuddyChatConnection?.getState().authorized === true
       : (IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true),
     initialSource: settings.chatSource,
-    isZcodeEnabled: () => !FIRST_RELEASE && (IS_STORE_BUILD?storeRuntime.isChatEnabled('zcode'):(zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true)),
+    isZcodeEnabled: () => FIRST_RELEASE ? zcodeChatConnection?.getState().authorized === true : (IS_STORE_BUILD?storeRuntime.isChatEnabled('zcode'):(zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true)),
     onSelect: (chatSource, change) => {
       if (FIRST_RELEASE && change?.reason === 'disabled') return;
       settings = saveSettings(settingsFile, { ...settings, chatSource, chatProvider: chatSource === 'workbuddy' ? 'workbuddy' : 'codex' });
@@ -5369,6 +5400,10 @@ async function bootstrap() {
       onModelSelection: zcodeChatModel => { settings = saveSettings(settingsFile, { ...settings, zcodeChatModel }); },
       createRpc: options => {
         fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
+        if (FIRST_RELEASE) return require('./lib/mas-zcode-official-chat').createMasZcodeOfficialChatRpc({...options,
+          access:zcodeInstalledAccess,expectedAccountKey:zcodeChatConnection.getAuthorizedAccountKey(),
+          getAuthorizedAccountKey:()=>zcodeChatConnection.getAuthorizedAccountKey(),getChatGrantEpoch:()=>zcodeChatConnection.getGeneration(),
+          getWeatherContext:text=>weatherContext(currentWeatherState(),text)});
         if (IS_STORE_BUILD) return storeRuntime.createZcodeChatRpc(options);
         return createZcodeChatRpc({ ...options, getWeatherContext: text => weatherContext(currentWeatherState(), text) });
       },
@@ -5687,9 +5722,10 @@ async function bootstrap() {
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
   if(FIRST_RELEASE) void (async()=>{
+    await zcodeChatConnection.restore();
     await zcodeQuotaConnection.restore(settings.zcodeEnabled);
-    if(zcodeQuotaConnection.getState().connected) await zcodeNotifications.restore();
-  })().catch(()=>writeError('ZCode 恢复',{code:'ZCODE_RESTORE_FAILED'}));
+    if(zcodeQuotaConnection.getState().connected) {await zcodeChatConnection.refreshAccount();await zcodeNotifications.restore();}
+  })().catch(()=>writeError('ZCode 联动',{code:'ZCODE_RESTORE_FAILED'})).finally(()=>finishStoreChatRestore());
   else void zcodeLink?.start();
 }
 
@@ -5754,7 +5790,7 @@ if (!hasSingleInstanceLock) {
     workbuddyChatConnection?.close();
     workbuddyQuotaConnection?.close();
     if(zcodeNotificationTimer!==null)clearInterval(zcodeNotificationTimer);
-    zcodeNotificationTimer=null;void zcodeNotifications?.close();zcodeQuotaConnection?.close();clearZcodePresentation();
+    zcodeNotificationTimer=null;void zcodeNotifications?.close();zcodeChatConnection?.close();zcodeQuotaConnection?.close();clearZcodePresentation();
     workbuddyUsage?.close();
     workbuddyQuota?.close();
     apiBalance?.close(); apiBalanceLabel?.destroy(); apiBalanceDetails?.destroy();

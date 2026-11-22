@@ -31,6 +31,18 @@ test('another session, another turn and a historical terminal cannot complete th
   }
   f.terminal(); await f.state.refresh(); assert.equal(f.alerts.at(-1).kind, 'completed');
 });
+test('a short official turn completed during account verification is matched from authenticated receipt time', async t => {
+  const f = fixture(t); f.setTime(2000);
+  assert.equal(f.state.accept(event('UserPromptSubmit', { observedAt: 1100 }), owner), true);
+  await f.state.refresh(); f.terminal('completed', { startedAt: 1090, completedAt: 1500 }); await f.state.refresh();
+  assert.deepEqual(f.alerts.map(alert => alert.kind), ['processing', 'completed']);
+  assert.equal(f.state.getState().tasks[0].startedAt, 1100); assert.equal(f.state.getState().tasks[0].acceptedAt, 2000);
+});
+test('receipt timestamps from an earlier binding or the future cannot start a task', t => {
+  const f = fixture(t); f.setTime(2000);
+  for (const observedAt of [999, 2001, '1100', -1]) assert.equal(f.state.accept(event('UserPromptSubmit', { observedAt }), owner), false);
+  assert.equal(f.alerts.length, 0); assert.equal(f.state.getState().tasks.length, 0);
+});
 test('terminal without an observed new submit, missing turn id or body-bearing metadata never starts or completes', async t => {
   const f = fixture(t); f.terminal(); assert.equal(f.state.accept(event('Stop'), owner), false);
   assert.equal(f.state.accept(event('UserPromptSubmit', { turnId: undefined }), owner), false);

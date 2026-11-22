@@ -17,6 +17,8 @@ test('disconnect revokes the main ZCode authority even when animation cleanup fa
     ipcMain: { handle: (_name, callback) => { handler = callback; } }, FIRST_RELEASE: true,
     zcodeQuotaConnection: { disconnect: async () => { actions.push('revoke-main'); connected = false; } },
     zcodeNotifications: { disable: async () => { actions.push('stop-animation'); throw Error('synthetic cleanup failure'); } },
+    zcodeChatConnection: { disable: async()=>{} }, storeChatDataConsent:()=>({revoke(){}}),
+    require: name=>require(name.replace('./lib/','../lib/')), writeError(){},
     fromGlobalSettings: () => true, path, pathToFileURL, __dirname: path.join(__dirname, '..'),
     globalSettingsBusy: false, globalSettingsWindow: owner, AbortController,
     globalSettingsSnapshot: () => ({ connected })
@@ -127,10 +129,11 @@ class Element {
   setAttribute(key, value) { this.attributes[key] = value; }
   addEventListener() {}
 }
-test('actual first-release chat projection renders ZCode unavailable and disabled, independently of ready peers', () => {
+test('actual first-release chat projection offers authorized official ZCode alongside ready peers', () => {
   const snapshot = vm.runInNewContext(declaration(main, 'chatSnapshot') + '\nchatSnapshot({source:"codex",connection:"ready",modelsStatus:"ready"})', {
     IS_STORE_BUILD: true, FIRST_RELEASE: true, STORE_PROVIDERS: ['codex', 'zcode', 'workbuddy'], availableUpdate: null,
     workbuddyChatConnection: { getState: () => ({ authorized: true }) }, storeChatReady: () => true,
+    zcodeChatConnection: {getState:()=>({authorized:true})},
     storeRuntime: { isChatEnabled: () => true, workbuddyCli: { getState: () => ({ connected: true }) }, getZcodeAccountSource: () => 'official' },
     storeEnableFlow: { getState: () => ({}) } });
   const sourceSelect = new Element(), sourceMenu = new Element(), sourceBar = new Element();
@@ -140,8 +143,7 @@ test('actual first-release chat projection renders ZCode unavailable and disable
     sourceId: () => 'codex', sourceName: () => 'Codex', changeBlocked: () => false, closeSourceMenu() {}, chooseSource() {},
     api: { setSource() {}, openConnections() {} }, document: { createElement: () => new Element() } });
   const zcode = sourceMenu.children.find(option => option.value === 'zcode');
-  assert.ok(zcode); assert.equal(zcode.disabled, true); assert.match(zcode.children[1].textContent, /ZCode.*暂不可用/);
-  assert.match(zcode.title, /尚不能.*球球.*聊天/);
+  assert.ok(zcode); assert.equal(zcode.disabled, false); assert.equal(zcode.children[1].textContent, 'ZCode');
   assert.equal(sourceMenu.children.find(option => option.value === 'workbuddy').disabled, false);
 });
 

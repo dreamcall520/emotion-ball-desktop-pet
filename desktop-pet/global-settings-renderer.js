@@ -70,7 +70,7 @@
     '常规设置': ['M4 6h7M15 6h5M4 12h2M10 12h10M4 18h10M18 18h2', 'M11 4v4M6 10v4M14 16v4']
   };
   function navigationIcon(label) {
-    const integration = { Codex: 'codex', 'ZCode 联动': 'zcode', WorkBuddy: 'workbuddy' }[label];
+    const integration = { Codex: 'codex', ZCode: 'zcode', 'ZCode 联动': 'zcode', WorkBuddy: 'workbuddy' }[label];
     if (integration) {
       const image = file => {
         const icon = el('img', '', 'nav-icon'); icon.src = `assets/integrations/${file}.png`;
@@ -232,7 +232,7 @@
     const focusId = document.activeElement?.dataset?.action;
     $('version').textContent = `球球 v${snapshot.version} · 本地设置`;
     const categories = groups();
-    const nav = [{ id: 'common', label: '常用设置' }, ...categories,
+    const nav = [{ id: 'common', label: '常用设置' }, ...categories.map(category => category.id === '/zcode-menu' ? { ...category, label: 'ZCode' } : category),
       { id: 'shortcuts', label: '快捷键' }, { id: 'quota-cards', label: '联动样式管理' }, { id: 'feedback', label: '意见反馈' },
       ...snapshot.entries.filter(entry => externalIds.has(entry.id)).map(entry => ({ ...entry,
         label: ({ '/chat-open': '和球球聊聊', '/customize-open': '定制球球' })[entry.id] || entry.label, external: true }))];
@@ -246,7 +246,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['天气', 'Codex', 'ZCode 联动', 'WorkBuddy', 'API 余额', '联动样式管理']],
+      ['应用与联动', ['天气', 'Codex', 'WorkBuddy', 'ZCode', 'API 余额', '联动样式管理']],
       ['快捷与常规', ['快捷键', '常规设置', '意见反馈']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
@@ -521,10 +521,15 @@
     button.onclick=()=>void manageStoreZcode(connected?'disconnect':'app');row.append(info,button);section.append(row);
     const note=zcodeNotice||(['error','needs-authorization'].includes(state.status)?state.message:null);
     if(note){const box=el('div','','store-codex-error');box.append(el('p',note,'description'));section.append(box);}
-    section.append(el('p',state.chat?.message || '官方套餐尚不能用于球球普通聊天；请在 ZCode 中使用。','description'));
+    section.append(el('p',state.chat?.message || '聊天需完成当前官方账号的连接授权。','description'));
+    if (connected && state.chat?.authorized !== true) {
+      const chatRow=el('div','','row'),chatInfo=el('div');chatInfo.append(el('p','授权后可使用当前官方账号聊天。','description'));
+      const chatButton=el('button','连接聊天','action');chatButton.type='button';chatButton.disabled=busy;chatButton.dataset.action='store-zcode-chat';
+      chatButton.onclick=()=>void manageStoreZcode('app');chatRow.append(chatInfo,chatButton);section.append(chatRow);
+    }
     if(!connected){
       const disclosure=el('div','','store-codex-disclosure'),scope=el('dl');disclosure.append(el('h4','授权说明'));
-      for(const [name,description]of [['访问范围','访问你选择的 ZCode 应用和账号目录。'],['功能用途','只读查询官方套餐额度，按来源分别展示趋势。'],['任务提醒','任务读取和动画提醒分别授权，可单独撤销。'],['解除连接','停止联动并撤销球球保存的本地授权。']])scope.append(el('dt',name),el('dd',description));
+      for(const [name,description]of [['访问范围','访问你选择的 ZCode 应用和账号目录。'],['功能用途','查询官方套餐额度，使用当前官方账号聊天。'],['任务提醒','任务读取和动画提醒分别授权，可单独撤销。'],['解除连接','停止联动并撤销球球保存的本地授权。']])scope.append(el('dt',name),el('dd',description));
       disclosure.append(scope);section.append(disclosure);
     }
     return section;
@@ -543,16 +548,16 @@
     try{
       let result;
       if(action==='app'){
-        if(await confirmStoreCodex('连接本机应用',['使用本机 ZCode 查询当前官方账号额度。'],'允许使用此应用',{target:'ZCode',path:'本机应用'})!=='confirm')return;
+        if(await confirmStoreCodex('连接本机应用',['使用本机 ZCode 查询额度，并在球球中聊天。'],'允许使用此应用',{target:'ZCode',path:'本机应用'})!=='confirm')return;
         result=await api.zcodeConnection('app');
         if(result?.status!=='app-authorized'){zcodeNotice=result?.status==='cancelled'?null:'请选择已安装的 ZCode.app。';return;}
-        const terms=[['本机连接','只读套餐额度，体验和付费来源分别展示。','沿用本机登录，不复制或展示凭据，可随时断开。'],['任务提醒','任务与动画分别授权，不自动发送模型消息。','官方套餐暂不能用于球球普通聊天。']];
+        const terms=[['本机连接','查询套餐额度，体验和付费来源分别展示。','沿用本机登录，不展示凭据，可随时断开。'],['聊天发送','你发的消息和当前对话上下文交给 ZCode 官方。','问天气时可附城市和天气摘要，会消耗套餐额度。'],['任务提醒','任务读取与动画提醒分别授权，不自动发送消息。','不切换到自定义 API 或其他账号计费。']];
         if(await confirmStoreCodex('授权 ZCode 联动',[],'同意并选择目录',{terms})!=='confirm'){await api.zcodeConnection('cancel');return;}
         result=await api.zcodeConnection('account');
         if(result?.status!=='stored'){zcodeNotice=result?.status==='cancelled'?null:'请选择 ZCode 账号目录，保留系统预选的位置。';return;}
         action='connect';
       }else{
-        const copy={disconnect:['解除 ZCode 连接？',['停止额度查询、任务读取和动画提醒，撤销本地授权。'],'解除连接'],
+        const copy={disconnect:['解除 ZCode 连接？',['停止额度、聊天、任务和动画提醒，撤销本地授权。'],'解除连接'],
           'tasks-authorize':['授权 ZCode 本机任务',['复用已授权目录，只读任务名称、状态和更新时间。','这些是本机记录，不能按当前登录账号隔离。'],'同意读取任务'],
           'tasks-revoke':['撤销任务授权？',['停止读取任务，额度查询和独立动画提醒保持。'],'撤销授权'],
           'notifications-enable':['开启 ZCode 动画提醒',['在所选目录安装球球的事件脚本，备份原设置。','事件输入只在本机过滤，仅传任务标识和阶段。','不读取聊天正文；新建 ZCode 任务后生效。'],'同意并选择目录'],
@@ -560,7 +565,7 @@
         if(copy&&await confirmStoreCodex(...copy)!=='confirm')return;
       }
       result=await api.zcodeConnection(action);if(result?.snapshot)snapshot=result.snapshot;
-      zcodeNotice=['error','invalid-app','invalid-directory','needs-authorization','needs-connection'].includes(result?.status)?result.message||'连接未完成，请检查官方登录后重试。':null;
+      zcodeNotice=['error','invalid-app','invalid-directory','needs-authorization','needs-connection'].includes(result?.status)?result.message||'连接未完成，请重试。':null;
     }catch(_){zcodeNotice='ZCode 操作未完成，请重试。';}
     finally{busy=false;render();void refresh();}
   }

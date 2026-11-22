@@ -1,5 +1,8 @@
 'use strict';
 const fs = require('node:fs');
+// Electron's patched fs presents app.asar as a virtual directory. Validate the
+// selected vendor archive as its physical file, while retaining symlink checks.
+const physicalFs = process.versions.electron ? require('original-fs') : fs;
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { createZcodeChatRpc } = require('./zcode-chat-rpc');
@@ -9,10 +12,9 @@ const validAccount = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test
 const within = (root, target) => target === root || target.startsWith(root + path.sep);
 const METHODS = ['readAccount', 'listModels', 'startThread', 'resumeThread', 'startTurn', 'interruptTurn'];
 function officialChatScope(account) {
-  const codingPlan = ['individual-coding-plan', 'team-coding-plan'].includes(account?.selection?.kind);
-  return { available: false, source: 'official',
-    code: codingPlan ? 'CODING_PLAN_SCOPE_UNSUPPORTED' : 'ZCODE_START_PLAN_SCOPE_UNVERIFIED',
-    message: codingPlan ? '当前套餐仅限官方支持的工具，暂不能用于球球聊天。' : '尚未确认 ZCode 体验额度可用于球球聊天，请在 ZCode 中使用。' };
+  const available = ['start-plan', 'individual-coding-plan', 'team-coding-plan'].includes(account?.selection?.kind);
+  return { available, source: 'official', code: available ? null : 'ZCODE_OFFICIAL_SELECTION_REQUIRED',
+    message: available ? '使用当前 ZCode 官方账号套餐，实际可用性以官方返回为准。' : '请先在 ZCode 中选择官方套餐来源。' };
 }
 
 // The selected original component owns its runtime; it is never copied, patched,
@@ -123,9 +125,8 @@ async function createInstalledZcodeChatRpc({ installedAppAccess, directoryAccess
     if (closed || exited) throw fail('CLOSED');
     try {
       const selected = await account();
-      // Official runtime availability is not permission to use an unsupported
-      // subscription in a third-party chat product. No silent billing fallback.
-      if (method === 'startTurn') throw fail(officialChatScope(selected).code);
+      // The user-selected official route is kept exact. No custom billing fallback.
+      if (method === 'startTurn' && !officialChatScope(selected).available) throw fail(officialChatScope(selected).code);
       const result = await rpc[method](...args); check(); await account(); return result;
     }
     catch (error) {
@@ -138,7 +139,8 @@ async function createInstalledZcodeChatRpc({ installedAppAccess, directoryAccess
 const SAFE_RUN_ERRORS = new Set(['INVALID_REQUEST', 'DIRECTORY_ACCESS_REQUIRED', 'CANCELLED', 'TIMEOUT', 'PROCESS_EXIT_UNCONFIRMED',
   'ZCODE_ACCOUNT_CHANGED', 'ZCODE_OUTSIDE_AUTHORIZED_DIRECTORY', 'ZCODE_ACCOUNT_MISSING', 'ZCODE_INVALID_ACCOUNT_FILE',
   'ZCODE_CREDENTIAL_SECURE_STORAGE_REQUIRED', 'ZCODE_CREDENTIAL_DECRYPT_FAILED', 'ZCODE_PROVIDER_UNSUPPORTED', 'ZCODE_LOGIN_REQUIRED',
-  'ZCODE_TEAM_KEY_MISSING', 'ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_INVALID_RESPONSE', 'ZCODE_USAGE_UNAVAILABLE', 'ZCODE_BILLING_ERROR', 'ZCODE_MAS_READ_ONLY']);
+  'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_PERSONAL_KEY_MISSING', 'ZCODE_PERSONAL_PROJECT_UNAVAILABLE', 'ZCODE_PLAN_ACCESS_DENIED',
+  'ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_UNTRUSTED_ENDPOINT', 'ZCODE_INVALID_RESPONSE', 'ZCODE_USAGE_UNAVAILABLE', 'ZCODE_BILLING_ERROR', 'ZCODE_MAS_READ_ONLY']);
 function safeAccount(value) {
   if (!validAccount(value?.accountKey) || !['zai', 'bigmodel'].includes(value.family) ||
     !['personal', 'team'].includes(value.selection?.scope) || ![null, 'start-plan', 'individual-coding-plan', 'team-coding-plan', 'api-key'].includes(value.selection?.kind)) throw fail('ZCODE_INVALID_RESPONSE');
@@ -173,7 +175,7 @@ function safeQuota(value) {
   return { accountKey: value.accountKey, state: 'connected', buckets, windows: buckets, modelIds, updatedAt: value.updatedAt,
     balanceState: value.balanceState, paidState: value.paidState };
 }
-function createMasInstalledZcodeRunner({ access, fs: io = fs, spawnProcess = spawn, env = process.env,
+function createMasInstalledZcodeRunner({ access, fs: io = physicalFs, spawnProcess = spawn, env = process.env,
   helper = path.join(__dirname, 'zcode-helper.cjs'), closeTimeoutMs = 6000, timeoutMs = 45000 } = {}) {
   if (!access?.installedAppAccess?.acquire || !access?.directoryAccess?.acquire || !Number.isFinite(closeTimeoutMs) || closeTimeoutMs <= 0 ||
     !Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new TypeError('Explicit ZCode App/account access is required');

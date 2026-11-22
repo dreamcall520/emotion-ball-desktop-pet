@@ -36,7 +36,9 @@ test('missing existing OS key and mismatched fingerprints fail without creating 
   }
 });
 test('usage performs read-only official GET and strips credentials from projected results', async t => {
-  const f = await fixture(t), reader = await createAccountReader(f), a = await reader.read(), requests = [];
+  const f = await fixture(t);
+  await fs.writeFile(path.join(f.v2, 'setting.json'), JSON.stringify({ providerFamilyDomain: 'zai', providerFamilyConnectionSelections: { zai: { kind: 'start-plan' } } }));
+  const reader = await createAccountReader(f), a = await reader.read(), requests = [];
   const value = await runOperation('usage', { expectedAccountKey: a.accountKey }, { reader, appVersion: '3.18.2', now: 1000,
     fetch: async (url, options) => { requests.push({ url, method: options.method }); assert.equal(options.headers.Authorization, 'Bearer SYNTHETIC_JWT_NOT_REAL');
       return { ok: true, status: 200, text: async () => JSON.stringify({ code: 0, data: { balances: [], plans: [] } }) }; } });
@@ -44,12 +46,12 @@ test('usage performs read-only official GET and strips credentials from projecte
   assert.equal(value.accountKey, a.accountKey); assert.equal(value.balanceState, 'empty'); assert.equal(value.updatedAt, 1000);
   assert.equal(JSON.stringify(value).includes('SYNTHETIC'), false); reader.close();
 });
-test('quota late results cannot survive account/token changes or mint a missing team key', async () => {
+test('quota late results cannot survive account/token changes and incomplete team selection cannot exchange tokens', async () => {
   const initial = { accountKey: 'a'.repeat(64), family: 'zai', jwtToken: 'synthetic', deviceMid: 'synthetic', selection: { kind: 'start-plan', scope: 'personal' } };
   let reads = 0;
   await assert.rejects(runOperation('usage', { expectedAccountKey: initial.accountKey }, { appVersion: '3.18.2', reader: { read: async () => ++reads === 1 ? initial : { ...initial, jwtToken: 'new' } },
     fetch: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ code: 0, data: { balances: [], plans: [] } }) }) }), { code: 'ZCODE_ACCOUNT_CHANGED' });
   let requests = 0;
   await assert.rejects(runOperation('usage', { expectedAccountKey: initial.accountKey }, { appVersion: '3.18.2', reader: { read: async () => ({ ...initial, selection: { kind: 'team-coding-plan', scope: 'team' } }) },
-    fetch: async () => { requests++; } }), { code: 'ZCODE_TEAM_KEY_MISSING' }); assert.equal(requests, 0);
+    fetch: async () => { requests++; } }), { code: 'ZCODE_TEAM_SELECTION_REQUIRED' }); assert.equal(requests, 0);
 });

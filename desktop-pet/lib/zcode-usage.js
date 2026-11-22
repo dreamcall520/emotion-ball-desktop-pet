@@ -1,4 +1,4 @@
-const { createZcodeTeamAuth, teamContext, isTeam } = require('./zcode-team-auth');
+const { createZcodeTeamAuth, createZcodeOfficialAccountAuth, teamContext, isTeam } = require('./zcode-team-auth');
 const OFFICIAL_HOSTS = new Set(['zcode.z.ai', 'api.z.ai', 'open.bigmodel.cn', 'bigmodel.cn']);
 const MAX_BYTES = 2 * 1024 * 1024;
 const text = (value, max = 160) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, max) : '';
@@ -38,6 +38,7 @@ async function requestOfficialJson(url, { headers = {}, fetch: fetchImpl = globa
   } catch (error) { throw fail(error.code === 'ZCODE_RESPONSE_TOO_LARGE' ? error.code : 'ZCODE_INVALID_RESPONSE'); }
 }
 const resolveZcodeTeamAccount = createZcodeTeamAuth(requestOfficialJson);
+const resolveZcodeOfficialAccount = createZcodeOfficialAccountAuth(requestOfficialJson);
 function normalizeZcodeBalance(payload, now = Date.now()) {
   const data = payload?.data || payload;
   const plans = Array.isArray(data?.plans) ? data.plans.slice(0, 64) : [];
@@ -80,10 +81,12 @@ function normalizeCodingPlanQuota(payload, now = Date.now()) {
     const total = validUnits(row.usage) && row.usage > 0 ? row.usage : null;
     const remainingUnits = validUnits(row.remaining) && total !== null && row.remaining <= total ? row.remaining
       : validUnits(row.currentValue) && total !== null && row.currentValue <= total ? total - row.currentValue : null;
-    const remaining = total !== null && remainingUnits !== null ? remainingUnits / total * 100 : 100 - row.percentage;
+    // Match the official sidebar/settings contract: percentage is the server's
+    // used-quota percentage. Exact unit counts remain separate detail fields.
+    const remaining = 100 - row.percentage;
     const bucketId = `zcode:paid:${row.type}:${row.unit}:${row.number}`;
     return [{ sourceId: 'zcode', source: 'coding-plan', id: bucketId, bucketId, label: tool ? 'MCP 工具' : row.type === 'CREDIT_LIMIT' ? 'Coding Plan 积分' : 'Coding Plan',
-      planName: text(data.planName || data.plan) || 'Coding Plan', model: '', meter: tool ? 'tool_usage' : 'model_usage',
+      planName: text(data.planName || data.plan || data.level) || 'Coding Plan', model: '', meter: tool ? 'tool_usage' : 'model_usage',
       windowMinutes: actualSpan, remaining, resetsAt, periodStart,
       periodKind: tool && row.unit === 5 ? 'monthly' : 'rolling', total, remainingUnits,
       unit: tool ? 'calls' : row.type === 'CREDIT_LIMIT' ? 'credits' : 'quota' }];
@@ -94,8 +97,16 @@ async function fetchZcodeUsage(account, options = {}) {
   const appVersion = options.appVersion === undefined ? '3.16.3' : options.appVersion;
   if (typeof appVersion !== 'string' || !/^\d{1,4}(?:\.\d{1,4}){1,3}$/.test(appVersion)) throw fail('ZCODE_INVALID_APP_VERSION');
   const team = isTeam(account);
-  if (team) account = await (options.resolveTeamAccount || resolveZcodeTeamAccount)(account, options);
-  const buckets = []; let balanceState = 'unavailable'; let paidState = 'unavailable'; let firstError = null;
+  const resolver = options.resolveOfficialAccount || resolveZcodeOfficialAccount;
+  let paidAuthError = null;
+  if (team) account = await (options.resolveTeamAccount || resolver)(account, options);
+  else if (account?.selection?.kind === 'individual-coding-plan' && !account.codingPlanApiKey && account.accessToken && account.accountId
+    // Legacy restricted adapters supply only resolveTeamAccount. They retain
+    // their explicit no-exchange boundary until they opt into the new resolver.
+    && (options.resolveOfficialAccount || !options.resolveTeamAccount)) {
+    try { account = await resolver(account, options); } catch (error) { paidAuthError = error; }
+  }
+  const buckets = []; let balanceState = 'unavailable'; let paidState = paidAuthError ? 'error' : 'unavailable'; let firstError = paidAuthError;
   if (!team && account?.jwtToken && account?.deviceMid) {
     try {
       const payload = await requestOfficialJson(`https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=${encodeURIComponent(appVersion)}`,
@@ -108,18 +119,20 @@ async function fetchZcodeUsage(account, options = {}) {
   }
   if (account?.codingPlanApiKey && ['zai', 'bigmodel'].includes(account.family)) {
     const context = team ? teamContext(account) : null;
-    const base = context?.origin || (account.family === 'zai' ? 'https://api.z.ai' : 'https://open.bigmodel.cn');
+    const quotaOrigin = account.family === 'zai' ? 'https://api.z.ai' : 'https://open.bigmodel.cn';
+    if (account.codingPlanQuotaOrigin !== undefined && account.codingPlanQuotaOrigin !== quotaOrigin) throw fail('ZCODE_UNTRUSTED_ENDPOINT');
+    const base = account.codingPlanQuotaOrigin || context?.origin || quotaOrigin;
     try {
       const payload = await requestOfficialJson(`${base}/api/monitor/usage/quota/limit${team ? '?type=2' : ''}`,
-        { ...options, headers: { Authorization: team ? account.codingPlanApiKey : `Bearer ${account.codingPlanApiKey}`,
+        { ...options, headers: { Authorization: team || account.codingPlanProjectToken ? account.codingPlanApiKey : `Bearer ${account.codingPlanApiKey}`,
           ...context?.headers } });
       if ([401, 403, '401', '403'].includes(payload.code)) throw fail('ZCODE_LOGIN_REQUIRED');
-      if (payload.success !== true || payload.code !== 200 || !Array.isArray(payload.data?.limits)) throw fail('ZCODE_INVALID_RESPONSE');
+      if (payload.success === false || ![undefined, 0, 200].includes(payload.code) || !Array.isArray(payload.data?.limits)) throw fail('ZCODE_INVALID_RESPONSE');
       const paid = normalizeCodingPlanQuota(payload, now);
       if (team) for (const row of paid) row.planName = `${row.planName} · 团队`;
       buckets.push(...paid); paidState = paid.length ? 'connected' : 'empty';
     } catch (error) {
-      if (team && error.code === 'ZCODE_LOGIN_REQUIRED') (options.resolveTeamAccount || resolveZcodeTeamAccount).invalidate?.(account);
+      if (error.code === 'ZCODE_LOGIN_REQUIRED') (team ? options.resolveTeamAccount || resolver : resolver).invalidate?.(account);
       firstError ||= error; paidState = 'error';
     }
   }
@@ -131,4 +144,4 @@ async function fetchZcodeUsage(account, options = {}) {
   }
   return { state: 'connected', buckets, windows: buckets, modelIds: [...models.values()], updatedAt: now, balanceState, paidState };
 }
-module.exports = { normalizeZcodeBalance, normalizeCodingPlanQuota, fetchZcodeUsage, requestOfficialJson, resolveZcodeTeamAccount };
+module.exports = { normalizeZcodeBalance, normalizeCodingPlanQuota, fetchZcodeUsage, requestOfficialJson, resolveZcodeTeamAccount, resolveZcodeOfficialAccount };

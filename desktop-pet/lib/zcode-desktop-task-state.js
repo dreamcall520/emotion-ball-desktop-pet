@@ -16,7 +16,7 @@ function createZcodeDesktopTaskState({ readTurnStatus = async () => null, now = 
   inactivityMs = 120000, pollMs = 1000, maxWatchMs = 1800000 } = {}) {
   if (typeof readTurnStatus !== 'function' || !Number.isSafeInteger(inactivityMs) || inactivityMs < 20 || inactivityMs > 1800000 ||
     !Number.isSafeInteger(pollMs) || pollMs < 10 || pollMs > 60000 || !Number.isSafeInteger(maxWatchMs) || maxWatchMs < inactivityMs || maxWatchMs > 86400000) throw new TypeError('Invalid task observer options');
-  let binding = null, closed = false, timer = null, revision = 0, alertId = 0, flight = null;
+  let binding = null, boundAt = 0, closed = false, timer = null, revision = 0, alertId = 0, flight = null;
   const tasks = new Map(), tombstones = new Set();
   const clock = () => { const at = Number(now()); return Number.isFinite(at) && at >= 0 ? Math.trunc(at) : Date.now(); };
   const call = (fn, value) => { try { fn(value); } catch {} };
@@ -62,12 +62,12 @@ function createZcodeDesktopTaskState({ readTurnStatus = async () => null, now = 
       source: task.terminalConfirmed ? 'zcode-authorized-turn-usage' : 'zcode-desktop-hook',
       scope: SCOPE, accountAttributionVerified: false, overallTaskVerified: false });
   }
-  function reset() { stopTimer(); binding = null; tasks.clear(); tombstones.clear(); clear('reset'); notify(); }
+  function reset() { stopTimer(); binding = null; boundAt = 0; tasks.clear(); tombstones.clear(); clear('reset'); notify(); }
   function bind(owner) {
     if (closed) return false;
     if (!validBinding(owner)) { reset(); return false; }
     if (current(owner)) return true;
-    reset(); binding = { accountKey: owner.accountKey, epoch: owner.epoch }; notify(); return true;
+    reset(); binding = { accountKey: owner.accountKey, epoch: owner.epoch }; boundAt = clock(); notify(); return true;
   }
   function accept(raw, owner) {
     if (closed || !current(owner) || !raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
@@ -80,13 +80,20 @@ function createZcodeDesktopTaskState({ readTurnStatus = async () => null, now = 
     const id = createHash('sha256').update(metadata.sessionId + '\0' + metadata.turnId).digest('hex').slice(0, 32);
     if (tombstones.has(id)) return false;
     const prior = tasks.get(id), at = clock();
+    // The authenticated bridge timestamps receipt before the controller's
+    // asynchronous account verification. A short official turn can finish
+    // during that verification; use receipt time, never later accept time, as
+    // the history boundary. Source HTTP clients cannot supply this bridge key.
+    const sourceAt = Object.hasOwn(raw, 'observedAt') ? raw.observedAt : at;
+    if (!Number.isSafeInteger(sourceAt) || sourceAt < boundAt || sourceAt > at || prior && sourceAt < prior.lastSourceAt) return false;
     if (metadata.event === 'UserPromptSubmit') {
       if (prior) return false;
       for (const task of tasks.values()) if (task.sessionId === metadata.sessionId && pending(task)) {
         Object.assign(task, { state: 'unknown', phase: 'superseded', realtime: false, revision: ++revision }); tombstone(task.id);
       }
       const task = { id, sessionId: metadata.sessionId, turnId: metadata.turnId, state: 'processing', phase: 'submitted',
-        startedAt: at, lastEventAt: at, deadline: at + inactivityMs, watchUntil: at + maxWatchMs, revision: ++revision,
+        startedAt: sourceAt, acceptedAt: at, lastSourceAt: sourceAt, lastEventAt: at,
+        deadline: at + inactivityMs, watchUntil: at + maxWatchMs, revision: ++revision,
         running: null, realtime: true, liveVerified: false, terminalConfirmed: false, terminalKind: null,
         evidence: 'observed-user-prompt-hook', scope: SCOPE, accountAttributionVerified: false, overallTaskVerified: false };
       tasks.set(id, task); notify(); emit('processing', task, owner);
@@ -95,7 +102,7 @@ function createZcodeDesktopTaskState({ readTurnStatus = async () => null, now = 
       if (!prior || !pending(prior)) return false;
       // No completion or success is inferred from Stop, including repeated Stop
       // callbacks in a continuation. A new stage only extends the activity lease.
-      Object.assign(prior, { phase: 'stop-observed', lastEventAt: at, deadline: at + inactivityMs, revision: ++revision }); notify();
+      Object.assign(prior, { phase: 'stop-observed', lastSourceAt: sourceAt, lastEventAt: at, deadline: at + inactivityMs, revision: ++revision }); notify();
     }
     void refresh(); return current(owner);
   }

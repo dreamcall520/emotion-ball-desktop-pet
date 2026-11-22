@@ -120,7 +120,7 @@ test('strict account reads only account-scoped paid keys while the existing webs
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zcode-strict-account-')), dir = path.join(home, '.zcode/v2');
   t.after(() => fs.rmSync(home, { recursive: true, force: true })); fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'credentials.json'), JSON.stringify({ 'oauth:active_provider': 'zai',
-    zcodejwttoken: 'synthetic-jwt', 'oauth:zai:user_info': JSON.stringify({ user_id: 'current-user' }) }));
+    zcodejwttoken: 'synthetic-jwt', 'oauth:zai:access_token': 'synthetic-oauth', 'oauth:zai:user_info': JSON.stringify({ user_id: 'current-user' }) }));
   fs.writeFileSync(path.join(dir, 'setting.json'), JSON.stringify({ providerFamilyDomain: 'zai',
     providerFamilyConnectionSelections: { zai: { kind: 'individual-coding-plan' } } }));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ provider: { 'builtin:zai-coding-plan': {
