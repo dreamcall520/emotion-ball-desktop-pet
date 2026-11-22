@@ -953,8 +953,8 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-period:empty,
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .compact-collapse,
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .quota-period:empty { display:none; }
-#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #items { margin-left:48px; gap:3px; }
-#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #items li { grid-template-columns:minmax(0,1fr) auto; grid-template-rows:14px 3px; row-gap:1px; column-gap:2px; align-items:center; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #items { margin-left:48px; gap:4px; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #items li { grid-template-columns:minmax(0,1fr) auto; grid-template-rows:14px 3px; row-gap:3px; column-gap:2px; align-items:center; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .quota-value { grid-column:2; font-size:12px; line-height:12px; font-weight:730; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-item-count="1"] #items li { grid-template-rows:18px 3px; }
 #quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-item-count="1"] .quota-value { font-size:14px; line-height:18px; }
