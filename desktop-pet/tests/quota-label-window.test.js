@@ -1308,7 +1308,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   assert.equal(label.dataset.expanded, 'false');
   assert.equal(label.dataset.appearance, 'dark');
   assert.equal(root.dataset.appearance, 'dark');
-  assert.equal(summary.children.map(node => node.textContent).join(''), 'Codex周额度64%');
+  assert.equal(summary.children.map(node => node.textContent).join(''), '周额度64%');
   assert.deepEqual(summary.children.map(node => node.className), ['summary-period', 'summary-value']);
   click();
   assert.equal(toggles, 1);
@@ -1472,8 +1472,8 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     'Spark7天9%紧张'
   ]);
   assert.deepEqual(items.children.map(item => item.children.map(child => child.className)), [
-    ['quota-name quota-cycle-caption', 'quota-period period-pill', 'quota-value', 'quota-progress'],
-    ['quota-name quota-cycle-caption', 'quota-period period-pill', 'quota-value', 'quota-progress']
+    ['quota-name', 'quota-period period-pill', 'quota-value', 'quota-progress'],
+    ['quota-name', 'quota-period period-pill', 'quota-value', 'quota-progress']
   ]);
   assert.deepEqual(items.children.map(item => item.children[0].textContent), ['<b>Codex</b>', 'Spark']);
   assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时', '7天']);
@@ -1975,7 +1975,7 @@ test('团队和额度查询原因通过 ZCode 原生窗口和 preload 白名单�
   assert.equal(nodes.items.children[0].children[0].textContent,'5.3');
   assert.equal(nodes.items.children[0].children[1].textContent,'1024活动');
   assert.equal(nodes.items.children[2].children[1].textContent,'每日体验');
-  assert.match(expanded.textContent,/ZCode/); assert.match(expanded.textContent,/体验/); assert.match(expanded.textContent,/1024/);
+  assert.match(expanded.textContent,/ZCODE/); assert.match(expanded.textContent,/体验/); assert.match(expanded.textContent,/1024/);
   assert.match(expanded.children[1].children[2].title,/Start Plan 体验/);
   assert.match(expanded.children[1].children[0].title,/1024 活动/); assert.match(expanded.textContent,/到期/);
   assert.doesNotMatch(expanded.textContent,/重置机会/);

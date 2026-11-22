@@ -939,49 +939,28 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 .empty-status-text { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 10px; line-height: 12px; }
 
 
-/* Keep the brand beside quota readings; its original artwork is a soft watermark. */
-#quota-label[data-collapsed-source="true"][data-size="standard"][data-expanded="false"] { padding:5px 8px; }
-#quota-label[data-collapsed-source="true"] #compact-header { display:block; position:absolute; left:8px; top:7px; width:42px; height:44px; margin:0; }
-#quota-label[data-collapsed-source="true"] .compact-product { position:relative; width:100%; height:100%; }
-#quota-label[data-collapsed-source="true"] #compact-product { display:block; position:absolute; inset:0; overflow:visible; color:var(--quota-muted); font-size:10px; line-height:12px; font-weight:650; letter-spacing:0; }
-#quota-label[data-collapsed-source="true"] #compact-product .source-icon { position:absolute; top:1px; left:4px; opacity:.13; }
-#quota-label[data-collapsed-source="true"] #compact-product .source-icon,
-#quota-label[data-collapsed-source="true"] #compact-product .source-icon img { width:34px; height:34px; }
-#quota-label[data-collapsed-source="true"] .collapsed-source-name { position:absolute; bottom:11px; left:0; width:42px; text-align:center; }
-#quota-label[data-collapsed-source="true"] #compact-period { position:absolute; left:0; bottom:0; width:42px; padding:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border:0; background:none; box-shadow:none; color:var(--quota-subtle); font-size:7px; line-height:10px; font-weight:500; text-align:center; }
-#quota-label[data-collapsed-source="true"] #compact-period:empty,
-#quota-label[data-collapsed-source="true"] .compact-collapse,
-#quota-label[data-collapsed-source="true"] .quota-period:empty { display:none; }
-#quota-label[data-collapsed-source="true"] #items { margin-left:50px; gap:3px; }
-#quota-label[data-collapsed-source="true"][data-size="standard"][data-expanded="false"] #items li { grid-template-columns:minmax(0,1fr) auto auto; grid-template-rows:12px 3px; row-gap:1px; column-gap:3px; align-items:center; }
-#quota-label[data-collapsed-source="true"][data-size="standard"][data-expanded="false"] .quota-name { color:var(--quota-muted); font-size:9.5px; line-height:12px; font-weight:550; }
-#quota-label[data-collapsed-source="true"] .quota-value { grid-column:3; font-size:12px; line-height:12px; font-weight:730; }
-#quota-label[data-collapsed-source="true"][data-item-count="1"] #items li { grid-template-rows:18px 3px; }
-#quota-label[data-collapsed-source="true"][data-item-count="1"] .quota-value { font-size:14px; line-height:18px; }
-/* Both small cards fit source, full period name and percentage on one line. */
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] { padding-inline:1px; }
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] #summary { position:relative; gap:4px; }
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] .summary-period { position:relative; flex:0 1 auto; display:inline-flex; gap:3px; overflow:visible; }
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] .summary-period .source-icon { position:absolute; left:0; top:50%; transform:translateY(-50%); opacity:.12; }
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] .summary-period .source-icon,
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] .summary-period .source-icon img { width:24px; height:24px; }
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] .summary-source-name { position:relative; flex:none; font-size:8px; line-height:12px; font-weight:650; color:var(--quota-muted); }
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] .summary-value { flex:none; font-size:12px; }
-#quota-label[data-source="zcode"] .v20-brand { gap:4px; }
-#quota-label[data-source="zcode"] .v20-brand b { flex:none; letter-spacing:0; }
-#quota-label[data-source="zcode"] .v20-brand .source-icon { flex-basis:12px; }
-#quota-label[data-source="zcode"] .v20-brand .source-icon,
-#quota-label[data-source="zcode"] .v20-brand .source-icon img { width:12px; height:12px; }
-#quota-label[data-source="zcode"] .v20-plan-summary { flex:0 1 auto; min-width:0; max-width:56px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quota-subtle); font-size:8px; font-weight:500; }
-/* Quota names share one hierarchy; only names shrink, never percentage or state. */
-#quota-label[data-source][data-size] .quota-cycle-caption { font-size:9.5px; font-weight:550; line-height:12px; letter-spacing:0; color:var(--quota-muted) !important; padding-inline:0; text-indent:0; }
-#quota-label[data-source][data-size] #items .quota-cycle-caption { color:var(--quota-muted) !important; }
-
-#quota-label .quota-cycle-caption { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-#quota-label[data-collapsed-source="true"][data-source="zcode"][data-shared-plan="false"] #items li { grid-template-columns:minmax(0,1fr) minmax(0,.75fr) auto; }
-#quota-label[data-display="card"][data-size="compact"][data-expanded="false"] .summary-period-label { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-#quota-label[data-source="zcode"] .v20-cell-label .period-pill { flex:0 1 auto; min-width:0; box-sizing:border-box; }
-#quota-label[data-source="zcode"] .v20-periods:not(.dual) .v20-plan-name { flex:0 1 45%; min-width:0; }
-#quota-label :is(.quota-value,.summary-value,.v20-value) { flex-shrink:0; white-space:nowrap; text-overflow:clip; }
-
-#quota-label[data-collapsed-source="true"] .quota-period.period-pill { box-sizing:border-box; }
+/* Only the standard folded card uses a source watermark and compact quota tags. */
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] { padding:5px 8px; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-header { display:block; position:absolute; left:8px; top:7px; width:42px; height:44px; margin:0; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .compact-product { position:relative; width:100%; height:100%; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product { display:block; position:absolute; inset:0; overflow:visible; color:var(--quota-muted); font-size:10px; line-height:12px; font-weight:650; letter-spacing:0; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon { position:absolute; top:1px; left:4px; opacity:.13; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon,
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-product .source-icon img { width:34px; height:34px; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .collapsed-source-name { position:absolute; bottom:11px; left:0; width:42px; text-align:center; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-period { position:absolute; left:0; bottom:0; width:42px; padding:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border:0; background:none; box-shadow:none; color:var(--quota-subtle); font-size:7px; line-height:10px; font-weight:500; text-align:center; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #compact-period:empty,
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .compact-collapse,
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .quota-period:empty { display:none; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #items { margin-left:48px; gap:3px; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] #items li { grid-template-columns:minmax(0,1fr) auto; grid-template-rows:14px 3px; row-gap:1px; column-gap:2px; align-items:center; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .quota-value { grid-column:2; font-size:12px; line-height:12px; font-weight:730; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-item-count="1"] #items li { grid-template-rows:18px 3px; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-item-count="1"] .quota-value { font-size:14px; line-height:18px; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-source="zcode"][data-shared-plan="false"] #items li { grid-template-columns:minmax(0,1fr) minmax(0,.75fr) auto; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"][data-source="zcode"][data-shared-plan="false"] .quota-value { grid-column:3; }
+#quota-label[data-size="standard"][data-expanded="false"][data-collapsed-source="true"] .quota-period.period-pill { box-sizing:border-box; }
+#quota-label[data-size="standard"][data-expanded="false"] .quota-cycle-caption { display:inline-block; width:fit-content; min-width:0; max-width:100%; box-sizing:border-box; padding:0 3px; border:1px solid rgba(112,171,238,.24); border-radius:999px; background:linear-gradient(180deg,rgba(229,242,255,.68),rgba(204,227,252,.38)); box-shadow:inset 0 1px 0 rgba(255,255,255,.24); color:#3f6fbf; font-size:9.5px; font-weight:550; line-height:12px; letter-spacing:0; text-indent:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+:root[data-appearance="dark"] #quota-label[data-size="standard"][data-expanded="false"] .quota-cycle-caption { color:#fff; background:linear-gradient(180deg,rgba(36,61,96,.42),rgba(29,49,81,.32)); border-color:rgba(181,213,255,.15); box-shadow:inset 0 1px 0 rgba(255,255,255,.07); }
+@media (prefers-color-scheme:dark) { :root[data-appearance="system"] #quota-label[data-size="standard"][data-expanded="false"] .quota-cycle-caption { color:#fff; background:linear-gradient(180deg,rgba(36,61,96,.42),rgba(29,49,81,.32)); border-color:rgba(181,213,255,.15); box-shadow:inset 0 1px 0 rgba(255,255,255,.07); } }
+:root[data-color-mode="accessible"] #quota-label[data-size="standard"][data-expanded="false"] .quota-cycle-caption { color:var(--accessible-blue) !important; border-color:var(--accessible-line) !important; background:var(--accessible-surface) !important; box-shadow:none !important; }

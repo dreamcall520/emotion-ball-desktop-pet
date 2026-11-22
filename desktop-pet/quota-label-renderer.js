@@ -199,8 +199,8 @@
   const knownPlanKind = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) && item.periodKind === 'daily' ? 'trial'
     : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) && ['one_time', 'expiry'].includes(item.periodKind) ? 'event' : '';
   const displayPlanName = value => String(value || '').replace(/^(max|pro|lite|ultra|enterprise)(?=$|[\s·])/i, name => ({max:'Max',pro:'Pro',lite:'Lite',ultra:'Ultra',enterprise:'Enterprise'}[name.toLowerCase()])).replace(/\s*[·•]\s*/g, ' · ');
-  const shortPlanName = item => ({trial:'每日体验',event:'1024活动'}[knownPlanKind(item)] || displayPlanName(item.planName));
-  const sharedPlanName = items => items[0]?.planName && items.every(item => item.planName === items[0].planName) ? shortPlanName(items[0]) : '';
+  const shortPlanName = item => ({trial:'每日体验',event:'1024活动'}[knownPlanKind(item)] || item.planName);
+  const sharedPlanName = items => items[0]?.planName && items.every(item => item.planName === items[0].planName) ? displayPlanName(shortPlanName(items[0])) : '';
   const paidPeriodLabel = item => /^zcode:paid:(?:TOKENS_LIMIT|CREDIT_LIMIT):/.test(item.bucketId)
     ? ({300:'5小时额度',10080:'周额度'}[item.windowMinutes] || '') : '';
   function displayItems(model) {
@@ -442,10 +442,10 @@
     icon.replaceChildren(...(sourceId === 'zcode' ? [image('zcode')] : [image(light, 'source-icon-light'), image(dark, 'source-icon-dark')]));
     return icon;
   }
-  function compactReading(minutes, text, caption, badge = null, preference, systemDark, sourceName = '', fullCaption = caption) {
+  function compactReading(minutes, text, caption, badge = null, preference, systemDark) {
     const period = node('span', 'summary-period');
     period.replaceChildren(badge === 'CX' || badge === 'Z' ? sourceIcon(badge === 'Z' ? 'zcode' : 'codex', preference, systemDark) : node('span', 'summary-badge', badge || periodBadgeText(minutes)),
-      ...(sourceName ? [node('span', 'summary-source-name', sourceName)] : []), namedText('summary-period-label quota-cycle-caption', caption, fullCaption));
+      node('span', 'summary-period-label', caption));
     return [period, node('span', 'summary-value', text)];
   }
   function renderNumbers(model) {
@@ -478,10 +478,7 @@
     const showHeading = dual || model.sourceId === 'zcode';
     const header = node('div', 'v20-header');
     const brand = node('span', 'v20-brand');
-    const sharedPlan = model.sourceId === 'zcode' ? sharedPlanName(model.items) : '';
-    brand.replaceChildren(...(model.sourceId === 'zcode' ? [sourceIcon('zcode'), node('b', '', 'ZCode'),
-      ...(sharedPlan ? [namedText('v20-plan-summary', sharedPlan, model.items[0].planName)] : [])] : [node('b', '', 'CODEX'),
-      ...(!dual ? [node('span', 'period-pill quota-cycle-caption', codexPeriodCaption(model.items[0].windowMinutes))] : [])]));
+    brand.replaceChildren(node('b', '', model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX'), ...(!dual && model.sourceId !== 'zcode' ? [node('span', 'period-pill', itemTitle(model.items[0]))] : []));
     if (model.sourceId === 'zcode') brand.title = itemTitle(model.items[0]);
     const headerTools = node('div', 'v20-header-tools');
     const collapse = node('button', 'v20-collapse', '⌃');
@@ -527,8 +524,8 @@
         const teamPeriod = model.sourceId === 'zcode' ? paidPeriodLabel(item) : '';
         heading.title = itemTitle(item);
         if (teamPeriod) heading.className += ' v20-team-period-label';
-        heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName && !teamPeriod && !sharedPlan ? [namedText('v20-plan-name', shortPlanName(item), item.planName)] : []),
-          namedText('period-pill quota-cycle-caption', teamPeriod || (model.sourceId === 'zcode' ? item.label : codexPeriodCaption(item.windowMinutes)), itemTitle(item)));
+        heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName && !teamPeriod ? [node('span', 'v20-plan-name', shortPlanName(item))] : []),
+          node('span', 'period-pill', teamPeriod || (model.sourceId === 'zcode' ? item.label : itemTitle(item))));
       }
       return cell;
     }));
@@ -646,7 +643,7 @@
         const severity = severityOf(item.remaining);
         row.dataset.severity = severity;
         row.dataset.role = index === 0 ? 'primary' : 'secondary';
-        nameNode.className = 'quota-name quota-cycle-caption';
+        nameNode.className = 'quota-name' + (collapsedSource ? ' quota-cycle-caption' : '');
         nameNode.textContent = collapsedSource && model.sourceId !== 'zcode' ? codexPeriodCaption(item.windowMinutes)
           : model.sourceId === 'zcode' && model.size === 'standard'
           ? ({ 'GLM-5.3': '5.3', 'GLM-5.3-Flash': '5.3 Flash' }[item.label] || item.label)
@@ -686,13 +683,10 @@
         : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
         const codexCollapsed = model.sourceId !== 'zcode' && model.size === 'compact' && !model.expanded;
-        const zcodeCollapsed = model.sourceId === 'zcode' && !model.expanded;
         const caption = codexCollapsed ? codexPeriodCaption(summaryItem.windowMinutes)
-          : zcodeCollapsed && model.size === 'compact' ? (paidPeriodLabel(summaryItem) || summaryItem.label)
-            : model.sourceId === 'zcode' ? (paidPeriodLabel(summaryItem).replace('5小时额度','5小时') || '额度') : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
+          : model.sourceId === 'zcode' ? (paidPeriodLabel(summaryItem).replace('5小时额度','5小时') || '额度') : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, remainingText(summaryItem.remaining, model.sourceId),
-          caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'CX' : null, model.codexIconPreference, model.codexIconDark,
-          zcodeCollapsed && model.size === 'compact' ? 'ZCode' : codexCollapsed ? 'Codex' : '', itemTitle(summaryItem)));
+          caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'CX' : null, model.codexIconPreference, model.codexIconDark));
         if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
         if (compactPeriod) compactPeriod.textContent = itemTitle(summaryItem);
       } else {

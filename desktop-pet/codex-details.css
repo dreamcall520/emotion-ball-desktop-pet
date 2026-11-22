@@ -179,7 +179,7 @@ html[data-resolved-appearance=dark] .reset-event-popup{background:#1a222d}
 .zcode-plan-heading { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: var(--detail-muted); font-size: 12px; line-height: 18px; font-weight: 600; }
 .zcode-plan-scope { flex: none; padding: 1px 6px; border-radius: 5px; color: var(--detail-blue); background: var(--detail-count); font-size: 10px; line-height: 16px; font-weight: 500; }
 .zcode-bucket-grid { display: flex; gap: 6px; max-width: 100%; padding: 2px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
-.zcode-bucket-button { flex: none; min-width: 0; min-height: 32px; padding: 6px 10px; border: 1px solid var(--detail-line); border-radius: 7px; font-size: 12px; line-height: 17px; color: var(--detail-muted); white-space: nowrap; }
+.zcode-bucket-button { flex: none; min-width: 0; max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; min-height: 32px; padding: 6px 10px; border: 1px solid var(--detail-line); border-radius: 7px; font-size: 12px; line-height: 17px; color: var(--detail-muted); white-space: nowrap; }
 .zcode-bucket-button:hover { background: var(--detail-count); }
 .zcode-bucket-button[aria-pressed="true"] { color: var(--detail-blue); background: var(--detail-count); border-color: color-mix(in srgb,var(--detail-blue) 45%,transparent); font-weight: 650; }
 .zcode-bucket-selector.has-shared-plan { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

@@ -28,18 +28,16 @@ function renderFixture() {
   });
   return { nodes, receive };
 }
-test('ZCode compact summary keeps the primary quota name with complete accessible bucket identities', () => {
+test('ZCode collapsed summary uses a short fixed caption and preserves every bucket in its accessible title', () => {
   const { nodes, receive } = renderFixture();
   for (const count of [1, 2, 4]) for (const size of ['compact', 'standard']) for (const appearance of ['light', 'dark']) {
     const items = Array.from({ length: count }, (_, index) => ({ label: `GLM-5.3${index % 2 ? '-Flash' : ''}`,
       planName: index > 1 ? 'Start Plan 体验' : 'ZCode 1024 活动', bucketId: `zcode:bucket-${index}`, windowMinutes: 1440,
       remaining: 100, resetsAt: Date.now() + 86400000, periodKind: index > 1 ? 'daily' : 'one_time' }));
     receive({ sourceId: 'zcode', state: 'ready', size, appearance, expanded: false, items });
-    assert.equal(nodes.summary.textContent, size === 'compact' ? 'ZCodeGLM-5.3100%' : '额度100%');
+    assert.equal(nodes.summary.textContent, '额度100%');
     assert.equal(nodes.summary.children[0].children[0].attributes['aria-label'], 'ZCode');
-    assert.equal(nodes.summary.children[0].children.at(-1).textContent, size === 'compact' ? items[0].label : '额度');
-    assert.equal(nodes.summary.children[0].children.at(-1).title, `${items[0].planName} · ${items[0].label}`);
-    assert.equal(nodes.summary.children[0].children.at(-1).attributes['aria-label'],nodes.summary.children[0].children.at(-1).title);
+    assert.equal(nodes.summary.children[0].children[1].textContent, '额度');
     assert.match(nodes['quota-label'].title, /^ZCode 剩余额度/);
     for (const item of items) {
       assert.ok(nodes['quota-label'].title.includes(item.planName));
@@ -51,7 +49,7 @@ test('ZCode compact summary keeps the primary quota name with complete accessibl
 test('Codex collapsed caption identifies its source and period', () => {
   const { nodes, receive } = renderFixture();
   receive({ sourceId: 'codex', state: 'ready', size: 'compact', items: [{ label: 'Codex', windowMinutes: 300, remaining: 15 }] });
-  assert.equal(nodes.summary.textContent, 'Codex5小时额度15%');
+  assert.equal(nodes.summary.textContent, '5小时额度15%');
   assert.equal(nodes['quota-label'].attributes['aria-label'], 'Codex 剩余额度');
 });
 test('ZCode没有reset时仍显示真实5h额度，展开提示时间待提供且保留周额度', () => {
