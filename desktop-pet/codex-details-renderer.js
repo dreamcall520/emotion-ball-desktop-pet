@@ -584,7 +584,10 @@
         const format = /^credits?$/i.test(item.unit) ? exactNumber : shortNumber;
         values.replaceChildren(node('span','',`剩余 ${format(item.remainingUnits)} ${quotaUnit(item)}`),node('span','',`共 ${format(item.total)} ${quotaUnit(item)}`));
         const deadline = node('span','zcode-quota-row-deadline');
-        deadline.replaceChildren(node('span','',item.resetsAt ? deadlineCopy(item).label : '重置时间'), node('span','',item.resetsAt ? deadlineLabel(item.resetsAt) : '待提供'));
+        const clock = svgNode('svg',{viewBox:'0 0 16 16','aria-hidden':'true'});
+        clock.appendChild(svgNode('circle',{cx:8,cy:8,r:5.5}));
+        clock.appendChild(svgNode('path',{d:'M8 4.5V8l2.5 1.5'}));
+        deadline.replaceChildren(clock,node('span','',item.resetsAt ? `${deadlineCopy(item).label} ${deadlineLabel(item.resetsAt)}` : '重置时间待提供'));
         row.replaceChildren(heading,progress,values,deadline); li.appendChild(row); return li;
       }));
       group.replaceChildren(planHeading(groupName,'h2','zcode-quota-group-title'),list); return group;
