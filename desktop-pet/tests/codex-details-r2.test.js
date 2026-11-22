@@ -156,7 +156,7 @@ test('ZCode retained quota is visibly pending update in quota and trend details'
   const h = renderer(), content = h.nodes['details-content'];
   const model = { sourceId: 'zcode', state: 'stale', items: [{ ...item(300), bucketId: 'zcode:paid:1',
     label: 'Coding Plan', planName: '团队套餐', periodKind: 'rolling', pace: { state: 'unknown' } }] };
-  h.receive({ ...model, action: 'quota' }); assert.match(content.querySelector('.zcode-quota-deadline').textContent, /^待更新/);
+  h.receive({ ...model, action: 'quota' }); assert.match(content.querySelector('.panel-note').textContent, /额度待更新/);
   h.receive({ ...model, action: 'trend' }); assert.equal(content.querySelector('.trend-pace').textContent, '待更新');
   h.receive({ ...model, state: 'ready', action: 'quota' }); assert.doesNotMatch(content.textContent, /待更新/);
 });
@@ -169,7 +169,7 @@ test('ZCode 团队卡的额度明细保留套餐、团队身份、独立周期�
     resetsAt:Date.now()+windowMinutes*60000, unit:'credits'}));
   h.receive({sourceId:'zcode',state:'ready',action:'quota',items:rows});
   assert.equal(content.querySelector('.zcode-quota-group-title').textContent,'Coding Plan · 团队');
-  assert.deepEqual(content.querySelectorAll('.zcode-quota-values').map(node=>node.textContent),['剩余 700 / 1,000 credits','剩余 780 / 1,000 credits']);
+  assert.deepEqual(content.querySelectorAll('.zcode-quota-values').map(node=>node.textContent),['剩余 700 点共 1,000 点','剩余 780 点共 1,000 点']);
   const buttons = content.querySelectorAll('.zcode-quota-row');
   assert.equal(buttons.length,2);
   buttons.forEach((button,index)=>{
@@ -374,14 +374,14 @@ test('ZCode MCP 月额无周期起点仍保留余额，趋势明确不可绘制'
   const h=renderer();const bucketId='zcode:'+ 'p'.repeat(160) + ':' + 'e'.repeat(160);
   const items=[{bucketId,label:'MCP 工具',windowMinutes:null,periodStart:null,periodKind:'monthly',remaining:80,total:1000,remainingUnits:800,unit:'次',resetsAt:Date.now()+1000000}];
   h.receive({sourceId:'zcode',action:'quota',bucketId,items});
-  assert.match(h.nodes['details-content'].textContent,/剩余 800 \/ 1,000 次/);
+  assert.match(h.nodes['details-content'].textContent,/剩余 800 次共 1,000 次/);
   h.nodes['details-content'].querySelector('.zcode-quota-row').events.click();assert.deepEqual(h.calls.at(-1),['trend',bucketId]);
   h.receive({sourceId:'zcode',action:'trend',bucketId,items});
-  assert.match(h.nodes['details-content'].textContent,/接口未提供周期起点，暂无法绘制趋势/);
+  assert.match(h.nodes['details-content'].textContent,/周期时间待提供，暂无法展示趋势/);
   assert.equal(h.nodes['details-content'].querySelector('.trend-chart'),null);
 });
 
-const zcodeItems = () => ['ZCode Start Plan','ZCode Start Plan','ZCode 1024 Dev Day','ZCode 1024 Dev Day'].map((planName,i)=>({...item(1440),bucketId:`zcode:${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName,periodKind:i<2?'daily':'one_time',periodStart:Date.now()-3600000,total:200000000,remainingUnits:199999123.456789,unit:'tokens'}));
+const zcodeItems = () => ['ZCode Start Plan','ZCode Start Plan','ZCode 1024 Dev Day','ZCode 1024 Dev Day'].map((planName,i)=>({...item(1440),bucketId:`zcode:${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName,periodKind:i<2?'daily':'one_time',periodStart:Date.now()-3600000,total:200000000,remainingUnits:199999123.456789,usedUnits:876.543211,unit:'tokens'}));
 
 test('ZCode 四桶用可直接单击的短按钮，真实全名保留，Codex 原标签不变', () => {
   const h=renderer(),items=zcodeItems();
@@ -416,7 +416,7 @@ test('ZCode 显示事实倒计时、实测图例、采样与真实用量，不�
   assert.match(c.querySelector('.trend-stats').textContent,/距刷新/);assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/剩余时间|64%/);
   assert.equal(c.querySelector('.zcode-chart-caption'),null);assert.match(c.querySelector('.chart-help-body').textContent,/实测余额.*时间基准/);
   assert.equal(c.querySelector('.zcode-sample-info'),null);assert.doesNotMatch(c.querySelector('.chart-help-body').textContent,/\d+\s*次采样|\d{2}\/\d{2}/);assert.match(c.querySelector('.zcode-usage-note').textContent,/已用/);
-  assert.equal(c.querySelector('.forecast-badge'),null);assert.match(c.querySelector('.forecast-copy').textContent,/当前记录尚无消耗.*记录到消耗后/);assert.doesNotMatch(c.querySelector('.panel-bottom').textContent,/每天重新计算额度/);assert.match(c.querySelector('.panel-bottom p').title,/每天重新计算额度/);
+  assert.equal(c.querySelector('.forecast-badge'),null);assert.match(c.querySelector('.forecast-copy').textContent,/最近记录暂无新增消耗.*记录到新的消耗后/);assert.doesNotMatch(c.querySelector('.panel-bottom').textContent,/每天重新计算额度/);assert.match(c.querySelector('.panel-bottom p').title,/每天重新计算额度/);
   h.receive({...model,bucketId:'zcode:2'});assert.match(c.querySelector('.panel-bottom').textContent,/使用截止/);assert.match(c.querySelector('.panel-bottom p').title,/到期后剩余额度失效/);
   h.receive({...model,items:[{...items[0],resetsAt:null,periodStart:null,windowMinutes:null,periodKind:'unknown'}]});
   assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/距|—/);assert.equal(c.querySelector('.time-path'),null);
@@ -474,12 +474,30 @@ test('ZCode 百分比不隐藏细小消耗，显示精确已用数量，Codex仍
     h.receive({sourceId:'zcode',action:'quota',items:[bucket]});
     assert.equal(h.nodes['details-content'].querySelector('.zcode-quota-heading strong').textContent,text);
   });
-  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:99.8706,total:5000000,remainingUnits:4993530,unit:'token'}]});
+  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:99.8706,total:5000000,remainingUnits:4993530,usedUnits:6470,unit:'token'}]});
   assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'本周期已用 6,470 token');
-  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:100,total:5000000,remainingUnits:5000000,unit:'token'}]});
+  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:100,total:5000000,remainingUnits:5000000,usedUnits:0,unit:'token'}]});
   assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note'),null);
   h.receive({action:'trend',period:300,items:[{...item(300),remaining:99.8706}]});
   assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,'100%');
+});
+
+test('ZCode 官方累计用量与余额取整分开，缺重置时间仍保留额度而不造倒计时', () => {
+  const h=renderer(),content=h.nodes['details-content'];
+  const bucket={...item(300),bucketId:'zcode:paid:CREDIT_LIMIT:3:5',label:'5 小时额度',planName:'max · 团队',periodKind:'rolling',
+    periodStart:null,resetsAt:null,remaining:99,total:35000,remainingUnits:34724,usedUnits:275,unit:'credits'};
+  const model={sourceId:'zcode',state:'ready',action:'trend',bucketId:bucket.bucketId,items:[bucket]};
+  h.receive(model);
+  assert.equal(content.querySelector('.zcode-usage-note').textContent,'本周期已用 275 点');
+  assert.doesNotMatch(content.querySelector('.trend-stats').textContent,/距重置|分钟|已结束/);
+  assert.equal(content.querySelector('.zcode-bucket-button').textContent,'5 小时额度');
+  assert.match(content.querySelector('.zcode-plan-heading').textContent,/Max 套餐.*团队/);
+  h.receive({...model,items:[{...bucket,usedUnits:null}]});
+  assert.equal(content.querySelector('.zcode-usage-note'),null,'missing official used must not be replaced by total minus remaining');
+  h.receive({...model,action:'quota'});
+  assert.equal(content.querySelector('.zcode-quota-heading strong').textContent,'99%');
+  assert.match(content.querySelector('.zcode-quota-row-deadline').textContent,/重置时间待提供/);
+  assert.doesNotMatch(content.textContent,/credits|各额度有效期限分别统计|276/);
 });
 
 

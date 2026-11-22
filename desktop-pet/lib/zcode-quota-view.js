@@ -5,12 +5,12 @@ const text = value => typeof value === 'string' ? value.replace(/[\u0000-\u001f\
 const validTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000;
 const validBucket = row => typeof row?.id === 'string' && row.id.startsWith('zcode:') && row.id.length <= 400
   && Number.isFinite(row.remaining) && row.remaining >= 0 && row.remaining <= 100
-  && validTime(row.resetsAt)
-  && (Number.isFinite(row.windowMinutes) && row.windowMinutes > 0 && validTime(row.periodStart) && row.resetsAt > row.periodStart
-    || row.windowMinutes === null && row.periodStart === null);
+  && (row.resetsAt === null || validTime(row.resetsAt))
+  && (Number.isFinite(row.windowMinutes) && row.windowMinutes > 0 || row.windowMinutes === null)
+  && (row.periodStart === null || validTime(row.periodStart) && validTime(row.resetsAt) && row.resetsAt > row.periodStart);
 function buildPace(row, fresh, now) {
   const duration = row.resetsAt - row.periodStart, remainingTime = row.resetsAt - now;
-  if (!fresh || row.periodStart === null || !Number.isFinite(row.windowMinutes)
+  if (!fresh || row.periodStart === null || row.resetsAt === null || !Number.isFinite(row.windowMinutes)
     || duration <= 0 || remainingTime <= 0 || remainingTime > duration) {
     return { state: 'unknown', remainingTimePercent: null };
   }
@@ -21,8 +21,8 @@ function buildPace(row, fresh, now) {
 function buildForecast(selected, samples, state, now) {
   const unknown = (reason, detail) => ({ state: 'unknown', status: 'unknown', reason,
     exhaustsAt: null, label: '', summary: '暂无法预估额度用完时间', detail });
-  if (!selected || selected.periodStart === null || !Number.isFinite(selected.windowMinutes)) {
-    return unknown('missing-period', '接口未提供周期起点，暂无法预估');
+  if (!selected || selected.periodStart === null || selected.resetsAt === null || !Number.isFinite(selected.windowMinutes)) {
+    return unknown('missing-period', '周期时间待提供，暂无法预估');
   }
   if (selected.periodStart > now) return unknown('missing-period', '额度周期尚未开始，暂无法预估');
   if (state !== 'ready') return unknown('stale', '额度尚未更新，稍后再看');
@@ -129,7 +129,7 @@ function buildZcodeQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   if (source.enabled !== true || state !== 'connected' || !validTime(now)) return empty;
   const stale = source.quota.stale !== false || !validTime(source.quota.updatedAt) || source.quota.updatedAt > now || now - source.quota.updatedAt >= 300000;
   const windows = Array.isArray(source.quota?.windows) ? source.quota.windows : Array.isArray(source.buckets) ? source.buckets : [];
-  const items = windows.slice(0, 64).filter(row => validBucket(row) && row.resetsAt > now).map(row => {
+  const items = windows.slice(0, 64).filter(row => validBucket(row) && (row.resetsAt === null || row.resetsAt > now)).map(row => {
     const periodKind = ['one_time', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(row.periodKind) ? row.periodKind : 'unknown';
     const prefix = periodKind === 'one_time' ? '到期' : periodKind === 'daily' ? '刷新' : periodKind === 'unknown' ? '有效至' : '重置';
     const label = row.source === 'coding-plan' && row.meter !== 'tool_usage'
@@ -138,9 +138,10 @@ function buildZcodeQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
     return { sourceId: 'zcode', id: row.id, bucketId: row.id, label,
       planName: text(row.planName) || 'ZCode', model: text(row.model), meter: text(row.meter),
       windowMinutes: row.windowMinutes, remaining: row.remaining, resetsAt: row.resetsAt,
-      resetLabel: `${prefix} ${formatQuotaDate(row.resetsAt, row.windowMinutes, now)}`,
+      resetLabel: row.resetsAt === null ? `${prefix}时间待提供` : `${prefix} ${formatQuotaDate(row.resetsAt, row.windowMinutes, now)}`,
       total: Number.isFinite(row.total) && row.total >= 0 ? row.total : null,
       remainingUnits: Number.isFinite(row.remainingUnits) && row.remainingUnits >= 0 ? row.remainingUnits : null,
+      usedUnits: Number.isFinite(row.usedUnits) && row.usedUnits >= 0 ? row.usedUnits : null,
       unit: text(row.unit), periodStart: row.periodStart, periodKind,
       pace: buildPace(row, !stale, now) };
   });

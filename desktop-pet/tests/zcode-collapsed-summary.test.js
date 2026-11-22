@@ -52,6 +52,18 @@ test('Codex collapsed caption identifies its source and period', () => {
   assert.equal(nodes.summary.textContent, '5小时额度15%');
   assert.equal(nodes['quota-label'].attributes['aria-label'], 'Codex 剩余额度');
 });
+test('ZCode没有reset时仍显示真实5h额度，展开提示时间待提供且保留周额度', () => {
+  const { nodes, receive } = renderFixture();
+  receive({ sourceId: 'zcode', state: 'ready', expanded: true, items: [
+    { label: '5 小时额度', planName: 'max', bucketId: 'zcode:paid:CREDIT_LIMIT:3:5', windowMinutes: 300, remaining: 100,
+      periodKind: 'rolling', resetsAt: null, periodStart: null, usedUnits: 0, total: 35000, remainingUnits: 35000 },
+    { label: '每周额度', planName: 'max', bucketId: 'zcode:paid:CREDIT_LIMIT:6:1', windowMinutes: 10080, remaining: 94,
+      periodKind: 'rolling', resetsAt: Date.now() + 86400000 }
+  ] });
+  assert.match(nodes.items.textContent, /100%/); assert.match(nodes.items.textContent, /94%/);
+  assert.match(nodes['codex-expanded'].textContent, /重置时间待提供/);
+  assert.doesNotMatch(nodes.items.textContent, /1970|NaN|undefined/);
+});
 
 test('ZCode team errors use compact text and complete hover guidance, then clear on recovery', () => {
   const { nodes, receive } = renderFixture();

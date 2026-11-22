@@ -9,7 +9,7 @@ const fail = code => Object.assign(new Error(code), { code });
 // are distinct. Transient loss/cancellation suspends reads without saving false.
 function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
   onChange = () => {}, onAccountChanged = () => {} }) {
-  let enabled = false, authorized = false, tasksAuthorized = false, accountKey = null;
+  let enabled = false, authorized = false, tasksAuthorized = false, tasksAllowed = true, accountKey = null;
   let epoch = 0, taskEpoch = 0, closed = false, pending = Promise.resolve(), accountFlight = null, connecting = null;
   const queue = operation => {
     const result = pending.catch(() => {}).then(operation);
@@ -64,7 +64,7 @@ function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
     const selected = await readAccount(); check(owner, signal);
     if (!validAccount(selected?.accountKey)) throw fail('ZCODE_LOGIN_REQUIRED');
     if (saved.accountKey !== selected.accountKey) throw fail('ACCOUNT_CHANGED');
-    enabled = authorized = true; accountKey = selected.accountKey; tasksAuthorized = saved.tasks === true;
+    enabled = authorized = true; accountKey = selected.accountKey; tasksAuthorized = tasksAllowed && saved.tasks === true;
     // Connection consent is committed before starting a potentially long quota
     // request. Closing its settings window after this point is not a disconnect.
     // The link's suspension revision cancels a still-pending consent continuation.
@@ -88,7 +88,9 @@ function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
       if (connecting) rollbackRuntime(connecting);
       return { status: 'cancelled' };
     },
-    connect(signal) {
+    connect(signal, { tasksEnabled = tasksAllowed } = {}) {
+      tasksAllowed = tasksEnabled !== false;
+      if (!tasksAllowed) { ++taskEpoch; tasksAuthorized = false; }
       const owner = ++epoch;
       return queue(async () => {
         check(owner, signal);
@@ -112,7 +114,7 @@ function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
           }
           previousSaved = await storage.load('zcode'); check(owner, signal);
           const saved = { purpose: PURPOSE, version: 1, accountKey: selected.accountKey,
-            tasks: validRecord(previousSaved) && previousSaved.accountKey === selected.accountKey && previousSaved.tasks === true };
+            tasks: tasksAllowed && validRecord(previousSaved) && previousSaved.accountKey === selected.accountKey && previousSaved.tasks === true };
           await storage.save('zcode', saved); wrote = true; check(owner, signal);
           attempt.runtimeStarted = true;
           const result = await activate(owner, signal, saved); check(owner, signal);
@@ -128,7 +130,8 @@ function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
         } finally { if (connecting === attempt) connecting = null; }
       }).catch(error => { if (error.code === 'CANCELLED') return { status: 'cancelled' }; throw error; });
     },
-    restore(value) {
+    restore(value, { tasksEnabled = true } = {}) {
+      tasksAllowed = tasksEnabled !== false;
       const owner = ++epoch; ++taskEpoch;
       if (closed) return Promise.resolve(getState());
       enabled = value === true; authorized = tasksAuthorized = false; accountKey = null;
@@ -152,7 +155,7 @@ function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
         try {
           await storage.save('zcode', { purpose: PURPOSE, version: 1, accountKey: key, tasks: true }); wrote = true;
           check(owner, signal, taskOwner); await verifyAccount({ signal }); check(owner, signal, taskOwner);
-          tasksAuthorized = true; notify();
+          tasksAllowed = tasksAuthorized = true; notify();
           // Granting read authority does not wait for a quota network request.
           void Promise.resolve().then(() => {
             if (!closed && owner === epoch && taskOwner === taskEpoch && tasksAuthorized) return link.refresh();
@@ -166,7 +169,7 @@ function createMasZcodeQuotaConnection({ access, readAccount, link, storage,
       }).catch(error => { if (error.code === 'CANCELLED') return { status: 'cancelled' }; throw error; });
     },
     revokeTasks() {
-      const owner = epoch; ++taskEpoch; tasksAuthorized = false; notify();
+      const owner = epoch; ++taskEpoch; tasksAllowed = tasksAuthorized = false; notify();
       return queue(async () => {
         if (closed || owner !== epoch || !enabled || !authorized || !validAccount(accountKey)) return { status: 'revoked' };
         await storage.save('zcode', { purpose: PURPOSE, version: 1, accountKey, tasks: false });

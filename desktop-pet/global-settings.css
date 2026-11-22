@@ -62,6 +62,7 @@ h2 { font-size:14px; font-weight:600; margin:0; }
 .row:last-child { border-bottom:0; }
 .row-title { font-size:12px; line-height:1.5; }
 .description { font-size:11px; line-height:1.6; color:var(--muted); margin:4px 0 0; }
+.zcode-quota-description { white-space:pre-line; }
 .row.unavailable .row-title { color:var(--muted); }
 .row button { flex-shrink:0; }
 .action { background:var(--secondary); border:1px solid var(--line); border-radius:9px; color:var(--text); padding:6px 12px; font-size:11px; }

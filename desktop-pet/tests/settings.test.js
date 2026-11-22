@@ -117,8 +117,8 @@ test('损坏文件回退且有效设置可回读', t => {
     colorMode: 'standard',
     uiTheme: 'blue',
     chatModel: 'auto',
-    chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact',
-    chatProvider: 'codex', workbuddyEnabled: false, workbuddyNotificationsEnabled: true, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto',
+    chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeTasksEnabled: true, zcodeNotificationsEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact',
+    chatProvider: 'codex', workbuddyEnabled: false, workbuddyNotificationsEnabled: true, workbuddyTasksEnabled: true, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto',
     apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '',
     notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
@@ -145,7 +145,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyNotificationsEnabled: true, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeTasksEnabled: true, zcodeNotificationsEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyNotificationsEnabled: true, workbuddyTasksEnabled: true, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
     quotaCardOrder: DEFAULTS.quotaCardOrder, quotaCardPinned: DEFAULTS.quotaCardPinned,
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
@@ -566,4 +566,13 @@ test('自动异常上报默认开启，旧配置补齐并保留手动关闭', t 
   saveSettings(file, {...loadSettings(file),autoReportErrors:false});
   assert.equal(loadSettings(file).autoReportErrors, false);
   assert.equal(loadSettings(file).size, 'small');
+});
+
+test('new task and reminder defaults remain opted out after saving manual revocation',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'task-default-preference-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const file=path.join(root,'settings.json');
+ for(const name of ['zcodeTasksEnabled','zcodeNotificationsEnabled','workbuddyTasksEnabled']){
+  assert.equal(normalizeSettings({})[name],true);assert.equal(normalizeSettings({[name]:false})[name],false);
+  saveSettings(file,{...loadSettings(file),[name]:false});assert.equal(loadSettings(file)[name],false);
+ }
 });

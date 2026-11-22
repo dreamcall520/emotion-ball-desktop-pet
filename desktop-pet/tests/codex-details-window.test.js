@@ -145,3 +145,65 @@ test('详情窗口只接受本页主 frame，复用窗口且尺寸始终在屏�
   assert.deepEqual(visibility.at(-1), { value: false, visible: false }, '原生窗口关闭也通知恢复卡片');
   controller.destroy(); assert.equal(controller.getWindow(), null);
 });
+
+function recordedDetails(sourceId) {
+  const calls = [], windows = [];
+  class Window extends EventEmitter {
+    constructor(options) {
+      super(); this.bounds = Object.fromEntries(['x','y','width','height'].map(key => [key, options[key]]));
+      this.webContents = new EventEmitter(); this.webContents.setWindowOpenHandler = () => {};
+      this.webContents.send = (_channel, model) => calls.push({ kind: 'send', period: model.period, bucketId: model.bucketId });
+      windows.push(this);
+    }
+    getBounds() { return { ...this.bounds }; }
+    setBounds(value) { calls.push({ kind: 'bounds', before: this.getBounds(), after: { ...value } }); this.bounds = { ...value }; }
+    isDestroyed() { return false; }
+    setAlwaysOnTop() {}
+    loadFile() { return Promise.resolve(); }
+    isVisible() { return this.visible === true; }
+    show() { this.visible = true; calls.push({ kind: 'show' }); }
+    hide() { this.visible = false; calls.push({ kind: 'hide' }); }
+    destroy() {}
+  }
+  let anchor = { x: 800, y: 300, width: 80, height: 80 };
+  const controller = createCodexDetailsWindow({ BrowserWindow: Window, sourceId, getAnchor: () => anchor,
+    screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1600, height: 1000 } }) } });
+  return { controller, calls, windows, setAnchor: value => { anchor = value; } };
+}
+test('ZCode visible trend switches preserve measured bounds and focus, including a manually moved window', () => {
+  const f = recordedDetails('zcode');
+  f.controller.open({ action: 'trend', period: 300, bucketId: 'zcode:five-hour' });
+  const win = f.windows[0]; win.webContents.emit('did-finish-load'); f.controller.resize(475);
+  win.setBounds({ ...win.getBounds(), x: 120, y: 60 });
+  const measured = win.getBounds(); f.calls.length = 0;
+  f.setAnchor({ x: 1200, y: 700, width: 80, height: 80 });
+  assert.equal(f.controller.open({ action: 'trend', period: 10080, bucketId: 'zcode:weekly' }), true);
+  assert.deepEqual(win.getBounds(), measured, 'tab switch must not shrink to 420 or jump back to the pet');
+  assert.deepEqual(f.calls.map(call => call.kind), ['send'], 'an existing trend only receives the selected model, without native show or bounds');
+  assert.equal(f.controller.getPeriod(), 'zcode:weekly');
+  f.calls.length = 0; f.controller.close(); f.controller.open({ action: 'trend', period: 300, bucketId: 'zcode:five-hour' });
+  assert.ok(f.calls.some(call => call.kind === 'show'), 'explicit reopening still shows the window');
+  assert.notEqual(win.getBounds().x, measured.x, 'reopening after close still anchors to the current pet');
+});
+test('ZCode repeated measured resize requests skip native no-ops but accept a genuine height change', () => {
+  const f = recordedDetails('zcode'); f.controller.open({ action: 'trend', bucketId: 'zcode:five-hour' });
+  f.windows[0].webContents.emit('did-finish-load'); f.controller.resize(475); f.calls.length = 0;
+  f.controller.resize(475); f.controller.resize(475);
+  assert.equal(f.calls.filter(call => call.kind === 'bounds').length, 0);
+  f.controller.resize(500);
+  assert.equal(f.calls.filter(call => call.kind === 'bounds').length, 1);
+  assert.equal(f.windows[0].getBounds().height, 500);
+});
+test('ZCode explicit open still recovers a natively hidden trend window', () => {
+  const f = recordedDetails('zcode'); f.controller.open({ action: 'trend', bucketId: 'zcode:five-hour' });
+  f.windows[0].webContents.emit('did-finish-load'); f.windows[0].hide(); f.calls.length = 0;
+  f.controller.open({ action: 'trend', bucketId: 'zcode:weekly' });
+  assert.equal(f.windows[0].isVisible(), true); assert.ok(f.calls.some(call => call.kind === 'show'));
+});
+test('Codex same-action open retains its existing reanchor, default height and show behavior', () => {
+  const f = recordedDetails('codex'); f.controller.open({ action: 'trend', period: 300 });
+  f.windows[0].webContents.emit('did-finish-load'); f.controller.resize(475); f.calls.length = 0;
+  f.controller.open({ action: 'trend', period: 10080 });
+  assert.equal(f.windows[0].getBounds().height, 420);
+  assert.ok(f.calls.some(call => call.kind === 'bounds')); assert.ok(f.calls.some(call => call.kind === 'show'));
+});

@@ -1039,7 +1039,7 @@ function currentWorkBuddyAccountKey() {
   return workbuddyVerifiedAccountKey || state.accountKey || null;
 }
 async function completeStoreWorkBuddyConnection(signal) {
-  const connected = await workbuddyQuotaConnection.connect(signal);
+  const connected = await workbuddyQuotaConnection.connect(signal, { tasksEnabled: settings.workbuddyTasksEnabled !== false });
   if (signal.aborted || !connected.connected) return connected;
   let granted = false;
   try {
@@ -1055,12 +1055,23 @@ async function completeStoreWorkBuddyConnection(signal) {
     let message;
     try { await chat.connectSource('workbuddy'); }
     catch { message = '已连接，聊天模型暂未读取成功，可在聊天中重试。'; }
-    if (!signal.aborted && settings.workbuddyNotificationsEnabled !== false) {
-      const reminder = await workbuddyNotifications.enable(signal);
-      if (reminder.status !== 'ready') message = '已连接；动画提醒还需要选择 WorkBuddy 目录。';
+    const deferred = [];
+    if (!signal.aborted && workbuddyChatConnection.getAuthorizedAccountKey() === identity.accountKey && settings.workbuddyTasksEnabled !== false && workbuddyQuotaConnection.getState().tasks?.authorized !== true) {
+      try {
+        const task = await workbuddyQuotaConnection.authorizeTasks(signal);
+        if (task.status === 'cancelled') settings = saveSettings(settingsFile, { ...settings, workbuddyTasksEnabled: false });
+        if (!['stored','ready','authorized'].includes(task.status)) deferred.push('任务同步');
+      } catch { deferred.push('任务同步'); }
     }
-    if (message) return { ...result, message };
-    return result;
+    if (!signal.aborted && workbuddyChatConnection.getAuthorizedAccountKey() === identity.accountKey && settings.workbuddyNotificationsEnabled !== false) {
+      try {
+        const reminder = await workbuddyNotifications.enable(signal);
+        if (reminder.status === 'cancelled') settings = saveSettings(settingsFile, { ...settings, workbuddyNotificationsEnabled: false });
+        if (reminder.status !== 'ready') deferred.push('动画提醒');
+      } catch { deferred.push('动画提醒'); }
+    }
+    if (deferred.length) message = (message ? message + ' ' : '已连接；') + deferred.join('、') + '未完成，可稍后单独开启。';
+    return { ...result, ...(deferred.length ? { status: 'partial' } : {}), ...(message ? { message } : {}) };
   } finally {
     if (!granted || signal.aborted) {
       workbuddyVerifiedAccountKey = null;
@@ -1070,7 +1081,7 @@ async function completeStoreWorkBuddyConnection(signal) {
   }
 }
 async function completeStoreZcodeConnection(signal) {
-  const connected = await zcodeQuotaConnection.connect(signal);
+  const connected = await zcodeQuotaConnection.connect(signal, { tasksEnabled: settings.zcodeTasksEnabled !== false });
   if (signal.aborted || !connected.connected) return connected;
   let granted = false;
   try {
@@ -1085,7 +1096,23 @@ async function completeStoreZcodeConnection(signal) {
     let message;
     try { await chat.connectSource('zcode'); }
     catch { message = '已连接，聊天模型暂未读取成功，可在聊天中重试。'; }
-    return { ...result, ...(message ? { message } : {}) };
+    const deferred = [];
+    if (!signal.aborted && zcodeChatConnection.getAuthorizedAccountKey() === identity.accountKey && settings.zcodeTasksEnabled !== false && zcodeQuotaConnection.getState().tasks?.authorized !== true) {
+      try {
+        const task = await zcodeQuotaConnection.authorizeTasks(signal);
+        if (task.status === 'cancelled') settings = saveSettings(settingsFile, { ...settings, zcodeTasksEnabled: false });
+        if (!['stored','ready','authorized'].includes(task.status)) deferred.push('本机任务');
+      } catch { deferred.push('本机任务'); }
+    }
+    if (!signal.aborted && zcodeChatConnection.getAuthorizedAccountKey() === identity.accountKey && settings.zcodeNotificationsEnabled !== false) {
+      try {
+        const reminder = await zcodeNotifications.enable(signal);
+        if (reminder.status === 'cancelled') settings = saveSettings(settingsFile, { ...settings, zcodeNotificationsEnabled: false });
+        if (reminder.status !== 'ready') deferred.push('动画提醒');
+      } catch { deferred.push('动画提醒'); }
+    }
+    if (deferred.length) message = (message ? message + ' ' : '已连接；') + deferred.join('、') + '未完成，可稍后单独开启。';
+    return { ...result, ...(deferred.length ? { status: 'partial' } : {}), ...(message ? { message } : {}) };
   } finally {
     if (!granted || signal.aborted) await Promise.allSettled([
       Promise.resolve().then(() => storeChatDataConsent().revoke('zcode')), zcodeChatConnection.disable()
@@ -4379,11 +4406,17 @@ function registerIpc() {
           Promise.resolve().then(() => storeChatDataConsent().revoke('workbuddy'))]);
         result = await workbuddyQuotaConnection.disconnect();
       }
-      else if (action === 'tasks-authorize') result = await workbuddyQuotaConnection.authorizeTasks(controller.signal);
-      else if (action === 'tasks-revoke') result = await workbuddyQuotaConnection.revokeTasks();
+      else if (action === 'tasks-authorize') {
+        result = await workbuddyQuotaConnection.authorizeTasks(controller.signal);
+        if (['stored','ready','authorized','cancelled'].includes(result.status)) settings = saveSettings(settingsFile, { ...settings, workbuddyTasksEnabled: result.status !== 'cancelled' });
+      }
+      else if (action === 'tasks-revoke') {
+        try { settings = saveSettings(settingsFile, { ...settings, workbuddyTasksEnabled: false }); }
+        finally { result = await workbuddyQuotaConnection.revokeTasks(); }
+      }
       else if (action === 'notifications-enable') {
         result = await workbuddyNotifications.enable(controller.signal);
-        if (result.status === 'ready') settings = saveSettings(settingsFile, { ...settings, workbuddyNotificationsEnabled: true });
+        if (['ready','cancelled'].includes(result.status)) settings = saveSettings(settingsFile, { ...settings, workbuddyNotificationsEnabled: result.status === 'ready' });
       }
       else if (action === 'notifications-disable') {
         try { settings = saveSettings(settingsFile, { ...settings, workbuddyNotificationsEnabled: false }); }
@@ -4409,10 +4442,20 @@ function registerIpc() {
         finally { result=await zcodeQuotaConnection.disconnect(); }
         if(cleanup?.some(value=>value.status==='rejected'))throw Object.assign(new Error('ZCODE_REMINDER_CLEANUP_FAILED'),{code:'ZCODE_REMINDER_CLEANUP_FAILED'});
       }
-      else if(action==='tasks-authorize')result=await zcodeQuotaConnection.authorizeTasks(controller.signal);
-      else if(action==='tasks-revoke')result=await zcodeQuotaConnection.revokeTasks();
-      else if(action==='notifications-enable')result=await zcodeNotifications.enable(controller.signal);
-      else if(action==='notifications-disable')result=await zcodeNotifications.disable();
+      else if(action==='tasks-authorize'){
+        result=await zcodeQuotaConnection.authorizeTasks(controller.signal);
+        if(['stored','ready','authorized','cancelled'].includes(result.status))settings=saveSettings(settingsFile,{...settings,zcodeTasksEnabled:result.status!=='cancelled'});
+      }
+      else if(action==='tasks-revoke'){
+        try{settings=saveSettings(settingsFile,{...settings,zcodeTasksEnabled:false});}finally{result=await zcodeQuotaConnection.revokeTasks();}
+      }
+      else if(action==='notifications-enable'){
+        result=await zcodeNotifications.enable(controller.signal);
+        if(['ready','cancelled'].includes(result.status))settings=saveSettings(settingsFile,{...settings,zcodeNotificationsEnabled:result.status==='ready'});
+      }
+      else if(action==='notifications-disable'){
+        try{settings=saveSettings(settingsFile,{...settings,zcodeNotificationsEnabled:false});}finally{result=await zcodeNotifications.disable();}
+      }
       else result=await completeStoreZcodeConnection(controller.signal);
       if(controller.signal.aborted)return{status:'cancelled'};
       return{...result,snapshot:globalSettingsSnapshot()};
@@ -5360,7 +5403,7 @@ async function bootstrap() {
     void (async () => {
       try {
         await restoreWorkBuddyChat;
-        await workbuddyQuotaConnection.restore(settings.workbuddyEnabled);
+        await workbuddyQuotaConnection.restore(settings.workbuddyEnabled, { tasksEnabled: settings.workbuddyTasksEnabled !== false });
         if (workbuddyQuotaConnection.getState().connected) {
           const identity = await workbuddyRun('account-check', {});
           if (!isQuitting && workbuddyQuotaConnection.getState().connected) {
@@ -5723,8 +5766,11 @@ async function bootstrap() {
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
   if(FIRST_RELEASE) void (async()=>{
     await zcodeChatConnection.restore();
-    await zcodeQuotaConnection.restore(settings.zcodeEnabled);
-    if(zcodeQuotaConnection.getState().connected) {await zcodeChatConnection.refreshAccount();await zcodeNotifications.restore();}
+    await zcodeQuotaConnection.restore(settings.zcodeEnabled, { tasksEnabled: settings.zcodeTasksEnabled !== false });
+    if(zcodeQuotaConnection.getState().connected) {
+      await zcodeChatConnection.refreshAccount();
+      if(settings.zcodeNotificationsEnabled!==false)await zcodeNotifications.restore();
+    }
   })().catch(()=>writeError('ZCode 联动',{code:'ZCODE_RESTORE_FAILED'})).finally(()=>finishStoreChatRestore());
   else void zcodeLink?.start();
 }

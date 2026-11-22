@@ -35,7 +35,20 @@
     if (text !== undefined) element.textContent = text;
     return element;
   };
-  const bucketTitle = item => item.planName && !item.label.includes(item.planName) ? `${item.planName} · ${item.label}` : item.label;
+  function paidPlan(name) {
+    const match = /^(lite|pro|max)(?:\s*·\s*(团队|个人))?$/i.exec(name || '');
+    return match ? { name: `${match[1][0].toUpperCase()}${match[1].slice(1).toLowerCase()} 套餐`, scope: match[2] || '' } : null;
+  }
+  const planTitle = name => {
+    const plan = paidPlan(name);
+    return plan ? `${plan.name}${plan.scope ? ` · ${plan.scope}` : ''}` : name;
+  };
+  const bucketTitle = item => item.planName && !item.label.includes(item.planName) ? `${planTitle(item.planName)} · ${item.label}` : item.label;
+  function planHeading(name, tag = 'div', className = 'zcode-plan-heading') {
+    const heading = node(tag, className), plan = paidPlan(name);
+    heading.replaceChildren(node('span', '', plan?.name || name), ...(plan?.scope ? [node('span', 'zcode-plan-scope', plan.scope)] : []));
+    return heading;
+  }
   const note = text => node('p', 'panel-note', text);
   function invoke(method, ...args) { try { bridge[method]?.(...args); } catch (_) {} }
   function button(text, className, callback) {
@@ -82,8 +95,9 @@
   function bucketSelector(model, item) {
     const selector = node('section','zcode-bucket-selector'), grid = node('div','zcode-bucket-grid');
     grid.setAttribute('role','group'); grid.setAttribute('aria-label','选择额度');
+    const sharedPlan = paidPlan(item.planName) && model.items.every(value => value.planName === item.planName);
     bucketOptions = displayBuckets(model.items).map(value=>{
-      const option = button(bucketLabel(value),'zcode-bucket-button',()=>selectBucket(value.bucketId));
+      const option = button(sharedPlan ? value.label : bucketLabel(value),'zcode-bucket-button',()=>selectBucket(value.bucketId));
       option.dataset.bucketOption = value.bucketId; option.title = bucketTitle(value);
       option.setAttribute('aria-label',bucketTitle(value)); option.setAttribute('aria-pressed',String(value.bucketId === item.bucketId));
       option.addEventListener('keydown',event=>{
@@ -97,7 +111,7 @@
       return option;
     });
     grid.replaceChildren(...bucketOptions);
-    selector.replaceChildren(grid); return selector;
+    selector.replaceChildren(...(sharedPlan ? [planHeading(item.planName)] : []), grid); return selector;
   }
   function zcodePercent(value) {
     if (Number.isInteger(value)) return `${value}%`;
@@ -105,11 +119,8 @@
     if (value >= 99.95 && value < 100) return '<100%';
     return `${Number(value.toFixed(1))}%`;
   }
-  const decimalPlaces = value => {
-    const [coefficient, exponent = '0'] = String(value).toLowerCase().split('e');
-    return Math.max(0,(coefficient.split('.')[1] || '').length-Number(exponent));
-  };
   const exactNumber = value => value === null ? '暂未提供' : value.toLocaleString('en-US',{maximumFractionDigits:20});
+  const quotaUnit = item => /^credits?$/i.test(item.unit) ? '点' : item.unit;
   function shortNumber(value) {
     if (value === null) return '暂未提供';
     if (value >= 100000000) return `${Number((value/100000000).toFixed(2))}亿`;
@@ -159,7 +170,8 @@
       return { ...(zcode ? { bucketId: bucketKey(item.bucketId), label: clean(item.label,64), planName: clean(item.planName,100),
         periodKind: ['one_time','expiry','daily','rolling','weekly','monthly','unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
         periodStart: timestamp(item.periodStart), total: Number.isFinite(item.total) && item.total >= 0 ? item.total : null,
-        remainingUnits: Number.isFinite(item.remainingUnits) && item.remainingUnits >= 0 ? item.remainingUnits : null, unit: clean(item.unit,16) } : {}),
+        remainingUnits: Number.isFinite(item.remainingUnits) && item.remainingUnits >= 0 ? item.remainingUnits : null,
+        usedUnits: Number.isFinite(item.usedUnits) && item.usedUnits >= 0 ? item.usedUnits : null, unit: clean(item.unit,16) } : {}),
         windowMinutes: item.windowMinutes, remaining: percent(item.remaining), resetsAt: timestamp(item.resetsAt), resetLabel: clean(item.resetLabel, 40),
         pace: { state: ['fast','balanced','slow'].includes(pace.state) ? pace.state : 'unknown', remainingTimePercent: percent(pace.remainingTimePercent) } };
     }).filter(item => (zcode ? item.windowMinutes === null || Number.isFinite(item.windowMinutes) && item.windowMinutes > 0 : Number.isSafeInteger(item.windowMinutes) && item.windowMinutes > 0) && item.remaining !== null);
@@ -279,7 +291,7 @@
     return element;
   }
   function chart(model, item) {
-    if (model.sourceId === 'zcode' && (!Number.isFinite(item.windowMinutes) || !item.periodStart)) return node('p','empty-state','接口未提供周期起点，暂无法绘制趋势');
+    if (model.sourceId === 'zcode' && (!Number.isFinite(item.windowMinutes) || !item.periodStart)) return node('p','empty-state','周期时间待提供，暂无法展示趋势。');
     const samples = model.trend.samples, reset = model.trend.resetsAt || item.resetsAt;
     const duration = (model.trend.windowMinutes || item.windowMinutes) * 60000;
     const end = reset || samples.at(-1)?.at, start = model.sourceId === 'zcode' && item.periodStart ? item.periodStart : reset ? reset - duration : samples[0]?.at;
@@ -387,7 +399,7 @@
     expiryTimer=window.setTimeout?.(()=>render(lastModel),Math.max(1,deadline-now));
   }
   function dailyChart(model,item){
-    if (model.sourceId === 'zcode' && (!Number.isFinite(item.windowMinutes) || !item.periodStart)) return node('p','empty-state','接口未提供周期起点，暂无法绘制趋势');
+    if (model.sourceId === 'zcode' && (!Number.isFinite(item.windowMinutes) || !item.periodStart)) return node('p','empty-state','周期时间待提供，暂无法展示趋势。');
     const lastSample=model.trend.samples.at(-1)?.at;
     const end=model.sourceId === 'zcode' ? Date.now() : lastSample,reset=model.trend.resetsAt||item.resetsAt;
     let start=model.sourceId === 'zcode' && item.periodStart ? item.periodStart : reset-(model.trend.windowMinutes||item.windowMinutes)*60000;
@@ -469,7 +481,7 @@
     const known = model.trend.forecast.state === 'estimate';
     const noDecline = zcode && !known && model.trend.forecast.reason === 'no-decline';
     if (zcode) forecast.dataset.reason = model.trend.forecast.reason;
-    copy.replaceChildren(node('b','',noDecline ? '当前记录尚无消耗' : model.trend.forecast.summary || (known ? '预估结果暂未提供' : '暂无法预估额度用完时间')),node('p','',noDecline ? '记录到消耗后，会自动估算用完时间。' : model.trend.forecast.detail || (known ? '按近期用量估算，会随实际用量变化' : '连续用量记录不足，稍后再查看')));
+    copy.replaceChildren(node('b','',noDecline ? '最近记录暂无新增消耗' : model.trend.forecast.summary || (known ? '预估结果暂未提供' : '暂无法预估额度用完时间')),node('p','',noDecline ? '记录到新的消耗后，会自动更新预估。' : model.trend.forecast.detail || (known ? '按近期用量估算，会随实际用量变化' : '连续用量记录不足，稍后再查看')));
     forecast.title = zcode ? '优先按近期用量；近期无消耗时，按本周期连续记录粗估' : model.trend.forecast.reference ? '按本周期已记录的余额变化与实际经过时间粗估，会随实际用量变化'
       : '根据连续用量记录，估算当前周期额度何时用完、能否够用到重置';
     const forecastBadge = zcode ? known ? ({risk:'可能提前用完',tight:'接近用完',safe:'预计够用'}[model.trend.forecast.status] || '参考预估') : ''
@@ -478,7 +490,7 @@
     const bottom = node('div','panel-bottom'), reset = node('p','');
     if (zcode) {
       const deadline = deadlineCopy(item);
-      reset.replaceChildren(node('span','',deadline.label),node('b','',deadlineLabel(item.resetsAt)));
+      reset.replaceChildren(node('span','',item.resetsAt ? deadline.label : '重置时间'),node('b','',item.resetsAt ? deadlineLabel(item.resetsAt) : '待提供'));
       reset.title = `${deadline.label}：${dateLabel(item.resetsAt)}${deadline.detail ? `；${deadline.detail}` : ''}`;
     } else reset.replaceChildren(node('span','','本周期重置'),node('b','',model.trend.resetLabel || item.resetLabel || dateLabel(model.trend.resetsAt || item.resetsAt)));
     const opportunities = button('','reset-link',() => invoke('openDetail','opportunities',model.period));
@@ -536,11 +548,10 @@
     });
     const zcodeNotes = [];
     if (zcode) {
-      if (item.total !== null && item.remainingUnits !== null && item.total > item.remainingUnits) {
-        const used = item.total-item.remainingUnits;
-        const usedText = used.toLocaleString('en-US',{maximumFractionDigits:Math.min(20,Math.max(decimalPlaces(item.total),decimalPlaces(item.remainingUnits)))});
-        const usage = node('p','zcode-usage-note',`本周期已用 ${usedText} ${item.unit}`);
-        usage.title = `总额 ${exactNumber(item.total)}；剩余 ${exactNumber(item.remainingUnits)} ${item.unit}`;
+      if (item.usedUnits !== null && item.usedUnits > 0) {
+        const usedText = exactNumber(item.usedUnits);
+        const usage = node('p','zcode-usage-note',`本周期已用 ${usedText} ${quotaUnit(item)}`);
+        usage.title = `官方返回的本周期累计用量；图表仅统计球球已记录时段的变化。`;
         zcodeNotes.push(usage);
       }
       graph.dataset.source = 'zcode';
@@ -562,24 +573,22 @@
       const group = node('section','zcode-quota-group'), list = node('ul','zcode-quota-list');
       list.replaceChildren(...items.map(item=>{
         const li = node('li','zcode-quota-bucket');
-        const exact = `剩余 ${exactNumber(item.remainingUnits)} / ${exactNumber(item.total)} ${item.unit}`;
+        const exact = `剩余 ${exactNumber(item.remainingUnits)} / ${exactNumber(item.total)} ${quotaUnit(item)}`;
         const row = button('','zcode-quota-row',()=>invoke('openDetail','trend',item.bucketId));
         row.dataset.bucketId = item.bucketId; row.title = `${bucketTitle(item)} · ${exact} · ${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}`;
         row.setAttribute('aria-label',`${bucketTitle(item)}，${item.remaining}%，${exact}，${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}，查看趋势`);
         const heading = node('span','zcode-quota-heading');
         heading.replaceChildren(node('b','',item.label || '额度'),node('strong','',zcodePercent(item.remaining)),node('span','reset-chevron','›'));
         const progress = node('span','zcode-quota-progress'), fill = node('span',''); fill.style.width = `${item.remaining}%`; progress.appendChild(fill); progress.setAttribute('aria-hidden','true');
-        const values = node('span','zcode-quota-values',`剩余 ${shortNumber(item.remainingUnits)} / ${shortNumber(item.total)} ${item.unit}`); values.title = exact;
-        const separateDeadline = items.some(value=>value.resetsAt !== item.resetsAt);
-        const deadline = separateDeadline ? [node('span','zcode-quota-row-deadline',`${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}`)] : [];
-        row.replaceChildren(heading,progress,values,...deadline); li.appendChild(row); return li;
+        const values = node('span','zcode-quota-values'); values.title = exact;
+        values.replaceChildren(node('span','',`剩余 ${shortNumber(item.remainingUnits)} ${quotaUnit(item)}`),node('span','',`共 ${shortNumber(item.total)} ${quotaUnit(item)}`));
+        const deadline = node('span','zcode-quota-row-deadline');
+        deadline.replaceChildren(node('span','',item.resetsAt ? deadlineCopy(item).label : '重置时间'), node('span','',item.resetsAt ? deadlineLabel(item.resetsAt) : '待提供'));
+        row.replaceChildren(heading,progress,values,deadline); li.appendChild(row); return li;
       }));
-      const deadline = deadlineCopy(items[0]), endings = [...new Set(items.map(item=>item.resetsAt))];
-      const foot = node('p','zcode-quota-deadline',endings.length === 1 ? `${deadline.label}：${deadlineLabel(items[0].resetsAt)}${items[0].resetsAt && deadline.detail ? ` · ${deadline.detail}` : ''}` : '各额度有效期限分别统计');
-      if (model.state === 'stale') foot.textContent = `待更新 · ${foot.textContent}`;
-      group.replaceChildren(node('h2','zcode-quota-group-title',groupName),list,foot); return group;
+      group.replaceChildren(planHeading(groupName,'h2','zcode-quota-group-title'),list); return group;
     });
-    content.replaceChildren(...(sections.length ? sections : [node('p','empty-state',zcodeStatuses.get(model.statusCode) || '暂未提供额度明细')]));
+    content.replaceChildren(...(sections.length ? [...sections,...(model.state === 'stale' ? [note('额度待更新，当前显示上次查询结果。')] : [])] : [node('p','empty-state',zcodeStatuses.get(model.statusCode) || '暂未提供额度明细')]));
   }
 
   function renderCredits(model) {

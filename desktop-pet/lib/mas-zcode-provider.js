@@ -93,15 +93,15 @@ function createMasZcodeProvider({ directoryAccess, installedAppAccess, run, cred
     if (value?.state !== 'connected' || !Array.isArray(rows) || rows.length > 64 || !validTime(value.updatedAt)) throw fail('ZCODE_INVALID_RESPONSE');
     const buckets = rows.map(row => {
       if (typeof row?.id !== 'string' || !row.id.startsWith('zcode:') || row.id.length > 400
-        || !Number.isFinite(row.remaining) || row.remaining < 0 || row.remaining > 100 || !validTime(row.resetsAt)
+        || !Number.isFinite(row.remaining) || row.remaining < 0 || row.remaining > 100 || !(row.resetsAt === null || validTime(row.resetsAt))
         || !(row.windowMinutes === null || Number.isFinite(row.windowMinutes) && row.windowMinutes > 0)
-        || !(row.periodStart === null || validTime(row.periodStart))) throw fail('ZCODE_INVALID_RESPONSE');
+        || !(row.periodStart === null || validTime(row.periodStart)) || row.resetsAt === null && row.periodStart !== null) throw fail('ZCODE_INVALID_RESPONSE');
       const projected = { sourceId: 'zcode', id: row.id, bucketId: row.id, remaining: row.remaining,
         resetsAt: row.resetsAt, windowMinutes: row.windowMinutes, periodStart: row.periodStart };
       for (const key of ['source', 'planId', 'entitlementId', 'label', 'planName', 'model', 'unit', 'meter', 'periodKind']) {
         if (typeof row[key] === 'string') projected[key] = row[key].replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 160);
       }
-      for (const key of ['expiresAt', 'total', 'remainingUnits']) {
+      for (const key of ['expiresAt', 'total', 'remainingUnits', 'usedUnits']) {
         if (row[key] === null || Number.isFinite(row[key]) && row[key] >= 0) projected[key] = row[key];
       }
       return projected;

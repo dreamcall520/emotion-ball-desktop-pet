@@ -76,6 +76,12 @@ function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, sourceId =
       y: Math.round(Math.max(area.y, Math.min(y, area.y + area.height - height))), width, height };
   }
   function applyBounds(value) {
+    if (sourceId === 'zcode') {
+      const current = win.getBounds();
+      if (['x', 'y', 'width', 'height'].every(key => current[key] === value[key])) {
+        lastBounds = current; return;
+      }
+    }
     win.setBounds(value, false);
     lastBounds = win.getBounds();
   }
@@ -115,7 +121,12 @@ function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, sourceId =
   return {
     open(value) {
       if (!actions.has(value?.action)) return false;
+      const updateInPlace = sourceId === 'zcode' && visible && alive() && model?.action === value.action
+        && (typeof win.isVisible !== 'function' || win.isVisible());
       model = sourceId === 'zcode' ? { ...value, sourceId } : value; visible = true;
+      // ZCode bucket tabs share one detail action. Keep its measured geometry
+      // and focus; reopening would shrink to the initial height before resize.
+      if (updateInPlace) { send(); return true; }
       try { ensure(); applyBounds(bounds(value.action === 'trend' ? 420 : 300, { fromAnchor: true })); visibilityChanged(true); send(); if (ready) win.show(); return true; }
       catch (error) { report(error); destroy(); return false; }
     },

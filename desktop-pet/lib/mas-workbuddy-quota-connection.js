@@ -3,7 +3,7 @@
 // Authority and quota queries are independent of every chat/task provider.
 // Only the settings connection flow may acquire interactive system grants.
 function createMasWorkBuddyQuotaConnection({ access, quota, usage, taskAccess, tasks, saveEnabled, onChange = () => {} }) {
-  let enabled = false, authorized = false, epoch = 0, closed = false, tasksAuthorized = false, taskEpoch = 0;
+  let enabled = false, authorized = false, epoch = 0, closed = false, tasksAuthorized = false, tasksAllowed = true, taskEpoch = 0;
   function getState() {
     const state = quota.getState();
     const connected = enabled && authorized && !closed;
@@ -22,11 +22,11 @@ function createMasWorkBuddyQuotaConnection({ access, quota, usage, taskAccess, t
   }
   function activate() { quota.setEnabled(true); usage.setEnabled(true); onChange(); void restoreTasks(); }
   async function restoreTasks() {
-    if (!taskAccess || !tasks || !enabled || !authorized || closed) return;
+    if (!tasksAllowed || !taskAccess || !tasks || !enabled || !authorized || closed) return;
     const current = ++taskEpoch;
     let result;
     try { result = await taskAccess.ensure({ interactive: false }); } catch { result = null; }
-    if (current !== taskEpoch || closed || !enabled) return;
+    if (current !== taskEpoch || closed || !enabled || !tasksAllowed) return;
     tasksAuthorized = result?.status === 'stored'; tasks.setEnabled(tasksAuthorized);
     if (tasksAuthorized) await tasks.refresh(false);
     onChange();
@@ -37,14 +37,15 @@ function createMasWorkBuddyQuotaConnection({ access, quota, usage, taskAccess, t
     const result = await taskAccess.ensure({ interactive: true, signal });
     if (current !== taskEpoch || closed || signal?.aborted || !enabled) return { status: 'cancelled' };
     if (result?.status !== 'stored') return result;
-    tasksAuthorized = true; tasks.setEnabled(true); onChange(); await tasks.refresh();
+    tasksAllowed = tasksAuthorized = true; tasks.setEnabled(true); onChange(); await tasks.refresh();
     return { status: 'stored' };
   }
   async function revokeTasks() {
-    ++taskEpoch; tasksAuthorized = false; tasks?.setEnabled(false); onChange();
+    ++taskEpoch; tasksAllowed = tasksAuthorized = false; tasks?.setEnabled(false); onChange();
     await taskAccess?.revoke(); return { status: 'needs-authorization' };
   }
-  async function restore(value) {
+  async function restore(value, { tasksEnabled = true } = {}) {
+    tasksAllowed = tasksEnabled !== false; ++taskEpoch; tasksAuthorized = false; tasks?.setEnabled(false);
     const current = ++epoch;
     enabled = value === true; authorized = false;
     if (!enabled || closed) return getState();
@@ -55,7 +56,9 @@ function createMasWorkBuddyQuotaConnection({ access, quota, usage, taskAccess, t
     if (authorized) activate(); else onChange();
     return getState();
   }
-  async function connect(signal) {
+  async function connect(signal, { tasksEnabled = tasksAllowed } = {}) {
+    tasksAllowed = tasksEnabled !== false;
+    if (!tasksAllowed) { ++taskEpoch; tasksAuthorized = false; tasks?.setEnabled(false); }
     const current = ++epoch;
     if (closed || signal?.aborted) return { status: 'cancelled' };
     const result = await access.ensure({ interactive: false, signal });

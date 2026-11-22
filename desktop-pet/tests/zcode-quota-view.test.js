@@ -1,6 +1,6 @@
 const test = require('node:test'); const assert = require('node:assert/strict');
 const { buildZcodeQuotaLabelModel, buildZcodeDetailsModel } = require('../lib/zcode-quota-view');
-const { normalizeZcodeBalance } = require('../lib/zcode-usage');
+const { normalizeZcodeBalance, normalizeCodingPlanQuota } = require('../lib/zcode-usage');
 const fixture = require('./fixtures/zcode-balance.json'); const now = fixture.server_time * 1000;
 const buckets = normalizeZcodeBalance(fixture, now);
 const snapshot = { enabled: true, quota: { state: 'connected', stale: false, updatedAt: now, windows: buckets },
@@ -44,7 +44,19 @@ test('monthly tool quotas without a supplied period start remain visible but nev
     windowMinutes: null, periodStart: null, periodKind: 'monthly', total: 100, remainingUnits: 90, unit: 'calls' };
   const model = buildZcodeDetailsModel({ ...snapshot, generation: 9, quota: { ...snapshot.quota, windows: [row] } }, { action: 'trend' }, now);
   assert.equal(model.items.length, 1); assert.equal(model.items[0].windowMinutes, null); assert.equal(model.generation, 9);
-  assert.match(model.trend.forecast.detail, /未提供周期起点/); assert.deepEqual(model.trend.samples, []);
+  assert.equal(model.trend.forecast.detail, '周期时间待提供，暂无法预估'); assert.deepEqual(model.trend.samples, []);
+});
+test('5h without a server reset remains visible in card and details with no invented trend or used count', () => {
+  const windows = normalizeCodingPlanQuota({ data: { limits: [
+    { type: 'CREDIT_LIMIT', unit: 3, number: 5, percentage: 0, usage: 35000, remaining: 35000, currentValue: 0 },
+    { type: 'CREDIT_LIMIT', unit: 6, number: 1, percentage: 6, usage: 155000, remaining: 144496, currentValue: 10503, nextResetTime: now + 86400000 }
+  ] } }, now);
+  const model = buildZcodeDetailsModel({ ...snapshot, quota: { ...snapshot.quota, windows } }, { action: 'trend', bucketId: windows[0].id }, now);
+  assert.equal(model.state, 'ready'); assert.deepEqual(model.items.map(row => row.label), ['5 小时额度', '每周额度']);
+  assert.equal(model.items[0].resetLabel, '重置时间待提供'); assert.equal(model.items[0].usedUnits, 0);
+  assert.equal(model.items[1].usedUnits, 10503); assert.equal(model.trend.resetsAt, null); assert.equal(model.trend.periodStart, null);
+  assert.deepEqual(model.trend.samples, []); assert.equal(model.trend.forecast.reason, 'missing-period');
+  assert.equal(model.items[0].pace.state, 'unknown');
 });
 test('partial live task evidence remains visible while the overall task count stays unknown', () => {
   const model = buildZcodeDetailsModel({ ...snapshot, tasks: { state: 'unknown', items: [
@@ -156,7 +168,7 @@ test('unusable ZCode observations explain why they cannot estimate without inven
   const noPeriod = forecastFixture(); Object.assign(noPeriod.quota.windows[0], { periodStart: null, windowMinutes: null });
   const missing = forecastModel(noPeriod);
   assert.equal(missing.trend.forecast.reason, 'missing-period'); assert.equal(missing.items[0].pace.remainingTimePercent, null);
-  assert.match(missing.trend.forecast.detail, /未提供周期起点/);
+  assert.equal(missing.trend.forecast.detail, '周期时间待提供，暂无法预估');
 });
 test('a sufficient fresh segment after correction may estimate without using older or future samples', () => {
   const source = forecastFixture(); const cycle = source.history.windows[0];

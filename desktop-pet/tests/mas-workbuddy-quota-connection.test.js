@@ -86,3 +86,25 @@ test('cancelled task selection retains the connected quota and never enables met
  await flow.connect();await new Promise(r=>setImmediate(r));
  assert.equal((await flow.authorizeTasks()).status,'cancelled');assert.equal(flow.getState().connected,true);assert.equal(taskEnabled,false);
 });
+
+test('task opt-out takes precedence over residual native grants on startup and reconnect while quota remains connected',async()=>{
+ const events=[];let taskEnabled=false;
+ const flow=createMasWorkBuddyQuotaConnection({access:{ensure:async()=>({status:'stored'}),clearPendingApp(){}},
+  quota:{setEnabled:v=>events.push(['quota',v]),getState:()=>({report:{total:9}})},usage:{setEnabled(){}},saveEnabled(){},
+  taskAccess:{ensure:async()=>{events.push('task-grant-read');return{status:'stored'};}},
+  tasks:{getState:()=>({}),setEnabled:v=>{taskEnabled=v;},refresh:async()=>events.push('task-data-read')}});
+ await flow.restore(true,{tasksEnabled:false});await new Promise(r=>setImmediate(r));
+ assert.equal(flow.getState().connected,true);assert.equal(flow.getState().tasks.authorized,false);assert.equal(taskEnabled,false);assert.equal(events.includes('task-grant-read'),false);
+ await flow.connect(undefined,{tasksEnabled:false});await new Promise(r=>setImmediate(r));assert.equal(events.includes('task-data-read'),false);
+ await flow.authorizeTasks();assert.equal(taskEnabled,true);assert.equal(events.includes('task-data-read'),true);
+});
+
+test('task opt-out overtakes a background grant restore already awaiting source access',async()=>{
+ let release,taskEnabled=false;const events=[];
+ const flow=createMasWorkBuddyQuotaConnection({access:{ensure:async()=>({status:'stored'}),clearPendingApp(){}},
+  quota:{setEnabled(){},getState:()=>({report:{total:1}})},usage:{setEnabled(){}},saveEnabled(){},
+  taskAccess:{ensure:async()=>new Promise(r=>{release=r;})},
+  tasks:{getState:()=>({}),setEnabled:v=>{taskEnabled=v;},refresh:async()=>events.push('read')}});
+ await flow.restore(true);await new Promise(r=>setImmediate(r));await flow.restore(true,{tasksEnabled:false});
+ release({status:'stored'});await new Promise(r=>setImmediate(r));assert.equal(taskEnabled,false);assert.deepEqual(events,[]);assert.equal(flow.getState().connected,true);
+});

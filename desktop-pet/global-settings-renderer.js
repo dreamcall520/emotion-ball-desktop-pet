@@ -29,7 +29,7 @@
     '启用 WorkBuddy 联动': '只读本机当前 WorkBuddy 登录与积分；聊天仅在你发送消息后消耗积分。',
     '启用 Codex 联动': '读取本机 Codex 任务与额度；开启时会说明读取范围并请求确认。',
     '启用 ZCode 联动': '读取本机 ZCode 套餐、额度与任务；开启时会说明读取范围并请求确认，可在聊天中选择 ZCode。',
-    '显示 ZCode 额度': '独立显示 ZCode 额度卡；隐藏卡片不关闭 ZCode 联动。',
+    '显示 ZCode 额度': '独立显示 ZCode 额度卡；\n隐藏卡片不关闭 ZCode 联动。',
     '启用 API 余额监控': '从 ZCode 已配置的 API 读取账户余额；目前支持 Kimi。只查询余额，不调用模型，也不保存密钥。',
     '管理 API 账户': '打开 ZCode，在其 API 设置中新增或修改账户；球球会自动发现配置变化。',
     '显示 API 余额卡': '在一张卡内切换多个账户，分别保留余额与趋势。',
@@ -246,7 +246,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['天气', 'Codex', 'WorkBuddy', 'ZCode', 'API 余额', '联动样式管理']],
+      ['应用与联动', ['天气', 'Codex', 'ZCode', 'WorkBuddy', 'API 余额', '联动样式管理']],
       ['快捷与常规', ['快捷键', '常规设置', '意见反馈']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
@@ -321,7 +321,7 @@
       if (!storeCodex && !storeWorkbuddy && !storeZcode && enable.checked !== true) return sections.concat(apiSections);
       const children = category.children.filter(child => child !== enable && child !== apiGroup &&
         (!storeCodex || !/\/codex-(?:status|tasks-open|trend-open)$/.test(child.id)) &&
-        (!storeZcode || !child.id.endsWith('/zcode-tasks')));
+        (!storeZcode || !/\/zcode-(?:tasks|quota-detail|trend|refresh)$/.test(child.id)));
       if (category.id === 'workbuddy-settings') return sections.concat([
         { ...category, heading: '积分卡显示', children: children.filter(child => child.id === '/workbuddy-quota-visible') },
         ...(!storeWorkbuddy ? [{ ...category, heading: '积分趣味互动', children: children.filter(child => child.id === '/workbuddy-quota-fun') }] : [])
@@ -374,7 +374,7 @@
         const provider = item.id.startsWith('/zcode-menu/') ? 'zcode' : item.id.includes('/codex-') ? 'codex' : null;
         const providerOff = provider && snapshot.entries.find(entry => entry.id === `/${provider}-menu`)?.children.find(entry => entry.id.endsWith(`/${provider}-enabled`))?.checked === false;
         const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && (providerOff && provider === 'codex' && snapshot.firstReleaseConnection ? '请先连接本机 Codex。' : providerOff ? `请先开启「启用 ${provider === 'zcode' ? 'ZCode' : 'Codex'} 联动」。` : '当前不可用，请先开启对应功能或满足使用条件。')].filter(Boolean).join(' · ');
-        if (detail) text.append(el('p', detail, 'description'));
+        if (detail) text.append(el('p', detail, item.id.endsWith('/zcode-quota-visible') ? 'description zcode-quota-description' : 'description'));
         row.append(text);
         if (item.type === 'select') {
           const select = el('select');
@@ -482,12 +482,14 @@
     actions.append(button);
     row.append(actions);
     section.append(row);
-    if (codexNotice) {
+    const visibleNotice = codexNotice || (['error','needs-authorization'].includes(state.status) && state.message ? { status:state.status, message:state.message }
+      : !state.connected ? { message:'尚未连接本机 Codex。' } : null);
+    if (visibleNotice) {
       const notice = el('div', '', 'store-codex-error');
-      const message = el('p', codexNotice.message, 'description');
+      const message = el('p', visibleNotice.message, 'description');
       message.setAttribute('role', 'status');
       notice.append(message);
-      if (codexNotice.status === 'invalid-directory' && !busy) {
+      if (visibleNotice.status === 'invalid-directory' && !busy) {
         const retry = el('button', '重新选择', 'action');
         retry.type = 'button';
         retry.onclick = () => void connectStoreCodex('account');
@@ -524,8 +526,8 @@
     if(!connected)info.append(el('p','连接后可查看额度和趋势，并使用当前账号聊天。','description store-codex-summary'));
     const button=el('button',connected?'解除连接':'连接',connected?'action':'action store-codex-primary');button.type='button';button.disabled=busy;button.dataset.action='store-zcode-connection';
     button.onclick=()=>void manageStoreZcode(connected?'disconnect':'app');row.append(info,button);section.append(row);
-    const note=zcodeNotice||(['error','needs-authorization'].includes(state.status)?state.message:null);
-    if(note){const box=el('div','','store-codex-error');box.append(el('p',note,'description'));section.append(box);}
+    const note=zcodeNotice||(['error','needs-authorization'].includes(state.status)&&state.message?state.message:!connected?'尚未连接本机 ZCode。':null);
+    if(note){const box=el('div','','store-codex-error'),message=el('p',note,'description');message.setAttribute('role','status');box.append(message);section.append(box);}
     if (state.chat?.message && ['error','waiting-account','needs-authorization','needs-connection','account-changed'].includes(state.chat.status)) {
       const chatNotice=el('p',state.chat.message,'description');chatNotice.setAttribute('role','status');section.append(chatNotice);
     }
@@ -553,8 +555,8 @@
     info.append(el('p',tasks?'只看名称、状态和更新时间，不读取聊天内容。':'确认本轮结束后再提醒，不把暂时停顿当成完成。','description'));
     const ordinaryMessages=['动画提醒尚未启用。','已启用；新任务可触发处理中和本轮回复结束提醒。','已启用；本机新任务可触发处理中，确认本轮结束后提醒。'];
     if(state.message&&(tasks?state.status==='error':!ordinaryMessages.includes(state.message))){const note=el('p',state.message,'description');note.setAttribute('role','status');info.append(note);}
-    const button=el('button',authorized?(tasks?'撤销授权':'关闭提醒'):(tasks?'授权任务':'开启提醒'),'action');button.type='button';button.disabled=busy;button.dataset.action='store-zcode-'+kind;
-    button.onclick=()=>void manageStoreZcode(tasks?(authorized?'tasks-revoke':'tasks-authorize'):(authorized?'notifications-disable':'notifications-enable'));
+    const button=el('button',state.status==='cleanup-pending'&&!tasks?'重试清理':authorized?(tasks?'撤销授权':'关闭提醒'):(tasks?'授权任务':'开启提醒'),'action');button.type='button';button.disabled=busy;button.dataset.action='store-zcode-'+kind;
+    button.onclick=()=>void manageStoreZcode(tasks?(authorized?'tasks-revoke':'tasks-authorize'):(authorized||state.status==='cleanup-pending'?'notifications-disable':'notifications-enable'));
     const actions=el('div','','store-codex-identity');
     const taskEntry=tasks&&authorized?snapshot.entries.find(entry=>entry.id==='/zcode-menu')?.children.find(entry=>entry.id.endsWith('/zcode-tasks')):null;
     if(taskEntry){const view=el('button','查看任务','action');view.type='button';view.dataset.action=taskEntry.id;view.disabled=busy||!taskEntry.enabled;view.onclick=()=>void act(taskEntry);actions.append(view);}
@@ -568,7 +570,7 @@
         if(await confirmStoreCodex('连接本机应用',['使用本机 ZCode 查询额度，并在球球中聊天。'],'允许使用此应用',{target:'ZCode',path:'本机应用'})!=='confirm')return;
         result=await api.zcodeConnection('app');
         if(result?.status!=='app-authorized'){zcodeNotice=result?.status==='cancelled'?null:'请选择已安装的 ZCode.app。';return;}
-        const terms=[['本机连接','查询套餐额度，体验和付费来源分别展示。','沿用本机登录，不展示凭据，可随时断开。'],['聊天发送','你发的消息和当前对话上下文交给 ZCode 官方。','问天气时可附城市和天气摘要，会消耗套餐额度。'],['任务提醒','任务读取与动画提醒分别授权，不自动发送消息。','不切换到自定义 API 或其他账号计费。']];
+        const terms=[['本机连接','查询套餐额度，体验和付费来源分别展示。','沿用本机登录，不展示凭据，可随时断开。'],['聊天发送','你发的消息和当前对话上下文交给 ZCode 官方。','问天气时可附城市和天气摘要，会消耗套餐额度。'],['任务与提醒','默认开启本机任务和动画提醒，可分别关闭。','只读任务名称、状态和时间，不读取聊天正文。','安装提醒时另选目录，并备份原设置。']];
         if(await confirmStoreCodex('授权 ZCode 联动',[],'同意并选择目录',{terms})!=='confirm'){await api.zcodeConnection('cancel');return;}
         result=await api.zcodeConnection('account');
         if(result?.status!=='stored'){zcodeNotice=result?.status==='cancelled'?null:'请选择 ZCode 账号目录，保留系统预选的位置。';return;}
@@ -582,7 +584,7 @@
         if(copy&&await confirmStoreCodex(...copy)!=='confirm')return;
       }
       result=await api.zcodeConnection(action);if(result?.snapshot)snapshot=result.snapshot;
-      zcodeNotice=['error','invalid-app','invalid-directory','needs-authorization','needs-connection'].includes(result?.status)?result.message||'连接未完成，请重试。':null;
+      zcodeNotice=['error','partial','invalid-app','invalid-directory','needs-authorization','needs-connection'].includes(result?.status)?result.message||'连接未完成，请重试。':null;
     }catch(_){zcodeNotice='ZCode 操作未完成，请重试。';}
     finally{busy=false;render();void refresh();}
   }
@@ -590,7 +592,7 @@
   const workbuddyLinkTerms = [
     ['本机连接', '用所选应用和账号查询积分、消耗，并在球球中聊天。', '沿用本机登录，不复制或展示凭据，可随时断开。'],
     ['聊天发送', '你发的消息和当前对话上下文交给 WorkBuddy 官方。', '问天气时可附城市和天气摘要，聊天会消耗积分。'],
-    ['动画提醒', '默认开启，安装前会选择目录并备份原设置。', '事件输入可能含正文，只在本机处理和过滤。', '仅向本机球球传任务标识和阶段，不传正文。']
+    ['任务与提醒', '默认开启，任务和提醒目录按需分别授权。', '任务只看标题、状态和未读标记，不读取正文。', '安装提醒前选择目录并备份原设置。', '事件可能含正文，本机过滤后仅传标识和阶段。']
   ];
   function storeWorkbuddySection() {
     const state = snapshot.firstReleaseWorkbuddyConnection;
@@ -619,7 +621,8 @@
       disconnect.onclick = () => void disconnectStoreWorkbuddy(); actions.append(disconnect);
     }
     actions.append(button); row.append(actions); section.append(row);
-    const notice = workbuddyNotice || (state.message && (!state.connected || state.status === 'error') ? {status:state.status,message:state.message} : null);
+    const notice = workbuddyNotice || (state.message && (!state.connected || state.status === 'error') ? {status:state.status,message:state.message}
+      : !state.connected ? {message:'尚未连接本机 WorkBuddy。'} : null);
     if (notice) {
       const box = el('div', '', 'store-codex-error'), message = el('p', notice.message, 'description'); message.setAttribute('role', 'status'); box.append(message);
       if (notice.status === 'invalid-directory' && !working) { const retryButton = el('button', '重新选择', 'action'); retryButton.type = 'button'; retryButton.onclick = () => void connectStoreWorkbuddy('account'); box.append(retryButton); }
@@ -667,6 +670,7 @@
       if (result?.status==='cancelled') return;
       const tasks=snapshot.firstReleaseWorkbuddyConnection?.tasks;
       workbuddyTasksNotice = tasks?.authorized === !revoke || ['stored','ready','authorized','revoked','disconnected'].includes(result?.status) ? null : result?.message || '任务授权未完成，请重试。';
+      if(!workbuddyTasksNotice&&workbuddyNotice?.status==='partial')workbuddyNotice=null;
     } catch (_) { workbuddyTasksNotice='任务授权未完成，请重试。'; }
     finally { busy=false; render(); void refresh(); }
   }
@@ -694,6 +698,7 @@
       if(result?.status==='cancelled')return;
       const state=snapshot.firstReleaseWorkbuddyConnection?.notifications;
       workbuddyNotificationsNotice=state?.enabled === !disable ? null : result?.message || '动画提醒设置未完成，请重试。';
+      if(!workbuddyNotificationsNotice&&workbuddyNotice?.status==='partial')workbuddyNotice=null;
     }catch(_){workbuddyNotificationsNotice='动画提醒设置未完成，请重试。';}
     finally{busy=false;render();void refresh();}
   }
@@ -721,7 +726,7 @@
       const result = await api.workbuddyConnection('connect');
       if (result?.snapshot) snapshot = result.snapshot;
       const state = snapshot.firstReleaseWorkbuddyConnection;
-      workbuddyNotice = state?.connected === true && state.chat?.authorized === true ? null : storeWorkbuddyNotice(result);
+      workbuddyNotice = result?.status === 'partial' ? storeWorkbuddyNotice(result) : state?.connected === true && state.chat?.authorized === true ? null : storeWorkbuddyNotice(result);
     } catch (_) { workbuddyNotice = storeWorkbuddyNotice(); }
     finally { busy = false; render(); void refresh(); }
   }

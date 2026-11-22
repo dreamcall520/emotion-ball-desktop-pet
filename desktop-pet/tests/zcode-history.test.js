@@ -2,7 +2,7 @@ const test = require('node:test'); const assert = require('node:assert/strict');
 const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
 const { createZcodeQuotaHistory } = require('../lib/zcode-quota-history');
 const { createZcodeCompanion } = require('../lib/zcode-companion');
-const { normalizeZcodeBalance } = require('../lib/zcode-usage');
+const { normalizeZcodeBalance, normalizeCodingPlanQuota } = require('../lib/zcode-usage');
 const { buildZcodeQuotaLabelModel } = require('../lib/zcode-quota-view');
 const fixture = require('./fixtures/zcode-balance.json');
 const initialNow = fixture.server_time * 1000;
@@ -67,6 +67,20 @@ test('history separates account, bucket and period, bounds storage and never fab
   assert.equal(fs.statSync(filePath).mode & 0o777, 0o600);
   const loaded = createZcodeQuotaHistory({ filePath, now: () => now }); loaded.setAccount('a'); assert.equal(loaded.getState().windows.length, 5);
   store.close(); loaded.close(); fs.rmSync(dir, { recursive: true });
+});
+test('missing reset creates no history; a server-supplied new reset recovers into its own real cycle', () => {
+  let now = initialNow;
+  const store = createZcodeQuotaHistory({ now: () => now }); store.setAccount('reset-transitions');
+  const raw = { type: 'CREDIT_LIMIT', unit: 3, number: 5, percentage: 0, usage: 35000, remaining: 35000, currentValue: 0 };
+  const record = (row) => store.record({ enabled: true, quota: { state: 'connected', stale: false, updatedAt: now,
+    windows: normalizeCodingPlanQuota({ limits: [row] }, now) } });
+  assert.equal(record(raw), false); assert.deepEqual(store.getState().windows, []);
+  const firstEnd = now + 300 * 60000; record({ ...raw, nextResetTime: firstEnd });
+  assert.equal(store.getState().windows.length, 1); assert.equal(store.getState().windows[0].samples.length, 1);
+  now = firstEnd + 1000; assert.equal(record(raw), false); assert.equal(store.getState().windows.length, 1);
+  const nextEnd = now + 300 * 60000; record({ ...raw, nextResetTime: nextEnd });
+  assert.equal(store.getState().windows.length, 2); assert.notEqual(store.getState().windows[0].periodStart, store.getState().windows[1].periodStart);
+  assert.equal(store.getState().windows[1].samples.length, 1); store.close();
 });
 test('companion isolates requests across disabled generation and account changes; snapshots never expose credentials', async () => {
   let now = initialNow; let resolve; let accountKey = 'a'; let pending = true;

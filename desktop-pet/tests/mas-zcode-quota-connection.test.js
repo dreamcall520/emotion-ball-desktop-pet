@@ -110,3 +110,16 @@ test('projection is pure, masks unapproved identity and task history, and cannot
   assert.deepEqual(projectMasZcodeSnapshot(raw, true, B).history.windows, []); assert.deepEqual(projectMasZcodeSnapshot(raw, true, null).buckets, []);
   const approved = projectMasZcodeSnapshot(raw, true, A); assert.equal(approved.tasks.accountAttributionVerified, false); assert.equal(approved.activity.runningCount, null);
 });
+
+test('explicit task opt-out masks residual approved task history on startup and reconnect without disabling quota',async t=>{
+ const f=fixture(t,{preference:true,record:saved(A,true)});
+ await f.port.restore(true,{tasksEnabled:false});await settle();
+ assert.equal(f.record.tasks,true,'the residual record models a prior cleanup failure');
+ assert.equal(f.port.getState().connected,true);assert.equal(f.port.isTasksAuthorized(),false);
+ assert.equal(f.link.getSnapshot().history.results.length,0);assert.equal(f.link.getSnapshot().quota.windows.length,1);
+ await f.port.connect(undefined,{tasksEnabled:false});await settle();assert.equal(f.port.isTasksAuthorized(),false);
+ f.setReader(async()=>{throw Error('temporary grant loss');});await f.port.refreshAccount();
+ f.setReader(async()=>({accountKey:A}));await f.port.connect(undefined,{tasksEnabled:false});await settle();
+ assert.equal(f.port.getState().connected,true);assert.equal(f.port.isTasksAuthorized(),false);
+ await f.port.authorizeTasks();assert.equal(f.port.isTasksAuthorized(),true,'only a new explicit task grant can override the opt-out');
+});

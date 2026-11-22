@@ -104,3 +104,10 @@ test('installed global source filter reaches the authenticated receiver, and Sto
  assert.equal(JSON.stringify(port.getState()).includes('MUST_STAY_SOURCE_SIDE'),false);
  await port.disable();assert.equal(fs.readFileSync(config,'utf8'),original);assert.equal(pairs.size,0);assert.equal(grants.size,0);
 });
+
+test('failed source cleanup retains its independent grant and a second explicit disable can retry',async t=>{
+ let attempts=0;const f=fixture(t,{installer:{uninstall:async()=>{f.calls.push('uninstall');if(++attempts===1)throw Error('source unavailable');}}});
+ await f.port.enable();assert.equal((await f.port.disable()).status,'cleanup-pending');assert.deepEqual(f.calls,['uninstall']);
+ assert.equal(f.port.getState().status,'cleanup-pending');assert.match(f.port.getState().message,/源端配置清理未完成/);assert.equal(f.port.getState().connected,false);
+ assert.equal((await f.port.disable()).status,'disabled');assert.deepEqual(f.calls,['uninstall','uninstall','revoke']);assert.equal(f.port.getState().status,'disabled');
+});

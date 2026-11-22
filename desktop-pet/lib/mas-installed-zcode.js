@@ -164,7 +164,7 @@ function safeQuota(value) {
       if (typeof row[key] !== 'string' || row[key].length > 600 || /[\u0000-\u001f\u007f]/.test(row[key])) throw fail('ZCODE_INVALID_RESPONSE');
       result[key] = row[key];
     }
-    for (const key of ['windowMinutes', 'remaining', 'resetsAt', 'expiresAt', 'total', 'remainingUnits', 'periodStart']) {
+    for (const key of ['windowMinutes', 'remaining', 'resetsAt', 'expiresAt', 'total', 'remainingUnits', 'usedUnits', 'periodStart']) {
       if (row[key] === undefined) continue;
       if (row[key] !== null && (typeof row[key] !== 'number' || !Number.isFinite(row[key]) || row[key] < 0)) throw fail('ZCODE_INVALID_RESPONSE');
       result[key] = row[key];

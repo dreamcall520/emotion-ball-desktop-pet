@@ -60,6 +60,7 @@ function normalizeZcodeBalance(payload, now = Date.now()) {
       model: text(row.capabilities?.find(value => typeof value === 'string' && value.startsWith('model:'))?.slice(6)),
       windowMinutes: (end - start) / 60000, remaining: remainingUnits / total * 100,
       resetsAt: end, expiresAt: time(row.expires_at), total, remainingUnits, unit: text(row.unit_type) || 'unknown',
+      usedUnits: validUnits(row.used_units) && row.used_units <= total ? row.used_units : null,
       meter: text(row.meter), periodStart: start, periodKind }];
   });
 }
@@ -75,12 +76,16 @@ function normalizeCodingPlanQuota(payload, now = Date.now()) {
     const explicitStart = time(row.periodStart || row.period_start);
     const windowMinutes = monthly ? null : multipliers[row.unit] * row.number;
     const resetsAt = time(row.nextResetTime);
-    if ((!monthly && !windowMinutes) || !resetsAt || resetsAt <= now || (!tool && resetsAt > now + windowMinutes * 60000 + 60000)) return [];
-    const periodStart = explicitStart && explicitStart < resetsAt ? explicitStart : monthly ? null : resetsAt - windowMinutes * 60000;
-    const actualSpan = periodStart !== null ? (resetsAt - periodStart) / 60000 : null;
+    const resetSupplied = row.nextResetTime !== undefined && row.nextResetTime !== null;
+    if ((!monthly && !windowMinutes) || resetSupplied && !resetsAt || resetsAt !== null &&
+      (resetsAt <= now || !tool && resetsAt > now + windowMinutes * 60000 + 60000)) return [];
+    // An unused 5h allowance may have no reset timestamp. Its value is valid,
+    // while no cycle start or future deadline can be established yet.
+    const periodStart = resetsAt === null ? null : explicitStart && explicitStart < resetsAt ? explicitStart : monthly ? null : resetsAt - windowMinutes * 60000;
+    const actualSpan = periodStart !== null ? (resetsAt - periodStart) / 60000 : windowMinutes;
     const total = validUnits(row.usage) && row.usage > 0 ? row.usage : null;
-    const remainingUnits = validUnits(row.remaining) && total !== null && row.remaining <= total ? row.remaining
-      : validUnits(row.currentValue) && total !== null && row.currentValue <= total ? total - row.currentValue : null;
+    const remainingUnits = validUnits(row.remaining) && total !== null && row.remaining <= total ? row.remaining : null;
+    const usedUnits = validUnits(row.currentValue) && (total === null || row.currentValue <= total) ? row.currentValue : null;
     // Match the official sidebar/settings contract: percentage is the server's
     // used-quota percentage. Exact unit counts remain separate detail fields.
     const remaining = 100 - row.percentage;
@@ -88,7 +93,7 @@ function normalizeCodingPlanQuota(payload, now = Date.now()) {
     return [{ sourceId: 'zcode', source: 'coding-plan', id: bucketId, bucketId, label: tool ? 'MCP 工具' : row.type === 'CREDIT_LIMIT' ? 'Coding Plan 积分' : 'Coding Plan',
       planName: text(data.planName || data.plan || data.level) || 'Coding Plan', model: '', meter: tool ? 'tool_usage' : 'model_usage',
       windowMinutes: actualSpan, remaining, resetsAt, periodStart,
-      periodKind: tool && row.unit === 5 ? 'monthly' : 'rolling', total, remainingUnits,
+      periodKind: tool && row.unit === 5 ? 'monthly' : 'rolling', total, remainingUnits, usedUnits,
       unit: tool ? 'calls' : row.type === 'CREDIT_LIMIT' ? 'credits' : 'quota' }];
   });
 }

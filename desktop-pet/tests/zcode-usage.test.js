@@ -92,6 +92,25 @@ test('paid windows use server spans, MCP remains separate and missing windows st
   assert.equal(buckets[1].meter, 'tool_usage'); assert.equal(buckets[1].windowMinutes, null); assert.equal(buckets[1].periodStart, null);
   assert.deepEqual(normalizeCodingPlanQuota({ data: { limits: [] } }, now), []);
 });
+test('unused paid allowance without reset retains its real quota and never fabricates a cycle start', () => {
+  const rows = normalizeCodingPlanQuota({ data: { level: 'max', limits: [
+    { type: 'CREDIT_LIMIT', unit: 3, number: 5, percentage: 0, usage: 35000, remaining: 35000, currentValue: 0 },
+    { type: 'CREDIT_LIMIT', unit: 6, number: 1, percentage: 6, usage: 155000, remaining: 144496, currentValue: 10503, nextResetTime: now + 86400000 }
+  ] } }, now);
+  assert.equal(rows.length, 2); assert.equal(rows[0].windowMinutes, 300); assert.equal(rows[0].remaining, 100);
+  assert.equal(rows[0].resetsAt, null); assert.equal(rows[0].periodStart, null); assert.equal(rows[0].usedUnits, 0);
+  assert.equal(rows[1].usedUnits, 10503); assert.notEqual(rows[1].usedUnits, rows[1].total - rows[1].remainingUnits);
+  assert.equal(rows[1].windowMinutes, 10080); assert.equal(rows[1].periodStart, rows[1].resetsAt - 10080 * 60000);
+});
+test('official used and remaining counts stay nullable rather than being inferred from each other', () => {
+  const row = { type: 'CREDIT_LIMIT', unit: 3, number: 5, percentage: 1, usage: 35000, remaining: 34725, nextResetTime: now + 3600000 };
+  assert.equal(normalizeCodingPlanQuota({ limits: [row] }, now)[0].usedUnits, null);
+  const usedOnly = normalizeCodingPlanQuota({ limits: [{ ...row, remaining: undefined, currentValue: 274 }] }, now)[0];
+  assert.equal(usedOnly.usedUnits, 274); assert.equal(usedOnly.remainingUnits, null); assert.equal(usedOnly.remaining, 99);
+  for (const nextResetTime of ['invalid', 0, now - 1]) {
+    assert.deepEqual(normalizeCodingPlanQuota({ limits: [{ ...row, nextResetTime }] }, now), []);
+  }
+});
 test('native scoped paid credentials follow the exact selected account and team, without creating a key', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zcode-scope-')); const dir = path.join(home, '.zcode/v2'); fs.mkdirSync(dir, { recursive: true });
   const env = { ZCODE_CREDENTIAL_SECRET: 'scoped-secret' };

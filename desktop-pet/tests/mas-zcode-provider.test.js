@@ -282,6 +282,18 @@ test('v2官方runner只回安全账号和额度投影，provider不读取或透�
   const tasks = await provider.readTasks({ account: safeAccount });
   assert.equal(tasks.state, 'unknown'); assert.equal(tasks.accountAttributionVerified, false);
 });
+test('MAS安全投影保留无reset的5h与官方usedUnits，不从总额余额倒算已用', async t => {
+  const f = fixture(t), accountKey = 'a'.repeat(64);
+  const account = { accountKey, family: 'bigmodel', selection: { kind: 'team-coding-plan', scope: 'team' } };
+  const provider = createMasZcodeProvider({ directoryAccess: { withAccess: (_provider, operation) => operation(f.root) },
+    run: async operation => operation === 'account-check' ? account : { accountKey, state: 'connected', updatedAt: NOW,
+      buckets: [{ id: 'zcode:paid:CREDIT_LIMIT:3:5', source: 'coding-plan', remaining: 100, windowMinutes: 300,
+        resetsAt: null, periodStart: null, total: 35000, remainingUnits: 35000, usedUnits: 0 }],
+      balanceState: 'unavailable', paidState: 'connected', modelIds: [] } });
+  const quota = await provider.fetchUsage(await provider.readAccount());
+  assert.equal(quota.buckets[0].resetsAt, null); assert.equal(quota.buckets[0].windowMinutes, 300);
+  assert.equal(quota.buckets[0].periodStart, null); assert.equal(quota.buckets[0].usedUnits, 0);
+});
 
 test('官方runner迟到额度或任务缓存期间切账号都被丢弃', async t => {
   const f = fixture(t); let accountKey = 'a'.repeat(64), finish;

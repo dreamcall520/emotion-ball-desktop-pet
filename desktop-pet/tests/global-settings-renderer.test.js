@@ -154,11 +154,12 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
 
     const nav = await run("[...document.querySelectorAll('#navigation button')].map(n=>n.textContent)");
     for (const name of ['Codex','WorkBuddy','ZCode','API 余额','快捷键','常规设置']) assert(nav.includes(name), name);
-    assert(!nav.includes('ZCode 联动')); assert(nav.indexOf('WorkBuddy') < nav.indexOf('ZCode')); assert(nav.indexOf('ZCode') < nav.indexOf('联动样式管理'));
+    assert(!nav.includes('ZCode 联动'));
+    assert.deepEqual(nav.filter(name=>['天气','Codex','ZCode','WorkBuddy','联动样式管理'].includes(name)),['天气','Codex','ZCode','WorkBuddy','联动样式管理']);
     assert(!nav.includes('OpenAI API')); assert(!nav.includes('API 费用与用量')); assert(!nav.includes('Codex 与 API'));
     await run(`Promise.all([...document.querySelectorAll('#navigation img.nav-icon')].map(img=>img.complete?Promise.resolve():new Promise((resolve,reject)=>{img.onload=()=>resolve();img.onerror=()=>reject(Error(img.src));})))`);
     const integrationIcons = await run(`[...document.querySelectorAll('#navigation img.nav-icon')].map(img=>({file:img.getAttribute('src'),complete:img.complete,width:img.naturalWidth,alt:img.alt,decorative:img.getAttribute('aria-hidden')}))`);
-    assert.deepEqual(integrationIcons.map(icon=>icon.file),['assets/integrations/codex.png','assets/integrations/codex-dark.png','assets/integrations/workbuddy.png','assets/integrations/zcode.png']);
+    assert.deepEqual(integrationIcons.map(icon=>icon.file),['assets/integrations/codex.png','assets/integrations/codex-dark.png','assets/integrations/zcode.png','assets/integrations/workbuddy.png']);
     assert(integrationIcons.every(icon=>icon.complete&&icon.width===256&&icon.alt===''&&icon.decorative==='true'),JSON.stringify(integrationIcons));
     for (const appearance of ['light','dark','light']) {
       await run(`document.documentElement.dataset.appearance=${JSON.stringify(appearance)}`);
@@ -425,6 +426,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     assert.equal(await run("document.querySelector('[data-action=store-codex-connection]').closest('.row').classList.contains('store-connected-row')"),false,'unconnected Codex keeps its original authorization surface');
     assert.equal(await run("document.querySelector('.store-connected-group')"),null);
+    assert.equal(await run("document.querySelector('.store-codex-error [role=status]').textContent"),'尚未连接本机 Codex。');
     await run("document.querySelector('[data-action=store-codex-connection]').click()");
     await run("document.querySelector('dialog[open] button[value=confirm]').click()");
     await run(`new Promise((resolve,reject)=>{const end=Date.now()+3000;const check=()=>{if(document.querySelector('dialog[open] .store-codex-terms'))resolve();else if(Date.now()>end)reject(Error('directory terms did not open'));else setTimeout(check,10)};check()})`);
@@ -451,6 +453,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run("navigate('workbuddy-settings')");
     assert.equal(await run("document.querySelector('[data-workbuddy-tasks]')"),null,'task module stays hidden until the main connection is authorized');
+    assert.equal(await run("document.querySelector('.store-codex-error [role=status]').textContent"),'尚未连接本机 WorkBuddy。');
     await run("snapshot.codexIconPreference='app-default';snapshot.version='wb-art';window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     await run(`Promise.all([...document.querySelectorAll('#navigation img.nav-icon')].map(img=>img.complete?Promise.resolve():new Promise(resolve=>img.onload=resolve)))`);
@@ -483,22 +486,23 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run('new Promise(resolve=>setTimeout(resolve,30))');
     const wbTerms=await run("document.querySelector('dialog[open]').textContent");
     assert.match(wbTerms,/授权 WorkBuddy 联动/);
-    assert.deepEqual(await run("[...document.querySelectorAll('dialog[open] .store-codex-terms dt')].map(p=>p.textContent)"),['本机连接','聊天发送','动画提醒']);
+    assert.deepEqual(await run("[...document.querySelectorAll('dialog[open] .store-codex-terms dt')].map(p=>p.textContent)"),['本机连接','聊天发送','任务与提醒']);
     assert.deepEqual(await run("[...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>p.textContent)"),[
       '用所选应用和账号查询积分、消耗，并在球球中聊天。',
       '沿用本机登录，不复制或展示凭据，可随时断开。',
       '你发的消息和当前对话上下文交给 WorkBuddy 官方。',
       '问天气时可附城市和天气摘要，聊天会消耗积分。',
-      '默认开启，安装前会选择目录并备份原设置。',
-      '事件输入可能含正文，只在本机处理和过滤。',
-      '仅向本机球球传任务标识和阶段，不传正文。'
+      '默认开启，任务和提醒目录按需分别授权。',
+      '任务只看标题、状态和未读标记，不读取正文。',
+      '安装提醒前选择目录并备份原设置。',
+      '事件可能含正文，本机过滤后仅传标识和阶段。'
     ]);
     const consentLayouts=[],consentAppearance=await run('document.documentElement.dataset.appearance');
     for(const appearance of ['light','dark']) for(const width of [720,840,1080]) {
       win.setSize(width,820);
       await run(`document.documentElement.dataset.appearance=${JSON.stringify(appearance)};new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
       const layout=await run(`(()=>{const dialog=document.querySelector('dialog[open]'),r=dialog.getBoundingClientRect(),buttons=[...dialog.querySelectorAll('button')].map(b=>{const r=b.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right};});return {dialog:{x:r.x,y:r.y,width:r.width,height:r.height},viewport:{width:innerWidth,height:innerHeight},groups:dialog.querySelectorAll('.store-codex-terms > div').length,overflow:dialog.scrollWidth>dialog.clientWidth||dialog.scrollHeight>dialog.clientHeight,buttons,paragraphs:[...dialog.querySelectorAll('.store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);const style=getComputedStyle(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth,whiteSpace:style.whiteSpace,color:style.color};})};})()`);
-      assert.equal(layout.groups,3);assert.equal(layout.paragraphs.length,7);
+      assert.equal(layout.groups,3);assert.equal(layout.paragraphs.length,8);
       assert(layout.dialog.height<450,'merged consent is substantially shorter than the former 609px dialog');
       assert(layout.paragraphs.every(p=>p.lines===1&&!p.overflow&&p.whiteSpace!=='nowrap'),'each concise WorkBuddy authorization item fits naturally at '+width+'px '+appearance+': '+JSON.stringify(layout.paragraphs));
       assert(!layout.overflow&&layout.dialog.x>=0&&layout.dialog.y>=0&&layout.dialog.x+layout.dialog.width<=layout.viewport.width&&layout.dialog.y+layout.dialog.height<=layout.viewport.height,'consent stays inside the unchanged window: '+JSON.stringify(layout));
@@ -619,8 +623,8 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('[data-action=store-workbuddy-connection]').click()");
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/授权 WorkBuddy 联动/);
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/你发的消息和当前对话上下文交给 WorkBuddy 官方/);
-    assert.match(await run("document.querySelector('dialog[open]').textContent"),/默认开启，安装前会选择目录并备份原设置。/);
-    assert.match(await run("document.querySelector('dialog[open]').textContent"),/仅向本机球球传任务标识和阶段，不传正文。/);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/默认开启，任务和提醒目录按需分别授权。.*安装提醒前选择目录并备份原设置。/s);
+    assert.match(await run("document.querySelector('dialog[open]').textContent"),/事件可能含正文，本机过滤后仅传标识和阶段。/);
     for(const width of [720,840,1080]) {
       win.setSize(width,820);
       const paragraphs=await run(`([...document.querySelectorAll('dialog[open] .store-codex-terms p')].map(p=>{const range=document.createRange();range.selectNodeContents(p);return {text:p.textContent,lines:[...range.getClientRects()].filter(rect=>rect.width>0).length,overflow:p.scrollWidth>p.clientWidth};}))`);
@@ -666,6 +670,11 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.match(await run("document.querySelector('dialog[open]').textContent"),/使用本机 WorkBuddy 连接当前账号/);
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');assert.equal(await run('wbLinkActions.length'),beforeInitialChat);
 
+    await run(`snapshot.firstReleaseWorkbuddyConnection={enabled:true,connected:true,status:'ready',chat:{authorized:false},tasks:{authorized:false},notifications:{enabled:false,connected:false,status:'disabled'}};snapshot.version='wb-default-partial';window.qiuqiuSettings.workbuddyConnection=async action=>{if(action==='connect')snapshot.firstReleaseWorkbuddyConnection.chat.authorized=true;return{status:'partial',message:'已连接；任务同步未完成，可稍后单独开启。',snapshot}};window.dispatchEvent(new Event('focus'));true`);
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await run(`document.querySelector('[data-action=store-workbuddy-connection]').click()`);await run(`document.querySelector('dialog[open] button[value=confirm]').click()`);
+    await run(`new Promise((resolve,reject)=>{const end=Date.now()+3000;const check=()=>{if(document.querySelector('.store-connected-group .store-codex-error')?.textContent.includes('任务同步未完成'))resolve();else if(Date.now()>end)reject(Error('partial default result hidden'));else setTimeout(check,10)};check()})`);
+    assert.equal(await run(`snapshot.firstReleaseWorkbuddyConnection.chat.authorized`),true);
     writeAlignmentReport(true);win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {

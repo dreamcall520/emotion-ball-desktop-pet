@@ -176,7 +176,9 @@ html[data-resolved-appearance=dark] .reset-event-popup{background:#1a222d}
 /* ZCode source controls stay in the content area; Codex retains its period tabs. */
 #details-panel[data-source="zcode"] .panel-tools { flex: none; }
 .zcode-bucket-selector { min-width: 0; margin-top: 13px; }
-.zcode-bucket-grid { display: flex; gap: 6px; max-width: 100%; padding: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.zcode-plan-heading { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: var(--detail-muted); font-size: 12px; line-height: 18px; font-weight: 600; }
+.zcode-plan-scope { flex: none; padding: 1px 6px; border-radius: 5px; color: var(--detail-blue); background: var(--detail-count); font-size: 10px; line-height: 16px; font-weight: 500; }
+.zcode-bucket-grid { display: flex; gap: 6px; max-width: 100%; padding: 2px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .zcode-bucket-button { flex: none; min-width: 0; min-height: 32px; padding: 6px 10px; border: 1px solid var(--detail-line); border-radius: 7px; font-size: 12px; line-height: 17px; color: var(--detail-muted); white-space: nowrap; }
 .zcode-bucket-button:hover { background: var(--detail-count); }
 .zcode-bucket-button[aria-pressed="true"] { color: var(--detail-blue); background: var(--detail-count); border-color: color-mix(in srgb,var(--detail-blue) 45%,transparent); font-weight: 650; }
@@ -186,6 +188,7 @@ html[data-resolved-appearance=dark] .reset-event-popup{background:#1a222d}
 .zcode-usage-note { margin: 3px 0 0; color: var(--detail-subtle); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
 #details-panel[data-source="zcode"] .forecast-badge { white-space: normal; max-width: 55px; text-align: center; }
 #details-panel[data-source="zcode"] .forecast-copy { min-width: 0; }
+#details-panel[data-source="zcode"] .chart-block > .empty-state { min-height: 130px; display: grid; place-content: center; }
 #details-panel[data-source="zcode"] .panel-bottom { align-items: baseline; gap: 7px; }
 #details-panel[data-source="zcode"] .panel-bottom > p { display: flex; gap: 5px; align-items: baseline; min-width: 0; white-space: nowrap; }
 #details-panel[data-source="zcode"] .panel-bottom b { display: inline; margin: 0; }
@@ -195,20 +198,20 @@ html[data-resolved-appearance=dark] .reset-event-popup{background:#1a222d}
 #details-panel[data-source="zcode"] .trend-pace.slow { color: #287b50; }
 #details-panel[data-source="zcode"] .trend-pace.unknown { color: var(--detail-subtle); }
 html[data-resolved-appearance="dark"] #details-panel[data-source="zcode"] .trend-pace.slow { color: #87cba2; }
-.zcode-quota-group { margin-top: 15px; }
-.zcode-quota-group-title { margin: 0 0 6px; color: var(--detail-muted); font-size: 12px; line-height: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.zcode-quota-group { margin-top: 14px; }
+.zcode-quota-group-title { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: var(--detail-muted); font-size: 12px; line-height: 18px; font-weight: 600; overflow-wrap: anywhere; }
 .zcode-quota-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--detail-line); border-radius: 9px; overflow: hidden; }
 .zcode-quota-bucket + .zcode-quota-bucket { border-top: 1px solid var(--detail-line); }
-.zcode-quota-row { display: block; width: 100%; padding: 10px 11px; text-align: left; }
+.zcode-quota-row { display: block; width: 100%; padding: 11px 12px 10px; text-align: left; }
 .zcode-quota-row:hover,.zcode-quota-row:focus-visible { background: var(--detail-count); }
 .zcode-quota-heading { display: flex; align-items: center; gap: 7px; font-size: 13px; line-height: 19px; }
 .zcode-quota-heading b { min-width: 0; overflow-wrap: anywhere; font-weight: 550; }
 .zcode-quota-heading strong { margin-left: auto; flex: none; font-size: 16px; color: var(--detail-blue); font-variant-numeric: tabular-nums; }
 .zcode-quota-heading .reset-chevron { flex: none; color: var(--detail-subtle); }
-.zcode-quota-progress { display: block; height: 4px; margin: 7px 0 5px; border-radius: 3px; background: var(--detail-count); overflow: hidden; }
+.zcode-quota-progress { display: block; height: 4px; margin: 8px 0 6px; border-radius: 3px; background: var(--detail-count); overflow: hidden; }
 .zcode-quota-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--detail-blue); opacity: .72; }
-.zcode-quota-row-deadline { display: block; color: var(--detail-subtle); font-size: 11px; line-height: 17px; }
-.zcode-quota-values { color: var(--detail-subtle); font-size: 11px; line-height: 17px; overflow-wrap: anywhere; }
-.zcode-quota-deadline { margin: 6px 1px 0; color: var(--detail-subtle); font-size: 11px; line-height: 17px; overflow-wrap: anywhere; }
+.zcode-quota-row-deadline { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--detail-line); color: var(--detail-subtle); font-size: 10px; line-height: 16px; }
+.zcode-quota-row-deadline > span:last-child { color: var(--detail-muted); font-variant-numeric: tabular-nums; }
+.zcode-quota-values { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; color: var(--detail-subtle); font-size: 11px; line-height: 17px; font-variant-numeric: tabular-nums; }
 .chart-help-body ul { margin: 0; padding-left: 16px; }
 .chart-help-body li + li { margin-top: 5px; }

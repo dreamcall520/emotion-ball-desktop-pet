@@ -149,10 +149,15 @@ function createMasZcodeTaskNotifications({ installer, storage, getAccountKey, ve
       return serialized(async () => {
         await stopReceiver(); record = null;
         const results = await Promise.allSettled([storage.remove('zcode'), installer.uninstall()]);
-        try { await installer.revoke(); } catch (reason) { results.push({ status: 'rejected', reason }); }
-        status = 'disabled'; error = results.some(result => result.status === 'rejected')
-          ? '已停止提醒，源端配置清理未完成，可再次停用重试。' : null;
-        notify(); return { status: error ? 'cleanup-pending' : 'disabled' };
+        // Keep the source grant when uninstall fails, so a later explicit
+        // disable can safely retry removing our own hook rows.
+        if (results[1].status === 'fulfilled') {
+          try { await installer.revoke(); } catch (reason) { results.push({ status: 'rejected', reason }); }
+        }
+        error = results[1].status === 'rejected' ? '已停止提醒，源端配置清理未完成，可再次停用重试。'
+          : results.some(result => result.status === 'rejected') ? '已停止提醒，本机授权记录清理未完成，可再次停用重试。' : null;
+        status = error ? 'cleanup-pending' : 'disabled';
+        notify(); return { status };
       });
     },
     close() { ++intentEpoch; closed = true; enabled = connected = false; ++epoch; verificationAbort.abort(); state.close(); onClear();

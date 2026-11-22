@@ -113,6 +113,16 @@ test('read-only bridge projects account and quota without exposing credential fi
     assert.equal(f.events.filter(e => e === 'release:app').length, 1);
   }
 });
+test('official bridge preserves nullable reset and direct usedUnits fields from the helper', async t => {
+  const f = await fixture(t), result = { accountKey: 'a'.repeat(64), state: 'connected', updatedAt: 1000,
+    buckets: [{ sourceId: 'zcode', source: 'coding-plan', id: 'zcode:paid:CREDIT_LIMIT:3:5', bucketId: 'zcode:paid:CREDIT_LIMIT:3:5',
+      remaining: 100, windowMinutes: 300, resetsAt: null, periodStart: null, total: 35000, remainingUnits: 35000, usedUnits: 0 }],
+    modelIds: [], balanceState: 'unavailable', paidState: 'connected' };
+  const h = bridge(f, result), pending = h.run('usage', { expectedAccountKey: result.accountKey });
+  await new Promise(resolve => setTimeout(resolve, 5)); h.reply(); f.child.emit('exit', 0); f.child.emit('close', 0);
+  const quota = await pending;
+  assert.equal(quota.buckets[0].usedUnits, 0); assert.equal(quota.buckets[0].resetsAt, null); assert.equal(quota.buckets[0].periodStart, null);
+});
 test('read-only bridge abort retains scopes until actual exit and drops stale account output', async t => {
   const f = await fixture(t), controller = new AbortController(), h = bridge(f, {}, { closeTimeoutMs: 5 });
   const pending = h.run('account-check', {}, { signal: controller.signal }); const rejected = assert.rejects(pending, { code: 'PROCESS_EXIT_UNCONFIRMED' });

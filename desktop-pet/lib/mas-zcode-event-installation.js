@@ -152,7 +152,13 @@ function createMasZcodeEventInstallation({app,dialog,storage,assetRoot,mas=proce
   transact(loc,[{file:loc.receiver,before:snapshot(loc.root,loc.receiver),after:privateReceiver,mode:0o600},{file:loc.manifest,before:manifest,after:Buffer.from(JSON.stringify(record)+'\n'),mode:0o600}],signal,owner);
   state={...state,authorized:true,installed:true,status:'installed'};return{status:'installed',requiresNewSession:true};
  }));}
- function uninstall({signal}={}){return queue(()=>operation(signal,(loc,owner)=>{
+ function uninstall({signal}={}){return queue(async()=>{
+  const current=epoch;check(signal,current);
+  // No installation grant means no source operation was authorized. Repeated
+  // disable must be harmless; a present but expired grant still fails closed.
+  const grant=await storage.load('zcode');check(signal,current);
+  if(grant===null||grant===undefined){state={...state,authorized:false,installed:false,status:'uninstalled'};return{status:'uninstalled'};}
+  return operation(signal,(loc,owner)=>{
   const settings=settingsSnapshot(loc),manifest=manifestSnapshot(loc);if(!manifest.value){state.installed=false;return{status:'uninstalled'};}
   const record=manifest.value,next=structuredClone(settings.value);let retainedModifiedFiles=false;
   for(const event of record.events){const rows=next.hooks?.events?.[event];if(rows===undefined)continue;if(!Array.isArray(rows))throw fail('UNSUPPORTED_SETTINGS');
@@ -168,7 +174,8 @@ function createMasZcodeEventInstallation({app,dialog,storage,assetRoot,mas=proce
   changes.push({file:loc.manifest,before:manifest,after:null});transact(loc,changes,signal,owner);
   for(const directory of [path.dirname(loc.script),loc.own])try{io.rmdirSync(directory);}catch(error){if(!['ENOENT','ENOTEMPTY','EEXIST'].includes(error.code))throw error;}
   state={...state,installed:false,status:'uninstalled'};return{status:'uninstalled',retainedModifiedFiles};
- }));}
+  });
+ });}
  return{ensure,install,restore,uninstall,getState,
   revoke(){epoch++;selectionEpoch++;return queue(async()=>{await storage.remove('zcode');state.authorized=false;return{status:'needs-authorization'};});},
   close(){closed=true;epoch++;selectionEpoch++;},clearPending(){selectionEpoch++;}

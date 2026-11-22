@@ -46,6 +46,7 @@
       periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null,
       total: Number.isFinite(item.total) && item.total >= 0 ? item.total : null,
       remainingUnits: Number.isFinite(item.remainingUnits) && item.remainingUnits >= 0 ? item.remainingUnits : null,
+      usedUnits: Number.isFinite(item.usedUnits) && item.usedUnits >= 0 ? item.usedUnits : null,
       unit: typeof item.unit === 'string' ? item.unit.replace(/[^a-zA-Z\u4e00-\u9fff]/gu, '').slice(0, 16) : ''
     }; } catch (_) { return {}; }
   }
@@ -284,7 +285,7 @@
     if (model.state === 'stale') return `${verb}时间待额度更新`;
     const now = Date.now();
     const resetsAt = Number.isSafeInteger(item?.resetsAt) && item.resetsAt > now ? item.resetsAt : null;
-    if (!resetsAt) return `${verb}时间暂不可用`;
+    if (!resetsAt) return model.sourceId === 'zcode' ? `${verb}时间待提供` : `${verb}时间暂不可用`;
     const totalMinutes = Math.max(1, Math.ceil((resetsAt - now) / 60000));
     const days = Math.floor(totalMinutes / 1440);
     const hours = Math.floor((totalMinutes % 1440) / 60);
@@ -302,7 +303,7 @@
   function zcodeExpandedTime(model, item, dual) {
     const verb = ({ one_time: '到期', expiry: '到期', daily: '刷新', monthly: '刷新', rolling: '重置', weekly: '重置' }[item.periodKind] || '截止');
     if (model.state === 'stale') return { text: `${verb}时间待更新`, title: resetTimeText(model, item) };
-    if (!Number.isSafeInteger(item.resetsAt) || item.resetsAt <= Date.now()) return { text: `${verb}时间暂不可用`, title: resetTimeText(model, item) };
+    if (!Number.isSafeInteger(item.resetsAt) || item.resetsAt <= Date.now()) return { text: model.sourceId === 'zcode' ? `${verb}时间待提供` : `${verb}时间暂不可用`, title: resetTimeText(model, item) };
     const date = new Date(item.resetsAt), today = new Date(), tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     const sameDay = day => date.getFullYear() === day.getFullYear() && date.getMonth() === day.getMonth() && date.getDate() === day.getDate();
     const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;

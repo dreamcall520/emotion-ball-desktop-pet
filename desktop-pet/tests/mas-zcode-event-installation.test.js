@@ -117,3 +117,11 @@ test('an originally absent config is removed on uninstall and a preexisting disa
  const empty=await fixture(t),original={hooks:{enabled:false,timeoutMs:8000,events:{Stop:[]}},keep:true};fs.writeFileSync(empty.settings,JSON.stringify(original));
  await empty.installer.ensure({interactive:true});await empty.installer.install({receiver});await empty.installer.uninstall();assert.deepEqual(JSON.parse(fs.readFileSync(empty.settings)),original);
 });
+
+test('uninstall is idempotent before first authorization and after a completed revoke, while invalid grants still fail',async t=>{
+ const f=await fixture(t);assert.equal((await f.installer.uninstall()).status,'uninstalled');assert.equal(f.requests.length,0);assert.equal(fs.existsSync(f.settings),false);
+ await f.installer.ensure({interactive:true});await f.installer.install({receiver});await f.installer.uninstall();await f.installer.revoke();
+ assert.equal((await f.installer.uninstall()).status,'uninstalled');assert.equal(f.requests.length,1);
+ await f.storage.save('zcode',{purpose:'wrong-purpose',directory:f.root,bookmark:'not-an-install-grant'});
+ await assert.rejects(f.installer.uninstall(),{code:'DIRECTORY_ACCESS_REQUIRED'});
+});
