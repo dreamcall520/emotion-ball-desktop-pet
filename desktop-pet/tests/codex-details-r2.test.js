@@ -477,7 +477,7 @@ test('ZCode 百分比不隐藏细小消耗，显示精确已用数量，Codex仍
   h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:99.8706,total:5000000,remainingUnits:4993530,usedUnits:6470,unit:'token'}]});
   assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'本周期已用 6,470 token');
   h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:100,total:5000000,remainingUnits:5000000,usedUnits:0,unit:'token'}]});
-  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note'),null);
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'本周期已用 0 token');
   h.receive({action:'trend',period:300,items:[{...item(300),remaining:99.8706}]});
   assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,'100%');
 });

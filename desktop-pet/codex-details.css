@@ -213,5 +213,6 @@ html[data-resolved-appearance="dark"] #details-panel[data-source="zcode"] .trend
 .zcode-quota-row-deadline { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--detail-line); color: var(--detail-subtle); font-size: 10px; line-height: 16px; }
 .zcode-quota-row-deadline > span:last-child { color: var(--detail-muted); font-variant-numeric: tabular-nums; }
 .zcode-quota-values { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; color: var(--detail-subtle); font-size: 11px; line-height: 17px; font-variant-numeric: tabular-nums; }
+.zcode-quota-values > span { white-space: nowrap; }
 .chart-help-body ul { margin: 0; padding-left: 16px; }
 .chart-help-body li + li { margin-top: 5px; }

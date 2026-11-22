@@ -548,7 +548,7 @@
     });
     const zcodeNotes = [];
     if (zcode) {
-      if (item.usedUnits !== null && item.usedUnits > 0) {
+      if (item.usedUnits !== null) {
         const usedText = exactNumber(item.usedUnits);
         const usage = node('p','zcode-usage-note',`本周期已用 ${usedText} ${quotaUnit(item)}`);
         usage.title = `官方返回的本周期累计用量；图表仅统计球球已记录时段的变化。`;
@@ -581,7 +581,8 @@
         heading.replaceChildren(node('b','',item.label || '额度'),node('strong','',zcodePercent(item.remaining)),node('span','reset-chevron','›'));
         const progress = node('span','zcode-quota-progress'), fill = node('span',''); fill.style.width = `${item.remaining}%`; progress.appendChild(fill); progress.setAttribute('aria-hidden','true');
         const values = node('span','zcode-quota-values'); values.title = exact;
-        values.replaceChildren(node('span','',`剩余 ${shortNumber(item.remainingUnits)} ${quotaUnit(item)}`),node('span','',`共 ${shortNumber(item.total)} ${quotaUnit(item)}`));
+        const format = /^credits?$/i.test(item.unit) ? exactNumber : shortNumber;
+        values.replaceChildren(node('span','',`剩余 ${format(item.remainingUnits)} ${quotaUnit(item)}`),node('span','',`共 ${format(item.total)} ${quotaUnit(item)}`));
         const deadline = node('span','zcode-quota-row-deadline');
         deadline.replaceChildren(node('span','',item.resetsAt ? deadlineCopy(item).label : '重置时间'), node('span','',item.resetsAt ? deadlineLabel(item.resetsAt) : '待提供'));
         row.replaceChildren(heading,progress,values,deadline); li.appendChild(row); return li;
