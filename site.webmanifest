@@ -9,8 +9,8 @@
   "theme_color": "#f6f8fb",
   "icons": [
     {
-      "src": "assets/brand-app-144.webp?v=20261122-app-logo",
-      "sizes": "144x144",
+      "src": "assets/brand-72.webp?v=20261122-classic",
+      "sizes": "72x72",
       "type": "image/webp"
     }
   ]
