@@ -356,3 +356,11 @@ test('只有明确自由练习可以在没有账户百分比时打开守护战',
  assert.equal(w.sent.at(-1)[1].items.length,0);assert.equal(w.getBounds().height,310);
  f.guard.open(model()); assert.equal(w.getBounds().height,410);f.guard.destroy();
 });
+test('ZCode real quota opens a battle while an official reset time is explicitly unknown',()=>{
+ const f=fixture();
+ assert.equal(f.guard.open({sourceId:'zcode',state:'ready',items:[{label:'5小时额度',bucketId:'zcode:paid:five-hour',remaining:99,windowMinutes:300,periodStart:null,resetsAt:null}]}),true);
+ const win=f.guard.getWindow();win.webContents.emit('did-finish-load');
+ const current=win.sent.findLast(row=>row[0]==='pet:quota-guard-model')[1];
+ assert.equal(current.sourceId,'zcode');assert.equal(current.items[0].remaining,99);assert.equal(current.items[0].resetsAt,null);assert.equal(current.items[0].periodStart,null);
+ f.guard.destroy();
+});

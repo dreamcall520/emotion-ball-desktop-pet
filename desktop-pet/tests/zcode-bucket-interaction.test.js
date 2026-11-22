@@ -69,10 +69,15 @@ test('ZCode 个人与团队双周期主卡显示相同周期标签，真实套�
     const h = fixture({sourceId:'zcode',state,expanded:true,size,appearance,items:rows});
     assert.deepEqual(h.cells.map(cell=>cell.children[0].textContent),['5小时额度','周额度']);
     assert.ok(h.cells.every(cell=>cell.children[0].className.includes('v20-team-period-label')));
-    assert.doesNotMatch(h.nodes['codex-expanded'].textContent,/Coding Plan|团队/);
+    const brand=h.nodes['codex-expanded'].children[0].children[0];
+    assert.equal(brand.children[2].textContent,'Coding Plan · 团队');
+    assert.equal(brand.children[2].title,rows[0].planName);
+    assert.equal(brand.children[2].attributes['aria-label'],rows[0].planName);
+    assert.equal(h.nodes['codex-expanded'].textContent.split('Coding Plan · 团队').length-1,1,'shared plan is shown once above both periods');
+    assert.ok(h.cells.every(cell=>!cell.children[0].textContent.includes('Coding Plan')));
     assert.equal(h.nodes.summary.children[0].children[1].textContent,'5小时');
     h.cells.forEach((cell,index)=>{
-      assert.equal(cell.children[0].children[0].className,'period-pill');
+      assert.equal(cell.children[0].children[0].className,'period-pill quota-cycle-caption');
       assert.match(cell.children[0].title,/Coding Plan · 团队/);
       assert.equal(cell.children[1].children[0].textContent,`${rows[index].remaining}%`);
       assert.equal(cell.children[2].value,rows[index].remaining);
@@ -87,7 +92,9 @@ test('ZCode 个人与团队双周期主卡显示相同周期标签，真实套�
   for (const overrides of [{bucketId:'zcode:custom:credits'}, {windowMinutes:60}]) {
     const row = {...rows[0],...overrides};
     const h = fixture({sourceId:'zcode',state:'ready',expanded:true,items:[row]});
-    assert.deepEqual(h.cells[0].children[0].children.map(child=>child.textContent),[row.planName,row.label]);
+    assert.equal(h.nodes['codex-expanded'].children[0].children[0].children[2].textContent,row.planName);
+    assert.deepEqual(h.cells[0].children[0].children.map(child=>child.textContent),[row.label]);
+    assert.equal(h.cells[0].children[0].children[0].title,`${row.planName} · ${row.label}`);
     assert.doesNotMatch(h.cells[0].children[0].className,/v20-team-period-label/);
   }
 });
@@ -129,8 +136,11 @@ test('已知来源用完整中文，每桶保留原模型，底部明细是独�
   entry.click(); assert.deepEqual(h.calls,[['detail','quota','bucket-0']]);
   assert.equal(h.nodes['codex-expanded'].children[2].children[1].tagName,'nav');
   const single=fixture({sourceId:'zcode',state:'ready',expanded:true,items:items(1)});
-  assert.equal(single.cells[0].children[0].children[0].textContent,'1024活动');
-  assert.equal(single.cells[0].children[0].children[1].textContent,'GLM-5.3');
+  const shared=single.nodes['codex-expanded'].children[0].children[0].children[2];
+  assert.equal(shared.textContent,'1024活动');
+  assert.equal(shared.title,'1024 活动');
+  assert.equal(single.cells[0].children[0].children[0].textContent,'GLM-5.3');
+  assert.equal(single.cells[0].children[0].children.length,1);
 });
 
 

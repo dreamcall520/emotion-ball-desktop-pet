@@ -2655,7 +2655,8 @@ function zcodeGuardEntryAvailable() {
 
 function syncQuotaFunEntry() {
   if (!FIRST_RELEASE || !quotaFunEntry) return;
-  const controllers = quotaCardControllers(), visible = {};
+  const controllers = quotaCardControllers(), visible = {}, eligible = {}, models = {}, playable = {};
+  const { safeGuardEntryModel } = require('./lib/workbuddy-guard-entry-window');
   const suppressed = !settings?.quotaFunEnabled || isQuitting || screenLocked || pomodoroQuiet ||
     !petWindow || petWindow.isDestroyed() || !petWindow.isVisible() || quotaPopups.isBlocked() ||
     presentationSuppressed() || quotaGuard?.isVisible() || chatWindow?.isVisible() || shortcutWindow?.isPresenting() ||
@@ -2663,17 +2664,21 @@ function syncQuotaFunEntry() {
     quotaCardGroupTransition?.isActive();
   if (!suppressed) for (const [source, controller] of Object.entries(controllers)) {
     const bounds = controller?.getVisibleBounds?.();
-    if (bounds && !quotaCardCollected(source)) visible[source] = bounds;
+    if (!bounds || quotaCardCollected(source)) continue;
+    visible[source] = bounds;
+    const model = safeGuardEntryModel(source === 'codex' ? { ...quotaLabelModel(), sourceId: 'codex' }
+      : source === 'zcode' ? { ...buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }), sourceId: 'zcode' }
+      : { state: 'ready', items: [], practice: true, sourceId: source });
+    if (!model) continue;
+    eligible[source] = bounds; models[source] = model;
+    playable[source] = model.practice === true || model.items[0]?.remaining > 0;
   }
   const carrier = require('./lib/quota-fun-carrier').selectQuotaFunCarrier({
-    order: quotaCardConfig().order, enabled: !suppressed, visible });
+    order: quotaCardConfig().order, enabled: !suppressed, visible: eligible, playable });
   if (!carrier) { quotaFunCarrier = null; quotaFunEntry.hide(); return; }
   quotaFunCarrier = carrier.source;
-  const model = carrier.source === 'codex' ? { ...quotaLabelModel(), sourceId: 'codex' }
-    : carrier.source === 'zcode' ? { ...buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }), sourceId: 'zcode' }
-    : { state: 'ready', items: [], practice: true, sourceId: carrier.source };
   quotaFunEntry.show(carrier.bounds, screen.getDisplayMatching(carrier.bounds).workArea,
-    [petWindow.getBounds(), quotaObstacleBounds(), ...Object.values(visible)], edgeTuck?.getPresentation().side, model);
+    [petWindow.getBounds(), quotaObstacleBounds(), ...Object.values(visible)], edgeTuck?.getPresentation().side, models[carrier.source]);
 }
 
 function setQuotaFunEnabled(value) {
@@ -5607,7 +5612,7 @@ async function bootstrap() {
       quotaGroupHidden: quotaCardCollected('zcode') || quotaFreeStackPlan()?.hidden?.includes('zcode'), quotaGroupLayout: quotaFreeStackPlan()?.cards.zcode }),
     getSuppressed: () => isQuitting || screenLocked || chatWindow?.isVisible() || shortcutWindow?.isPresenting() || workbuddyDetails?.isVisible() || apiBalanceDetails?.isVisible() || codexDetails?.isVisible() || presentationSuppressed(),
     onChange: () => { notifyStoreConnections(); refreshTrayMenu(); tickEdgeNotice(true); syncZcodeQuotaGuard(); syncQuotaLabel(codexCompanion?.getSnapshot()); },
-    getGuardEntry: zcodeGuardEntryAvailable,
+    getGuardEntry: () => !FIRST_RELEASE && zcodeGuardEntryAvailable(),
     getCardSuppressed: () => quotaPopups.isBlocked() || quotaGuard?.isVisible() === true,
     onOpenGuard: () => openQuotaGuard('zcode'),
     onLayout: () => { syncQuotaFreeStack(); pomodoroWindows?.sync(); },

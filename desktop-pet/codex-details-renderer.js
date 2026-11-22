@@ -96,6 +96,7 @@
     const selector = node('section','zcode-bucket-selector'), grid = node('div','zcode-bucket-grid');
     grid.setAttribute('role','group'); grid.setAttribute('aria-label','选择额度');
     const sharedPlan = paidPlan(item.planName) && model.items.every(value => value.planName === item.planName);
+    if (sharedPlan) selector.className += ' has-shared-plan';
     bucketOptions = displayBuckets(model.items).map(value=>{
       const option = button(sharedPlan ? value.label : bucketLabel(value),'zcode-bucket-button',()=>selectBucket(value.bucketId));
       option.dataset.bucketOption = value.bucketId; option.title = bucketTitle(value);
@@ -502,7 +503,8 @@
     opportunities.replaceChildren(node('span','','重置机会 '),opportunityAmount,chevron);
     const expiries = quotaFresh(model) ? (model.resetOpportunities || []).filter(entry => entry.status==='available' && typeof entry.expiresAt === 'number' && entry.expiresAt > Date.now()).sort((a,b) => a.expiresAt-b.expiresAt) : [];
     if (expiries.length && model.resetCreditsAvailable!==0) opportunities.appendChild(node('span','expiry',`1 次于 ${dateLabel(expiries[0].expiresAt)} 到期`));
-    bottom.replaceChildren(reset, zcode ? button('额度明细','reset-link',() => invoke('openDetail','quota',selected)) : opportunities);
+    const detailLink = zcode ? button('额度明细','reset-link',() => invoke('openDetail','quota',selected)) : opportunities;
+    bottom.replaceChildren(reset, detailLink);
     const graph=node('div','chart-block'),switcher=node('div','chart-view-switch');
     switcher.setAttribute('role','tablist');switcher.setAttribute('aria-label','图表视图');
     const lineTitle=updated.title,help=node('details','chart-help'),summary=node('summary','','ⓘ'),helpBody=node('div','chart-help-body');
@@ -546,17 +548,20 @@
       tab.addEventListener('keydown',event=>{if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();const next=kind==='line'?'daily':'line';selectView(next);switcher.querySelector(`[data-view="${next}"]`).focus();}});
       switcher.appendChild(tab);
     });
-    const zcodeNotes = [];
     if (zcode) {
+      const cycleSummary = node('div','zcode-cycle-summary');
+      cycleSummary.appendChild(reset);
       if (item.usedUnits !== null) {
         const usedText = exactNumber(item.usedUnits);
-        const usage = node('p','zcode-usage-note',`本周期已用 ${usedText} ${quotaUnit(item)}`);
+        const usage = node('span','zcode-usage-note',`已用 ${usedText} ${quotaUnit(item)}`);
+        usage.setAttribute('aria-label',`本周期已用 ${usedText} ${quotaUnit(item)}`);
         usage.title = `官方返回的本周期累计用量；图表仅统计球球已记录时段的变化。`;
-        zcodeNotes.push(usage);
+        cycleSummary.appendChild(usage);
       }
+      bottom.replaceChildren(cycleSummary,detailLink);
       graph.dataset.source = 'zcode';
     }
-    content.replaceChildren(...(zcode ? [bucketSelector(model,item)] : []),stats,meta,graph,...zcodeNotes,forecast,bottom);
+    content.replaceChildren(...(zcode ? [bucketSelector(model,item)] : []),stats,meta,graph,forecast,bottom);
     selectView(chartViews.get(selected)||'line');
   }
   function renderQuota(model) {

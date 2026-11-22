@@ -56,14 +56,14 @@ function copyItem(value, sourceId = 'codex') {
   if (!label || (zcode ? windowMinutes !== null && (!Number.isFinite(windowMinutes) || windowMinutes <= 0) : !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0) ||
     typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
   if (zcode && (typeof item.bucketId !== 'string' || !/^zcode:[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,394}$/u.test(item.bucketId)
-    || !Number.isSafeInteger(resetsAt) || resetsAt <= 0)) return null;
+    || !(resetsAt === null || Number.isSafeInteger(resetsAt) && resetsAt > 0))) return null;
   return {
     label,
     windowMinutes,
     remaining,
     ...(zcode ? { bucketId: item.bucketId, model: cleanLabel(item.model),
       periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null } : {}),
-    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
+    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 || zcode && resetsAt === null ? { resetsAt } : {}),
     ...paceFields(pace),
     ...(resetLabel ? { resetLabel } : {})
   };

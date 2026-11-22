@@ -18,3 +18,10 @@ test('bounds must be finite visible rectangles and output is a fresh geometry-on
  const input={...codex,token:'private'},value=selectQuotaFunCarrier({enabled:true,order:['codex'],visible:{codex:input}});assert.deepEqual(value,{source:'codex',bounds:codex});value.bounds.x=999;assert.equal(input.x,10);
  assert.equal(selectQuotaFunCarrier({enabled:true,order:['codex'],visible:Object.create({codex})}),null);
 });
+test('the shared entry prefers playable sources in card order and only falls back to exhausted quota',()=>{
+ const zcode={x:10,y:100,width:168,height:58},visible={codex,zcode,workbuddy},order=['codex','zcode','workbuddy'];
+ assert.equal(selectQuotaFunCarrier({enabled:true,order,visible,playable:{codex:false,zcode:true,workbuddy:true}}).source,'zcode');
+ assert.equal(selectQuotaFunCarrier({enabled:true,order,visible:{codex,workbuddy},playable:{codex:false,workbuddy:true}}).source,'workbuddy');
+ assert.equal(selectQuotaFunCarrier({enabled:true,order,visible:{codex},playable:{codex:false}}).source,'codex');
+ assert.equal(selectQuotaFunCarrier({enabled:true,order:['workbuddy','zcode','codex'],visible,playable:{codex:true,zcode:true,workbuddy:true}}).source,'workbuddy');
+});

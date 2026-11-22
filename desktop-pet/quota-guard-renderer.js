@@ -22,7 +22,7 @@
         && /^zcode:[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,394}$/u.test(item.bucketId)
         && Number.isFinite(item.remaining) && item.remaining >= 0 && item.remaining <= 100
         && (item.windowMinutes === null || Number.isFinite(item.windowMinutes) && item.windowMinutes > 0)
-        && Number.isSafeInteger(item.resetsAt) && item.resetsAt > 0
+        && (item.resetsAt === null || Number.isSafeInteger(item.resetsAt) && item.resetsAt > 0)
         ? { remaining: item.remaining, windowMinutes: item.windowMinutes, bucketId: item.bucketId,
           periodStart: item.periodStart ?? null, resetsAt: item.resetsAt } : null;
       return item && Number.isFinite(item.remaining) && item.remaining >= 0 && item.remaining <= 100 &&

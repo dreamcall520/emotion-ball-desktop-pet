@@ -20,7 +20,7 @@ function guardModel(value, size = 'standard', appearance = 'system', visible = f
   const model = safeModel(value, sourceId);
   return { ...model, ...(sourceId === 'zcode' ? { items: model.items.slice(0, 1).filter(item =>
     /^zcode:[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,394}$/u.test(item.bucketId)
-    && Number.isSafeInteger(item.resetsAt) && item.resetsAt > 0) } : {}), size: size === 'compact' ? 'compact' : 'standard',
+    && (item.resetsAt === null || Number.isSafeInteger(item.resetsAt) && item.resetsAt > 0)) } : {}), size: size === 'compact' ? 'compact' : 'standard',
     appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system', expanded: false,
     visible: visible === true, ...(value?.practice === true ? { practice: true } : {}) };
 }

@@ -475,9 +475,9 @@ test('ZCode 百分比不隐藏细小消耗，显示精确已用数量，Codex仍
     assert.equal(h.nodes['details-content'].querySelector('.zcode-quota-heading strong').textContent,text);
   });
   h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:99.8706,total:5000000,remainingUnits:4993530,usedUnits:6470,unit:'token'}]});
-  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'本周期已用 6,470 token');
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'已用 6,470 token');
   h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:100,total:5000000,remainingUnits:5000000,usedUnits:0,unit:'token'}]});
-  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'本周期已用 0 token');
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'已用 0 token');
   h.receive({action:'trend',period:300,items:[{...item(300),remaining:99.8706}]});
   assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,'100%');
 });
@@ -488,7 +488,8 @@ test('ZCode 官方累计用量与余额取整分开，缺重置时间仍保留�
     periodStart:null,resetsAt:null,remaining:99,total:35000,remainingUnits:34724,usedUnits:275,unit:'credits'};
   const model={sourceId:'zcode',state:'ready',action:'trend',bucketId:bucket.bucketId,items:[bucket]};
   h.receive(model);
-  assert.equal(content.querySelector('.zcode-usage-note').textContent,'本周期已用 275 点');
+  assert.equal(content.querySelector('.zcode-usage-note').textContent,'已用 275 点');
+  assert.equal(content.querySelector('.zcode-usage-note').getAttribute('aria-label'),'本周期已用 275 点');
   assert.doesNotMatch(content.querySelector('.trend-stats').textContent,/距重置|分钟|已结束/);
   assert.equal(content.querySelector('.zcode-bucket-button').textContent,'5 小时额度');
   assert.match(content.querySelector('.zcode-plan-heading').textContent,/Max 套餐.*团队/);

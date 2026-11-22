@@ -28,7 +28,7 @@ function safeGuardEntryModel(value) {
   if (sourceId === 'zcode') {
     if (typeof first.bucketId !== 'string' || !/^zcode:[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,394}$/u.test(first.bucketId) ||
       !(first.windowMinutes === null || Number.isFinite(first.windowMinutes) && first.windowMinutes > 0) ||
-      !Number.isSafeInteger(first.resetsAt) || first.resetsAt <= 0) return null;
+      !(first.resetsAt === null || Number.isSafeInteger(first.resetsAt) && first.resetsAt > 0)) return null;
     item = { remaining:first.remaining, windowMinutes:first.windowMinutes, bucketId:first.bucketId,
       periodStart:Number.isSafeInteger(first.periodStart)&&first.periodStart>=0?first.periodStart:null, resetsAt:first.resetsAt };
   } else {

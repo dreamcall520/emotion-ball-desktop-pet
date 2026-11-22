@@ -1308,7 +1308,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   assert.equal(label.dataset.expanded, 'false');
   assert.equal(label.dataset.appearance, 'dark');
   assert.equal(root.dataset.appearance, 'dark');
-  assert.equal(summary.children.map(node => node.textContent).join(''), '周额度64%');
+  assert.equal(summary.children.map(node => node.textContent).join(''), 'Codex周额度64%');
   assert.deepEqual(summary.children.map(node => node.className), ['summary-period', 'summary-value']);
   click();
   assert.equal(toggles, 1);
@@ -1472,8 +1472,8 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     'Spark7天9%紧张'
   ]);
   assert.deepEqual(items.children.map(item => item.children.map(child => child.className)), [
-    ['quota-name', 'quota-period period-pill', 'quota-value', 'quota-progress'],
-    ['quota-name', 'quota-period period-pill', 'quota-value', 'quota-progress']
+    ['quota-name quota-cycle-caption', 'quota-period period-pill', 'quota-value', 'quota-progress'],
+    ['quota-name quota-cycle-caption', 'quota-period period-pill', 'quota-value', 'quota-progress']
   ]);
   assert.deepEqual(items.children.map(item => item.children[0].textContent), ['<b>Codex</b>', 'Spark']);
   assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时', '7天']);
@@ -1491,9 +1491,10 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     { label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080, remaining: 78 }
   ], overflow: 0 });
   assert.equal(status.textContent, '额度已过期');
-  assert.deepEqual(items.children.map(item => item.children[1].textContent), [
-    '已过期 5小时额度', '已过期 周额度'
+  assert.deepEqual(items.children.map(item => item.children[0].textContent), [
+    '5小时额度 · 已过期', '周额度 · 已过期'
   ]);
+  assert.deepEqual(items.children.map(item => item.children[1].textContent), ['', '']);
   assert.deepEqual(items.children.map(item => item.children[2].textContent), ['64%', '78%']);
   assert.equal(overflow.textContent, '');
 
@@ -1501,7 +1502,8 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     { label: '超长恶意标签<script>alert(1)</script>还有更多文字', windowMinutes: 300, remaining: 64 },
     { label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080, remaining: 78 }
   ], overflow: 0 });
-  assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时额度', '周额度']);
+  assert.deepEqual(items.children.map(item => item.children[0].textContent), ['5小时额度', '周额度']);
+  assert.deepEqual(items.children.map(item => item.children[1].textContent), ['', '']);
   assert.deepEqual(items.children.map(item => item.children[2].textContent), ['64%', '78%']);
 
   const states = {
@@ -1888,6 +1890,23 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
   assert.equal(w.sent.at(-1)[1].items.length, 4);
 });
 
+test('ZCode 长额度名和套餐通过窗口与 preload 保留官方160字边界，控制字符仍去除，Codex32字边界不变', () => {
+  const { safeModel } = require('../lib/quota-label-window');
+  const label='跨境额度 Official Quota '.repeat(12), planName='Max 团队 Organization '.repeat(12);
+  const truncate=value=>Array.from(value).slice(0,160).join('').trim();
+  const input={state:'ready',items:[{label:'\u202e'+label+'\n',planName:'\u0000'+planName+'\u2069',bucketId:'zcode:custom:long-name',windowMinutes:300,remaining:99.99}]};
+  const packet=safeModel(input,'zcode');
+  assert.equal(packet.items[0].label,truncate(label));assert.equal(packet.items[0].planName,truncate(planName));
+  assert.equal(Array.from(safeModel(input,'codex').items[0].label).length,32);
+  let api, listener, received;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../quota-label-preload.js'),'utf8'),{
+    process:{argv:['electron','--pet-source=zcode']},require:()=>({contextBridge:{exposeInMainWorld(_name,value){api=value;}},ipcRenderer:{on(_name,callback){listener=callback;},removeListener(){}}})
+  });
+  api.onModel(value=>{received=value;});listener({},packet);
+  assert.equal(received.items[0].label,packet.items[0].label);assert.equal(received.items[0].planName,packet.items[0].planName);
+  listener({},input);assert.equal(received.items[0].label,packet.items[0].label);assert.equal(received.items[0].planName,packet.items[0].planName);
+});
+
 test('团队和额度查询原因通过 ZCode 原生窗口和 preload 白名单，未知码和 Codex 保持原行为', () => {
   const { safeModel } = require('../lib/quota-label-window');
   for (const source of ['zcode', 'codex']) {
@@ -1956,7 +1975,7 @@ test('团队和额度查询原因通过 ZCode 原生窗口和 preload 白名单�
   assert.equal(nodes.items.children[0].children[0].textContent,'5.3');
   assert.equal(nodes.items.children[0].children[1].textContent,'1024活动');
   assert.equal(nodes.items.children[2].children[1].textContent,'每日体验');
-  assert.match(expanded.textContent,/ZCODE/); assert.match(expanded.textContent,/体验/); assert.match(expanded.textContent,/1024/);
+  assert.match(expanded.textContent,/ZCode/); assert.match(expanded.textContent,/体验/); assert.match(expanded.textContent,/1024/);
   assert.match(expanded.children[1].children[2].title,/Start Plan 体验/);
   assert.match(expanded.children[1].children[0].title,/1024 活动/); assert.match(expanded.textContent,/到期/);
   assert.doesNotMatch(expanded.textContent,/重置机会/);

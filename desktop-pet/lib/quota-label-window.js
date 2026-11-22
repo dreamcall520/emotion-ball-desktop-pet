@@ -21,10 +21,10 @@ const CONTROL_AND_DIRECTION = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u
 const EMPTY_MODEL = Object.freeze({ state: 'disconnected', items: Object.freeze([]), overflow: 0 });
 const MAX_TOPMOST_SYNC_ATTEMPTS = 8;
 
-function cleanLabel(value) {
+function cleanLabel(value, max = 32) {
   if (typeof value !== 'string') return '';
   return Array.from(value.replace(CONTROL_AND_DIRECTION, ' ').replace(/\s+/gu, ' ').trim())
-    .slice(0, 32).join('');
+    .slice(0, max).join('').trimEnd();
 }
 
 function record(value) {
@@ -54,7 +54,7 @@ function activityFields(value) {
 function bucketFields(item, sourceId) {
   if (sourceId !== 'zcode') return {};
   try { return {
-      planName: cleanLabel(item.planName),
+      planName: cleanLabel(item.planName, 160),
       ...(typeof item.model === 'string' ? { model: cleanLabel(item.model) } : {}),
       bucketId: typeof item.bucketId === 'string' && /^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(item.bucketId) ? item.bucketId : '',
       periodKind: ['one_time', 'expiry', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
@@ -84,7 +84,7 @@ function copyItem(value, sourceId = 'codex') {
   } catch (_) {
     return null;
   }
-  const label = cleanLabel(labelValue);
+  const label = cleanLabel(labelValue, sourceId === 'zcode' ? 160 : 32);
   if (!label || (sourceId === 'zcode' ? windowMinutes !== null && (!Number.isFinite(windowMinutes) || windowMinutes <= 0) : !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0) ||
     typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
   return {
@@ -92,7 +92,7 @@ function copyItem(value, sourceId = 'codex') {
     windowMinutes,
     remaining,
     ...bucketFields(item, sourceId),
-    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
+    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 || sourceId === 'zcode' && resetsAt === null ? { resetsAt } : {}),
     ...paceFields(pace),
     ...(resetLabel ? { resetLabel } : {})
   };

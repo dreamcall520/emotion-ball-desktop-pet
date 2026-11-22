@@ -22,6 +22,47 @@ test('ZCode guard percent format matches the card without rounding consumed quot
  for (const [value, expected] of [[0,'0%'],[1,'1%'],[99.8706,'99.9%'],[99.99,'<100%'],[.01,'<0.1%'],[100,'100%']]) assert.equal(remainingText(value,'zcode'),expected);
  assert.equal(remainingText(99.8706,'codex'),'100%');
 });
+test('an official ZCode bucket with an unknown reset stays playable across entry, native model and preload',()=>{
+ const {safeGuardEntryModel}=require('../lib/workbuddy-guard-entry-window');
+ const value=quota(99,300);value.items[0].resetsAt=null;value.items[0].periodStart=null;
+ const entry=safeGuardEntryModel(value);assert.ok(entry);assert.equal(entry.items[0].resetsAt,null);
+ const safe=guardModel(value);assert.equal(safe.items.length,1);assert.equal(safe.items[0].resetsAt,null);
+ for(const [preload,channel]of [['quota-guard','pet:quota-guard-model'],['quota-label','pet:zcode-quota-label']]){
+  let bridge;const listeners=new Map();
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../'+preload+'-preload.js'),'utf8'),{process:{argv:['--pet-source=zcode']},require:()=>({contextBridge:{exposeInMainWorld:(_key,value)=>{bridge=value;}},ipcRenderer:{on:(key,fn)=>listeners.set(key,fn),removeListener(){},send(){}}})});
+  let received;bridge.onModel(value=>{received=value;});listeners.get(channel)({},safe);
+  assert.equal(received.items[0].resetsAt,null);assert.equal(primary(received).remaining,99);
+  const game=new GuardGame();game.setModel(received);assert.equal(game.available,true);assert.equal(game.quota,99);assert.equal(game.period,300);
+ }
+ for(const resetsAt of [undefined,0,-1,'2000000000000',NaN]){const invalid=structuredClone(value);invalid.items[0].resetsAt=resetsAt;assert.equal(safeGuardEntryModel(invalid),null);assert.equal(guardModel(invalid).items.length,0);assert.equal(primary(invalid),null);}
+});
+
+test('actual MAS wiring uses one shared entry and skips exhausted Codex for usable ZCode or WorkBuddy',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../main.js'),'utf8');
+ const functions=source.slice(source.indexOf('function canShowQuotaGuard()'),source.indexOf('\nasync function openCodexDetailThread'));
+ const zcodeWiring=source.slice(source.indexOf('  zcodeLink = createZcodeLink('),source.indexOf('    getCardSuppressed:',source.indexOf('  zcodeLink = createZcodeLink(')));
+ const callback=zcodeWiring.match(/getGuardEntry:\s*([^\n]+),\s*$/m)?.[1];assert.ok(callback);
+ const bounds={x:100,y:200,width:168,height:58},shows=[];let hides=0;
+ const zcode=quota(99,300);zcode.items[0].resetsAt=null;
+ let current=zcode,visible={codex:bounds,zcode:{...bounds,y:270},workbuddy:{...bounds,y:340}},codexEntry=false;
+ const context=vm.createContext({FIRST_RELEASE:true,settings:{quotaFunEnabled:true,codexEnabled:true,codexQuotaAlwaysVisible:true,zcodeEnabled:true,zcodeQuotaAlwaysVisible:true,workbuddyEnabled:true,workbuddyQuotaAlwaysVisible:true},
+  isQuitting:false,screenLocked:false,pomodoroQuiet:false,shortcutWindow:null,chatWindow:null,codexDetails:null,workbuddyDetails:null,apiBalanceDetails:null,
+  quotaGuardSource:'codex',quotaGuard:{isVisible:()=>false},quotaCardGroupTransition:null,quotaFunCarrier:null,quotaPopups:{isBlocked:()=>false},presentationSuppressed:()=>false,
+  petWindow:{isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>({x:100,y:100,width:80,height:80})},
+  quotaLabel:{isGuardEntryVisible:()=>codexEntry},quotaLabelModel:()=>({state:'ready',items:[{label:'Codex',remaining:0,windowMinutes:10080}]}),
+  zcodeLink:{getSnapshot:()=>current},buildZcodeQuotaLabelModel:value=>value,quotaCardConfig:()=>({order:['codex','zcode','workbuddy']}),
+  quotaCardControllers:()=>Object.fromEntries(Object.entries(visible).map(([id,bounds])=>[id,{getVisibleBounds:()=>bounds}])),quotaCardCollected:()=>false,
+  quotaFunEntry:{show:(_card,_area,_obstacles,_side,model)=>shows.push(model),hide:()=>hides++},quotaObstacleBounds:()=>null,edgeTuck:null,
+  screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:1000,height:700}})},require:name=>require(name.replace('./lib/','../lib/'))});
+ vm.runInContext(functions,context);
+ const inline=vm.runInContext('('+callback+')',context);
+ assert.equal(inline(),false,'MAS leaves the card-embedded entry off while the shared entry owns the interaction');
+ context.syncQuotaFunEntry();assert.equal(context.quotaFunCarrier,'zcode');assert.equal(shows.at(-1).sourceId,'zcode');assert.equal(primary(shows.at(-1)).remaining,99);
+ current={...zcode,state:'stale'};context.syncQuotaFunEntry();assert.equal(context.quotaFunCarrier,'workbuddy');assert.equal(shows.at(-1).practice,true);assert.equal(primary(shows.at(-1)).remaining,100);
+ visible={codex:bounds};context.syncQuotaFunEntry();assert.equal(context.quotaFunCarrier,'codex');assert.equal(primary(shows.at(-1)).remaining,0);
+ context.settings.quotaFunEnabled=false;context.syncQuotaFunEntry();assert.equal(context.quotaFunCarrier,null);assert.equal(hides,1);
+ context.FIRST_RELEASE=false;assert.equal(inline(),true,'website keeps the established ZCode card entry');codexEntry=true;assert.equal(inline(),false,'website Codex priority remains intact');
+});
 test('guard and preload preserve only the sanitized first ZCode bucket and never pass secrets', () => {
  const source = quota(); source.secret = 'DO_NOT_PASS'; source.items.push({ ...source.items[0], remaining: 90 });
  const safe = guardModel(source); assert.equal(safe.sourceId,'zcode'); assert.equal(safe.items.length,1);
