@@ -7,6 +7,23 @@ const { createOfficialChatSession } = require('../lib/zcode-official-chat-helper
 const { projectResult, projectNotification } = require('../lib/zcode-official-chat-wire');
 const { createOfficialFetch } = require('../lib/zcode-helper.cjs');
 const accountKey = 'a'.repeat(64);
+test('official async scope acquisition integrates with the real synchronous ChatCompanion client contract', async () => {
+  const {createMasZcodeOfficialChatClient}=require('../lib/mas-zcode-official-chat');
+  const {createChatCompanion}=require('../lib/chat-companion');let closed=0;
+  const rpc={start:async()=>{},readAccount:async()=>({authenticated:true,accountKey}),
+    listModels:async()=>[{id:'glm-5.3',displayName:'GLM-5.3',supportedReasoningEfforts:['none'],defaultReasoningEffort:'none',isDefault:true}],close:async()=>{closed++;}};
+  const chat=createChatCompanion({store:{read:()=>null,write(){}},workspaceDir:'/unused',
+    createRpc:options=>createMasZcodeOfficialChatClient(options,{createRpc:async()=>{await tick();return rpc;}})});
+  await chat.connect();assert.equal(chat.getState().connection,'ready');assert.equal(chat.getState().modelsStatus,'ready');
+  await chat.close();assert.equal(closed,1);
+});
+test('closing the immediate client during async acquisition retires the late original process without starting it',async()=>{
+  const {createMasZcodeOfficialChatClient}=require('../lib/mas-zcode-official-chat');let release,started=0,closed=0;
+  const client=createMasZcodeOfficialChatClient({}, {createRpc:()=>new Promise(resolve=>{release=resolve;})});
+  const starting=client.start(),rejected=assert.rejects(starting,{code:'CLOSED'});await tick();const closing=client.close();
+  const late={start:async()=>{started++;},close:async()=>{closed++;}};release(late);await rejected;await closing;
+  assert.equal(started,0);assert(closed>=1);await assert.rejects(client.readAccount(),{code:'CLOSED'});
+});
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'zcode-official-bridge-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));

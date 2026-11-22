@@ -59,7 +59,7 @@ test('Codex 额度格仍是 section，保留原卡片点击收起而不新增桶
   h.cells[0].children[0].click(); assert.deepEqual(h.calls, [['toggle']]);
 });
 
-test('ZCode 团队双周期主卡仅显示周期标签，真实套餐留在辅助说明和明细入口', () => {
+test('ZCode 个人与团队双周期主卡显示相同周期标签，真实套餐留在辅助说明和明细入口', () => {
   const rows = [300,10080].map((windowMinutes,index) => ({
     label:'Coding Plan 积分', planName:'Coding Plan · 团队',
     bucketId:`zcode:paid:CREDIT_LIMIT:${index ? '6:1' : '3:5'}`, windowMinutes,
@@ -70,7 +70,7 @@ test('ZCode 团队双周期主卡仅显示周期标签，真实套餐留在辅�
     assert.deepEqual(h.cells.map(cell=>cell.children[0].textContent),['5小时额度','周额度']);
     assert.ok(h.cells.every(cell=>cell.children[0].className.includes('v20-team-period-label')));
     assert.doesNotMatch(h.nodes['codex-expanded'].textContent,/Coding Plan|团队/);
-    assert.equal(h.nodes.summary.children[0].children[1].textContent,'额度');
+    assert.equal(h.nodes.summary.children[0].children[1].textContent,'5小时');
     h.cells.forEach((cell,index)=>{
       assert.equal(cell.children[0].children[0].className,'period-pill');
       assert.match(cell.children[0].title,/Coding Plan · 团队/);
@@ -82,7 +82,9 @@ test('ZCode 团队双周期主卡仅显示周期标签，真实套餐留在辅�
     const entry = h.nodes['codex-expanded'].children[2].children[0].children[0];
     entry.click(); assert.deepEqual(h.calls.at(-1),['detail','quota',rows[0].bucketId]);
   }
-  for (const overrides of [{planName:'Coding Plan'},{bucketId:'zcode:custom:credits'}, {windowMinutes:60}]) {
+  const personal=fixture({sourceId:'zcode',state:'ready',expanded:true,items:rows.map(row=>({...row,planName:'Coding Plan'}))});
+  assert.deepEqual(personal.cells.map(cell=>cell.children[0].textContent),['5小时额度','周额度']);
+  for (const overrides of [{bucketId:'zcode:custom:credits'}, {windowMinutes:60}]) {
     const row = {...rows[0],...overrides};
     const h = fixture({sourceId:'zcode',state:'ready',expanded:true,items:[row]});
     assert.deepEqual(h.cells[0].children[0].children.map(child=>child.textContent),[row.planName,row.label]);

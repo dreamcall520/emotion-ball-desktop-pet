@@ -320,15 +320,17 @@
       const sections = storeCodex || storeWorkbuddy || storeZcode ? [] : [{ ...category, heading: '启用联动', children: [enable] }];
       if (!storeCodex && !storeWorkbuddy && !storeZcode && enable.checked !== true) return sections.concat(apiSections);
       const children = category.children.filter(child => child !== enable && child !== apiGroup &&
-        (!storeCodex || !/\/codex-(?:status|tasks-open|trend-open)$/.test(child.id)));
+        (!storeCodex || !/\/codex-(?:status|tasks-open|trend-open)$/.test(child.id)) &&
+        (!storeZcode || !child.id.endsWith('/zcode-tasks')));
       if (category.id === 'workbuddy-settings') return sections.concat([
         { ...category, heading: '积分卡显示', children: children.filter(child => child.id === '/workbuddy-quota-visible') },
         ...(!storeWorkbuddy ? [{ ...category, heading: '积分趣味互动', children: children.filter(child => child.id === '/workbuddy-quota-fun') }] : [])
       ]);
+      const informationHeading = storeZcode ? '额度信息' : '额度与任务信息';
       const module = child => /\/codex-task-names$/.test(child.id) ? '任务提醒'
         : /\/(?:codex|zcode)-quota-fun$/.test(child.id) ? '额度趣味互动'
-        : /\/(?:codex-status|codex-tasks-open|codex-trend-open|zcode-quota-detail|zcode-trend|zcode-tasks|zcode-refresh)$/.test(child.id) ? '额度与任务信息' : '额度显示';
-      return sections.concat(['任务提醒', '额度显示', '额度趣味互动', '额度与任务信息'].map(heading => ({
+        : /\/(?:codex-status|codex-tasks-open|codex-trend-open|zcode-quota-detail|zcode-trend|zcode-tasks|zcode-refresh)$/.test(child.id) ? informationHeading : '额度显示';
+      return sections.concat(['任务提醒', '额度显示', '额度趣味互动', informationHeading].map(heading => ({
         ...category, heading, children: children.filter(child => module(child) === heading)
       })), apiSections);
     });
@@ -514,14 +516,19 @@
     section.append(el('h3','启用联动'));
     const row = el('div','',connected ? 'row store-connected-row' : 'row'), info = el('div'), identity = el('div','','store-codex-identity');
     const icon=el('img');icon.alt='';icon.src='assets/integrations/zcode.png';
-    const status=el('span',busy?'正在处理连接…':connected?'已连接':'未连接','store-codex-state');status.setAttribute('role','status');if(connected)status.dataset.connected='';
+    const statusText = connected && state.chat?.authorized !== true ? '额度已连接，聊天待授权'
+      : state.status === 'error' ? '查询异常' : state.status === 'needs-authorization' && state.enabled ? '需重新授权'
+      : state.status === 'connecting' ? '正在查询额度…' : connected ? '已连接' : '未连接';
+    const status=el('span',busy?'正在处理连接…':statusText,busy?'store-codex-progress':'store-codex-state');status.setAttribute('role','status');if(connected && state.chat?.authorized === true && state.status !== 'error')status.dataset.connected='';
     identity.append(icon,el('span','本机 ZCode','row-title'),status);info.append(identity);
-    if(!connected)info.append(el('p','连接后可查看当前官方账号的套餐额度和趋势。','description store-codex-summary'));
+    if(!connected)info.append(el('p','连接后可查看额度和趋势，并使用当前账号聊天。','description store-codex-summary'));
     const button=el('button',connected?'解除连接':'连接',connected?'action':'action store-codex-primary');button.type='button';button.disabled=busy;button.dataset.action='store-zcode-connection';
     button.onclick=()=>void manageStoreZcode(connected?'disconnect':'app');row.append(info,button);section.append(row);
     const note=zcodeNotice||(['error','needs-authorization'].includes(state.status)?state.message:null);
     if(note){const box=el('div','','store-codex-error');box.append(el('p',note,'description'));section.append(box);}
-    section.append(el('p',state.chat?.message || '聊天需完成当前官方账号的连接授权。','description'));
+    if (state.chat?.message && ['error','waiting-account','needs-authorization','needs-connection','account-changed'].includes(state.chat.status)) {
+      const chatNotice=el('p',state.chat.message,'description');chatNotice.setAttribute('role','status');section.append(chatNotice);
+    }
     if (connected && state.chat?.authorized !== true) {
       const chatRow=el('div','','row'),chatInfo=el('div');chatInfo.append(el('p','授权后可使用当前官方账号聊天。','description'));
       const chatButton=el('button','连接聊天','action');chatButton.type='button';chatButton.disabled=busy;chatButton.dataset.action='store-zcode-chat';
@@ -535,13 +542,23 @@
     return section;
   }
   function storeZcodeCapabilitySection(kind) {
-    const state=snapshot.firstReleaseZcodeConnection[kind]||{},tasks=kind==='tasks',authorized=tasks?state.authorized===true:state.enabled===true;
+    const connected=snapshot.firstReleaseZcodeConnection.connected===true,state=snapshot.firstReleaseZcodeConnection[kind]||{},tasks=kind==='tasks',authorized=tasks?connected&&state.authorized===true:state.enabled===true;
     const section=el('section','','group');section.dataset[tasks?'zcodeTasks':'zcodeNotifications']='';section.append(el('h3',tasks?'本机任务':'动画提醒'));
-    const row=el('div','','row'),info=el('div');info.append(el('p',tasks?'仅读任务名称、状态和更新时间，不读取聊天正文。':'任务处理中或有本轮新结果时，球球主动提醒。','description'));
-    info.append(el('p',tasks?'任务来自授权目录，可能包含其他账号留下的记录。':state.message||'仅观察本机新任务，不把停止事件当作完成。','description'));
+    const row=el('div','','row'),info=el('div'),identity=el('div','','store-codex-identity');
+    const healthy=connected&&state.enabled===true&&state.connected===true&&state.status==='ready';
+    const reminderStatus={'needs-authorization':'需授权','account-changed':'需重新授权','waiting-account':'待确认账号',enabling:'正在开启…',working:'正在处理…',error:'设置异常','cleanup-pending':'清理未完成'}[state.status];
+    const status=el('span',tasks?(authorized?'已授权':'未授权'):reminderStatus||(healthy?'已开启':state.enabled?'待连接':'未开启'),'store-codex-state');
+    status.setAttribute('role','status');if(tasks?authorized:healthy)status.dataset.connected='';identity.append(status);info.append(identity);
+    info.append(el('p',tasks?'查看本机 ZCode 任务，记录可能来自其他账号。':'任务处理时显示思考动画，有新结果时提醒你。','description'));
+    info.append(el('p',tasks?'只看名称、状态和更新时间，不读取聊天内容。':'确认本轮结束后再提醒，不把暂时停顿当成完成。','description'));
+    const ordinaryMessages=['动画提醒尚未启用。','已启用；新任务可触发处理中和本轮回复结束提醒。','已启用；本机新任务可触发处理中，确认本轮结束后提醒。'];
+    if(state.message&&(tasks?state.status==='error':!ordinaryMessages.includes(state.message))){const note=el('p',state.message,'description');note.setAttribute('role','status');info.append(note);}
     const button=el('button',authorized?(tasks?'撤销授权':'关闭提醒'):(tasks?'授权任务':'开启提醒'),'action');button.type='button';button.disabled=busy;button.dataset.action='store-zcode-'+kind;
     button.onclick=()=>void manageStoreZcode(tasks?(authorized?'tasks-revoke':'tasks-authorize'):(authorized?'notifications-disable':'notifications-enable'));
-    row.append(info,button);section.append(row);return section;
+    const actions=el('div','','store-codex-identity');
+    const taskEntry=tasks&&authorized?snapshot.entries.find(entry=>entry.id==='/zcode-menu')?.children.find(entry=>entry.id.endsWith('/zcode-tasks')):null;
+    if(taskEntry){const view=el('button','查看任务','action');view.type='button';view.dataset.action=taskEntry.id;view.disabled=busy||!taskEntry.enabled;view.onclick=()=>void act(taskEntry);actions.append(view);}
+    actions.append(button);row.append(info,actions);section.append(row);return section;
   }
   async function manageStoreZcode(action) {
     if(busy)return;busy=true;request++;

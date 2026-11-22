@@ -198,7 +198,7 @@
   const knownPlanKind = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) && item.periodKind === 'daily' ? 'trial'
     : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) && ['one_time', 'expiry'].includes(item.periodKind) ? 'event' : '';
   const shortPlanName = item => ({trial:'每日体验',event:'1024活动'}[knownPlanKind(item)] || item.planName);
-  const teamPeriodLabel = item => /^zcode:paid:(?:TOKENS_LIMIT|CREDIT_LIMIT):/.test(item.bucketId) && / · 团队$/.test(item.planName)
+  const paidPeriodLabel = item => /^zcode:paid:(?:TOKENS_LIMIT|CREDIT_LIMIT):/.test(item.bucketId)
     ? ({300:'5小时额度',10080:'周额度'}[item.windowMinutes] || '') : '';
   function displayItems(model) {
     if (model.sourceId !== 'zcode') return model.items;
@@ -512,7 +512,7 @@
       cell.replaceChildren(...(showHeading ? [node('div', 'v20-cell-label', '')] : []), valueRow, progress, reset);
       if (showHeading) {
         const heading = cell.children[0];
-        const teamPeriod = model.sourceId === 'zcode' ? teamPeriodLabel(item) : '';
+        const teamPeriod = model.sourceId === 'zcode' ? paidPeriodLabel(item) : '';
         heading.title = itemTitle(item);
         if (teamPeriod) heading.className += ' v20-team-period-label';
         heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName && !teamPeriod ? [node('span', 'v20-plan-name', shortPlanName(item))] : []),
@@ -665,7 +665,7 @@
       if (summaryItem) {
         const codexCollapsed = model.sourceId !== 'zcode' && model.size === 'compact' && !model.expanded;
         const caption = codexCollapsed ? codexPeriodCaption(summaryItem.windowMinutes)
-          : model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
+          : model.sourceId === 'zcode' ? (paidPeriodLabel(summaryItem).replace('5小时额度','5小时') || '额度') : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, remainingText(summaryItem.remaining, model.sourceId),
           caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'CX' : null, model.codexIconPreference, model.codexIconDark));
         if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';

@@ -53,6 +53,12 @@ test('partial live task evidence remains visible while the overall task count st
   ] } }, { action: 'tasks' }, now);
   assert.equal(model.tasks[0].state, 'active'); assert.equal(model.tasks[1].state, 'unknown'); assert.equal(model.activity.runningCount, null);
 });
+test('MAS device cache cannot become a verified running count and paid periods remain distinguishable',()=>{
+ const paid=[300,10080].map(minutes=>({...buckets[0],id:'zcode:paid:'+minutes,source:'coding-plan',meter:'model_usage',label:'Coding Plan 积分',windowMinutes:minutes}));
+ const model=buildZcodeDetailsModel({...snapshot,quota:{...snapshot.quota,windows:paid},tasks:{state:'connected',scope:'authorized-device-cache',items:[{id:'cached',state:'active',updatedAt:now}]}},{action:'quota'},now);
+ assert.deepEqual(model.items.map(item=>item.label),['5 小时额度','每周额度']);
+ assert.equal(model.activity.runningCount,null);
+});
 
 function forecastFixture({ remaining = 40, kind = 'daily', decline = 10 } = {}) {
   const row = { ...buckets[0], id: 'zcode:forecast:bucket', periodKind: kind,

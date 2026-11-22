@@ -5400,7 +5400,7 @@ async function bootstrap() {
       onModelSelection: zcodeChatModel => { settings = saveSettings(settingsFile, { ...settings, zcodeChatModel }); },
       createRpc: options => {
         fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
-        if (FIRST_RELEASE) return require('./lib/mas-zcode-official-chat').createMasZcodeOfficialChatRpc({...options,
+        if (FIRST_RELEASE) return require('./lib/mas-zcode-official-chat').createMasZcodeOfficialChatClient({...options,
           access:zcodeInstalledAccess,expectedAccountKey:zcodeChatConnection.getAuthorizedAccountKey(),
           getAuthorizedAccountKey:()=>zcodeChatConnection.getAuthorizedAccountKey(),getChatGrantEpoch:()=>zcodeChatConnection.getGeneration(),
           getWeatherContext:text=>weatherContext(currentWeatherState(),text)});

@@ -8,17 +8,23 @@ if (process.versions.electron && process.argv.includes('--zcode-settings-child')
     const win = new BrowserWindow({ width: 840, height: 820, show: false, webPreferences: { contextIsolation: false } });
     await win.loadFile(path.join(__dirname, '../global-settings.html'));
     const run = code => win.webContents.executeJavaScript(code);
-    await run(`window.zcodeActions=[];window.zcodeSnapshot={firstRelease:true,version:'zcode-settings',initialView:'/zcode-menu',
-      firstReleaseZcodeConnection:{enabled:false,connected:false,status:'disconnected',chat:{authorized:false,message:'聊天需完成当前官方账号的连接授权。'},tasks:{authorized:false},notifications:{enabled:false}},
+    await run(`window.zcodeActions=[];window.zcodeEntryActions=[];window.zcodeSnapshot={firstRelease:true,version:'zcode-settings',initialView:'/zcode-menu',
+      firstReleaseZcodeConnection:{enabled:false,connected:false,status:'disconnected',chat:{authorized:false,status:'disabled',message:'聊天需完成当前官方账号的连接授权。'},tasks:{authorized:false,status:'needs-authorization'},notifications:{enabled:false,connected:false,status:'disabled',message:'动画提醒尚未启用。'}},
       entries:[{id:'/zcode-menu',label:'ZCode 联动',children:[{id:'/zcode-menu/zcode-enabled',label:'启用 ZCode 联动',type:'checkbox',checked:false,enabled:true,actionable:true},
-        {id:'/zcode-menu/zcode-quota-visible',label:'显示 ZCode 额度',type:'checkbox',checked:true,enabled:true,actionable:true}]}]};
+        {id:'/zcode-menu/zcode-quota-visible',label:'显示 ZCode 额度',type:'checkbox',checked:true,enabled:true,actionable:true},
+        ...[['zcode-quota-detail','额度明细'],['zcode-trend','额度趋势'],['zcode-tasks','本机任务'],['zcode-refresh','刷新 ZCode 状态']].map(([id,label])=>({id:'/zcode-menu/'+id,label,enabled:true,actionable:true}))]}]};
       window.qiuqiuSettings={get:async()=>structuredClone(zcodeSnapshot),onNavigate:callback=>window.zcodeNavigate=callback,
+        act:async id=>{zcodeEntryActions.push(id);return {snapshot:structuredClone(zcodeSnapshot)}},
         zcodeConnection:async action=>{zcodeActions.push(action);const state=zcodeSnapshot.firstReleaseZcodeConnection;
-          if(action==='connect'){Object.assign(state,{enabled:true,connected:true,status:'ready'});state.chat={authorized:true,message:'已同意使用当前 ZCode 账号聊天。'}}
+          if(action==='connect'){Object.assign(state,{enabled:true,connected:true,status:'ready'});state.chat={authorized:true,status:'ready',message:'已同意使用当前 ZCode 账号聊天。'}}
           if(action==='disconnect'){Object.assign(state,{enabled:false,connected:false,status:'disconnected'});state.chat.authorized=false;}
           if(action==='tasks-authorize')state.tasks.authorized=true;if(action==='tasks-revoke')state.tasks.authorized=false;
-          if(action==='notifications-enable')state.notifications.enabled=true;if(action==='notifications-disable')state.notifications.enabled=false;
+          if(action==='notifications-enable')Object.assign(state.notifications,{enabled:true,connected:true,status:'ready',message:'已启用；本机新任务可触发处理中，确认本轮结束后提醒。'});
+          if(action==='notifications-disable')Object.assign(state.notifications,{enabled:false,connected:false,status:'disabled',message:'动画提醒尚未启用。'});
           return {status:action==='app'?'app-authorized':action==='account'?'stored':action==='disconnect'?'disconnected':'ready',snapshot:structuredClone(zcodeSnapshot)}}};true`);
+    // The HTML's first load precedes this isolated fixture API. Remove its
+    // partial brand canvas before running the renderer with the injected API.
+    await run(`document.getElementById('brand-pet').replaceChildren();true`);
     await run(fs.readFileSync(path.join(__dirname, '../global-settings-renderer.js'), 'utf8'));
     const until = expression => run(`new Promise((resolve,reject)=>{const end=Date.now()+3000;const next=()=>{if(${expression})resolve();else if(Date.now()>end)reject(Error('settings did not settle: '+${JSON.stringify(expression)}));else setTimeout(next,10)};next()})`);
     const click = async selector => { await until(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});return element&&!element.disabled})()`);return run(`window.zcodePriorConnection=document.querySelector('[data-action=store-zcode-connection]');document.querySelector(${JSON.stringify(selector)}).click()`); };
@@ -42,7 +48,14 @@ if (process.versions.electron && process.argv.includes('--zcode-settings-child')
     await until(`document.querySelector('[data-zcode-tasks]')`);
     assert.deepEqual(await run('zcodeActions'), ['app', 'account', 'connect']);
     assert.equal(await run(`document.querySelector('#content > section').classList.contains('store-connected-group')`), true);
-    assert.match(await run(`document.querySelector('#content').textContent`), /已同意使用当前 ZCode 账号聊天/);
+    assert.equal(await run(`document.querySelector('[data-action=store-zcode-connection]').textContent`), '解除连接');
+    assert.equal(await run(`document.querySelector('#content > section .store-codex-state').textContent`), '已连接');
+    assert.doesNotMatch(await run(`document.querySelector('#content').textContent`), /已同意使用当前 ZCode 账号聊天/);
+    assert.equal(await run(`document.querySelector('[data-zcode-tasks] .store-codex-state').textContent`), '未授权');
+    assert.equal(await run(`document.querySelector('[data-zcode-notifications] .store-codex-state').textContent`), '未开启');
+    assert.equal(await run(`document.querySelector('[data-action="/zcode-menu/zcode-tasks"]')===null`), true);
+    assert.doesNotMatch(await run(`document.querySelector('#content').textContent`), /额度与任务信息/);
+    assert.ok(await run(`[...document.querySelectorAll('#content h3')].some(node=>node.textContent==='额度信息')`));
     await click('[data-action=store-zcode-tasks]');
     await click('dialog[open] button[value=cancel]');
     await until(`!document.querySelector('dialog[open]')&&document.querySelector('[data-action=store-zcode-connection]')!==window.zcodePriorConnection`);
@@ -50,16 +63,49 @@ if (process.versions.electron && process.argv.includes('--zcode-settings-child')
     await click('[data-action=store-zcode-tasks]');
     await click('dialog[open] button[value=confirm]');
     await until(`document.querySelector('[data-action=store-zcode-tasks]').textContent==='撤销授权'`);
+    assert.equal(await run(`document.querySelector('[data-zcode-tasks] .store-codex-state').textContent`), '已授权');
+    assert.equal(await run(`document.querySelector('[data-zcode-tasks] .store-codex-state').hasAttribute('data-connected')`), true);
+    assert.equal(await run(`document.querySelector('[data-zcode-tasks] [data-action="/zcode-menu/zcode-tasks"]').textContent`), '查看任务');
+    await click('[data-action="/zcode-menu/zcode-tasks"]');
+    await until(`zcodeEntryActions.includes('/zcode-menu/zcode-tasks')&&!document.querySelector('[data-action=store-zcode-tasks]').disabled`);
     await click('[data-action=store-zcode-notifications]');
     assert.match(await run(`document.querySelector('dialog[open]').textContent`), /备份原设置/);
     await click('dialog[open] button[value=confirm]');
     await until(`document.querySelector('[data-action=store-zcode-notifications]').textContent==='关闭提醒'`);
+    assert.equal(await run(`document.querySelector('[data-zcode-notifications] .store-codex-state').textContent`), '已开启');
+    assert.equal(await run(`document.querySelector('[data-zcode-notifications] .store-codex-state').hasAttribute('data-connected')`), true);
     const aligned = await run(`['store-zcode-connection','store-zcode-tasks','store-zcode-notifications'].map(id=>document.querySelector('[data-action='+id+']').getBoundingClientRect().right)`);
     assert(aligned.every(value => Math.abs(value - aligned[0]) <= .5));
+    for(const [status,enabled,connected,expected]of [['needs-authorization',true,false,'需授权'],['account-changed',false,false,'需重新授权'],['waiting-account',true,false,'待确认账号'],['error',true,false,'设置异常'],['ready',true,false,'待连接'],['disabled',false,false,'未开启'],['ready',true,true,'已开启']]){
+      await run(`Object.assign(zcodeSnapshot.firstReleaseZcodeConnection.notifications,${JSON.stringify({status,enabled,connected,message:''})});window.dispatchEvent(new Event('focus'));true`);
+      await until(`document.querySelector('[data-zcode-notifications] .store-codex-state').textContent===${JSON.stringify(expected)}`);
+    }
+    await run(`zcodeSnapshot.firstReleaseZcodeConnection.chat={authorized:false,status:'account-changed',message:'ZCode 账号已变化，请重新同意启用聊天。'};window.dispatchEvent(new Event('focus'));true`);
+    await until(`document.querySelector('[data-action=store-zcode-chat]')`);
+    assert.match(await run(`document.querySelector('#content > section').textContent`), /额度已连接，聊天待授权/);
+    assert.match(await run(`document.querySelector('#content > section').textContent`), /账号已变化/);
+    await run(`zcodeSnapshot.firstReleaseZcodeConnection.chat={authorized:true,status:'ready',message:'已同意使用当前 ZCode 账号聊天。'};window.dispatchEvent(new Event('focus'));true`);
+    await until(`document.querySelector('[data-action=store-zcode-chat]')===null`);
+    for (const appearance of ['light','dark']) for(const width of [720,840,1080]){
+      win.setSize(width,820);await run(`document.documentElement.dataset.appearance=${JSON.stringify(appearance)};new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+      const layout=await run(`(()=>{const groups=[...document.querySelectorAll('#content > section')].slice(0,3);return {overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth||groups.some(group=>[...group.querySelectorAll('p')].some(p=>p.scrollWidth>p.clientWidth+1)),rights:['store-zcode-connection','store-zcode-tasks','store-zcode-notifications'].map(id=>document.querySelector('[data-action='+id+']').getBoundingClientRect().right)}})()`);
+      assert.equal(layout.overflow,false,JSON.stringify({appearance,width,layout}));assert(layout.rights.every(value=>Math.abs(value-layout.rights[0])<=.5));
+    }
+    if(process.env.QIUQIU_ZCODE_SETTINGS_CAPTURE_DIR){
+      win.setSize(840,820);await run(`document.documentElement.dataset.appearance='light';new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+      fs.mkdirSync(process.env.QIUQIU_ZCODE_SETTINGS_CAPTURE_DIR,{recursive:true});fs.writeFileSync(path.join(process.env.QIUQIU_ZCODE_SETTINGS_CAPTURE_DIR,'zcode-settings-connected.png'),(await win.webContents.capturePage()).toPNG());
+    }
+    for(const id of ['zcode-quota-detail','zcode-trend','zcode-refresh']){await click('[data-action="/zcode-menu/'+id+'"]');await until(`zcodeEntryActions.includes('/zcode-menu/${id}')&&!document.querySelector('[data-action=store-zcode-tasks]').disabled`);}
+    await click('[data-action=store-zcode-tasks]');await click('dialog[open] button[value=confirm]');
+    await until(`document.querySelector('[data-zcode-tasks] .store-codex-state').textContent==='未授权'`);
+    assert.equal(await run(`document.querySelector('[data-action="/zcode-menu/zcode-tasks"]')===null`),true);
+    await click('[data-action=store-zcode-notifications]');await click('dialog[open] button[value=confirm]');
+    await until(`document.querySelector('[data-zcode-notifications] .store-codex-state').textContent==='未开启'`);
     await click('[data-action=store-zcode-connection]');
     await click('dialog[open] button[value=confirm]');
     await until(`document.querySelector('[data-zcode-tasks]')===null`);
     assert.equal(await run(`zcodeSnapshot.firstReleaseZcodeConnection.connected`), false);
+    assert.equal(await run(`document.querySelector('[data-zcode-notifications]')===null`),true);
     win.destroy(); process.stdout.write('ZCODE_SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {

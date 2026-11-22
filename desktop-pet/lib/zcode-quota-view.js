@@ -91,7 +91,7 @@ function safeResults(snapshot) {
   });
 }
 function activity(snapshot) {
-  return { runningCount: snapshot?.enabled === true && snapshot.tasks?.state === 'connected'
+  return { runningCount: snapshot?.enabled === true && snapshot.tasks?.state === 'connected' && snapshot.tasks?.scope !== 'authorized-device-cache'
     ? safeTasks(snapshot).filter(row => ['active', 'waiting'].includes(row.state)).length : null,
   unreadCount: snapshot?.enabled === true && snapshot.history?.available === true ? safeResults(snapshot).filter(row => row.readAt === null).length : null };
 }
@@ -111,7 +111,10 @@ function buildZcodeQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const items = windows.slice(0, 64).filter(row => validBucket(row) && row.resetsAt > now).map(row => {
     const periodKind = ['one_time', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(row.periodKind) ? row.periodKind : 'unknown';
     const prefix = periodKind === 'one_time' ? '到期' : periodKind === 'daily' ? '刷新' : periodKind === 'unknown' ? '有效至' : '重置';
-    return { sourceId: 'zcode', id: row.id, bucketId: row.id, label: text(row.label) || 'ZCode',
+    const label = row.source === 'coding-plan' && row.meter !== 'tool_usage'
+      ? row.windowMinutes === 300 ? '5 小时额度' : row.windowMinutes === 10080 ? '每周额度' : text(row.label) || 'Coding Plan'
+      : text(row.label) || 'ZCode';
+    return { sourceId: 'zcode', id: row.id, bucketId: row.id, label,
       planName: text(row.planName) || 'ZCode', model: text(row.model), meter: text(row.meter),
       windowMinutes: row.windowMinutes, remaining: row.remaining, resetsAt: row.resetsAt,
       resetLabel: `${prefix} ${formatQuotaDate(row.resetsAt, row.windowMinutes, now)}`,

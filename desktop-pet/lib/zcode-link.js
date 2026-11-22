@@ -145,7 +145,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
         click: item => { const value = item.checked; item.checked = prefs.zcodeQuotaFunEnabled !== false; setPreference('zcodeQuotaFunEnabled', value); } },
       { id: 'zcode-quota-detail', label: '额度明细', enabled, click: () => openDetails('quota') },
       { id: 'zcode-trend', label: '额度趋势', enabled, click: () => openDetails('trend') },
-      { id: 'zcode-tasks', label: '进行中任务', enabled, click: () => openDetails('tasks') },
+      { id: 'zcode-tasks', label: '本机任务', enabled, click: () => openDetails('tasks') },
       { id: 'zcode-refresh', label: '刷新 ZCode 状态', enabled, click: () => { void service.refresh(); } }
     ] };
   }
