@@ -90,6 +90,25 @@ function safeResults(snapshot) {
       updatedAt: row.updatedAt, readAt: validTime(row.readAt) ? row.readAt : null }];
   });
 }
+function safeDeviceTasks(snapshot) {
+  if (snapshot?.enabled !== true || snapshot.tasks?.scope !== 'authorized-device-cache') return [];
+  const rows = new Map();
+  // The history is only an optional older fallback. Never use unread/read flags
+  // to infer a terminal; the current official turn cache wins for the same id.
+  const sources = [safeResults(snapshot),
+    Array.isArray(snapshot.tasks.items) ? snapshot.tasks.items.slice(0, 64) : [],
+    Array.isArray(snapshot.tasks.results) ? snapshot.tasks.results.slice(0, 64) : []];
+  for (const source of sources) for (const row of source) {
+    const id = text(row?.id); if (!id) continue;
+    const turnId = text(row.turnId) || null;
+    const projected = { id, title: text(row.title) || '未命名任务', turnId,
+      state: turnId && ['completed', 'failed', 'interrupted'].includes(row.state) ? row.state : 'unknown',
+      updatedAt: validTime(row.updatedAt) ? row.updatedAt : null };
+    const prior = rows.get(id);
+    if (!prior || (projected.updatedAt ?? -1) >= (prior.updatedAt ?? -1)) rows.set(id, projected);
+  }
+  return [...rows.values()].sort((a, b) => (b.updatedAt ?? -1) - (a.updatedAt ?? -1)).slice(0, 64);
+}
 function activity(snapshot) {
   return { runningCount: snapshot?.enabled === true && snapshot.tasks?.state === 'connected' && snapshot.tasks?.scope !== 'authorized-device-cache'
     ? safeTasks(snapshot).filter(row => ['active', 'waiting'].includes(row.state)).length : null,
@@ -146,7 +165,10 @@ function buildZcodeDetailsModel(snapshot, options = {}, now = Date.now()) {
     observedAt, quotaUpdatedAt: snapshot?.enabled === true && validTime(snapshot.quota?.updatedAt) && snapshot.quota.updatedAt <= now ? snapshot.quota.updatedAt : null,
     bucketId: selected?.bucketId || null, buckets: model.items, period: selected?.windowMinutes || null,
     appearance: ['light', 'dark', 'system'].includes(options?.appearance) ? options.appearance : 'system',
-    colorMode: text(options?.colorMode), tasks: safeTasks(snapshot), results: safeResults(snapshot).filter(row => row.readAt === null),
+    colorMode: text(options?.colorMode),
+    taskScope: snapshot?.enabled === true && snapshot.tasks?.scope === 'authorized-device-cache' ? 'authorized-device-cache' : null,
+    tasks: snapshot?.tasks?.scope === 'authorized-device-cache' ? safeDeviceTasks(snapshot) : safeTasks(snapshot),
+    results: safeResults(snapshot).filter(row => row.readAt === null),
     trend: { bucketId: selected?.bucketId || null, period: selected?.windowMinutes || null,
       periodStart: selected?.periodStart || null, windowMinutes: selected?.windowMinutes || null,
       resetsAt: selected?.resetsAt || null, resetLabel: selected?.resetLabel || '', samples,

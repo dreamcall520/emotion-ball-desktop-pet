@@ -170,7 +170,8 @@
     const accountHistory = object(source.accountResetHistory);
     const samples = array(trend.samples,6000).map(raw => { const sample = object(raw); return { at: timestamp(sample.at), remaining: percent(sample.remaining) }; }).filter(sample => sample.at !== null && sample.remaining !== null).sort((a,b) => a.at - b.at).filter((sample,index,list) => !index || sample.at > list[index-1].at);
     return { sourceId: zcode ? 'zcode' : 'codex', bucketId: bucketKey(source.bucketId), planName: clean(source.planName,100), action: actions.includes(source.action) ? source.action : 'tasks', appearance: ['light','dark'].includes(source.appearance) ? source.appearance : 'system',
-      state: source.state, ...(zcode && zcodeStatuses.has(source.statusCode) ? { statusCode: source.statusCode } : {}),
+      state: source.state, taskScope: zcode && source.taskScope === 'authorized-device-cache' ? 'authorized-device-cache' : null,
+      ...(zcode && zcodeStatuses.has(source.statusCode) ? { statusCode: source.statusCode } : {}),
       observedAt: timestamp(source.observedAt), quotaUpdatedAt: timestamp(source.quotaUpdatedAt),
       colorMode: ['standard','accessible'].includes(source.colorMode) ? source.colorMode : null, generation: count(source.generation), items,
       period: items.some(item => item.windowMinutes === source.period) ? source.period : items[0]?.windowMinutes || 300,
@@ -199,24 +200,27 @@
     svg.appendChild(path); wrap.appendChild(svg); return wrap;
   }
   function renderActivity(model) {
-    const results = model.action === 'results', list = results ? model.results : model.tasks.filter(task => ['active','waiting'].includes(task.state));
-    setTitle(results ? '待查看' : '进行中', results ? model.activity.unreadCount : model.activity.runningCount);
+    const results = model.action === 'results', deviceCache = model.sourceId === 'zcode' && model.taskScope === 'authorized-device-cache' && !results;
+    const list = results ? model.results : deviceCache ? model.tasks : model.tasks.filter(task => ['active','waiting'].includes(task.state));
+    setTitle(results ? '待查看' : deviceCache ? '本机任务' : '进行中', deviceCache ? null : results ? model.activity.unreadCount : model.activity.runningCount);
     if (!list.length) {
       const known = results ? model.activity.unreadCount : model.activity.runningCount;
-      content.replaceChildren(node('p','empty-state',known === null ? '暂未提供' : results ? '暂无待查看结果' : '暂无进行中任务'),note(results ? '仅记录球球观察到的新完成结果。' : '仅展示球球已观察到的任务状态。'));
+      content.replaceChildren(node('p','empty-state',deviceCache ? '授权目录中暂无任务记录' : known === null ? '暂未提供' : results ? '暂无待查看结果' : '暂无进行中任务'),
+        note(deviceCache ? '仅显示所选目录的记录，可能来自其他账号；进行中数量暂未知。' : results ? '仅记录球球观察到的新完成结果。' : '仅展示球球已观察到的任务状态。'));
       return;
     }
     const ul = node('ul','activity-list');
     ul.replaceChildren(...list.map(task => {
       const li = node('li',''), row = button('','activity-item',() => invoke('openThread',task.id,task.turnId || undefined));
       row.dataset.threadId = task.id;
-      if (model.sourceId === 'zcode') { row.title = '在 ZCode 中查看'; row.setAttribute('aria-label', `${task.title || '未命名会话'}，在 ZCode 中查看`); }
+      if (model.sourceId === 'zcode') { row.title = deviceCache ? '打开 ZCode' : '在 ZCode 中查看'; row.setAttribute('aria-label', `${task.title || '未命名会话'}，${row.title}`); }
       const copy = node('span','activity-copy');
-      copy.replaceChildren(node('b','',task.title || '未命名会话'),node('small','',taskStates[task.state]));
+      copy.replaceChildren(node('b','',task.title || '未命名会话'),node('small','',taskStates[task.state]+(deviceCache && task.updatedAt !== null ? ' · '+dateLabel(task.updatedAt) : '')));
       row.replaceChildren(icon(task.state),copy,...(results ? [node('span','unread-marker')] : []));
       li.appendChild(row); return li;
     }));
-    content.replaceChildren(ul,note(model.sourceId === 'zcode' ? '在 ZCode 中查看。这里只显示球球已观察到的状态。' : results ? '打开对应会话后，清除该条待查看标记。' : '点击任务，打开对应 Codex 会话。阶段仅显示已观察到的状态。'));
+    content.replaceChildren(ul,note(deviceCache ? '仅显示所选目录的最近记录，可能来自其他账号；进行中数量暂未知。点选记录可打开 ZCode。'
+      : model.sourceId === 'zcode' ? '在 ZCode 中查看。这里只显示球球已观察到的状态。' : results ? '打开对应会话后，清除该条待查看标记。' : '点击任务，打开对应 Codex 会话。阶段仅显示已观察到的状态。'));
   }
   function opportunityRows(entries, history = false) {
     const list = node('ul','opportunity-list');

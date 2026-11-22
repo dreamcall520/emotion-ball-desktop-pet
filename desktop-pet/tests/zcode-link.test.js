@@ -77,6 +77,19 @@ test('completed result rows keep the ZCode app entry and reject unknown IDs', as
   assert.deepEqual(opened, ['known']);
   f.link.close();
 });
+test('MAS local task rows open only IDs in the authorized displayed model, including terminal records',async()=>{
+ const opened=[];let scope='authorized-device-cache';
+ const f=fixture({openTask:async id=>opened.push(id),
+  createDetails:()=>({owns:e=>e.sender==='own',isVisible:()=>true,getAction:()=> 'tasks',close(){},destroy(){},update(){},setAlwaysOnTop(){}}),
+  createCompanion:()=>({getSnapshot:()=>({tasks:{scope,items:[{id:'current'}],results:[{id:'finished'}]}}),setEnabled:async()=>{},close(){}}),
+  buildDetails:()=>({tasks:[{id:'current'},{id:'finished'}]})});
+ await f.link.setEnabled(true);
+ f.ipcMain.emit('pet:zcode-details-thread',{sender:'own'},'finished');
+ f.ipcMain.emit('pet:zcode-details-thread',{sender:'other'},'finished');
+ f.ipcMain.emit('pet:zcode-details-thread',{sender:'own'},'unknown');
+ scope='not-authorized';f.ipcMain.emit('pet:zcode-details-thread',{sender:'own'},'finished');
+ assert.deepEqual(opened,['finished']);f.link.close();
+});
 
 
 test('disabling while consent is pending cancels it without enabling or saving true', async () => {

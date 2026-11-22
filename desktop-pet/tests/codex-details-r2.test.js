@@ -61,7 +61,7 @@ function renderer(search = '') {
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../codex-details-renderer.js'),'utf8'),{
     getComputedStyle:computedStyle, TrendCurve, TrendDaily, URLSearchParams, location:{search},
     document,
-    window: {getComputedStyle:computedStyle,TrendCurve,TrendDaily,petCreditBalanceText:formatBalance,petCodexDetails:{onModel(callback) {receive = callback;},resize() {},openDetail(...args) {calls.push(args);}},addEventListener() {},setTimeout() {return 1;},clearTimeout() {},requestAnimationFrame(callback) {callback();},matchMedia() {return {matches:false,addEventListener() {}};}}
+    window: {getComputedStyle:computedStyle,TrendCurve,TrendDaily,petCreditBalanceText:formatBalance,petCodexDetails:{onModel(callback) {receive = callback;},resize() {},openDetail(...args) {calls.push(args);},openThread(...args) {calls.push(['openThread',...args]);}},addEventListener() {},setTimeout() {return 1;},clearTimeout() {},requestAnimationFrame(callback) {callback();},matchMedia() {return {matches:false,addEventListener() {}};}}
   });
   return {root,nodes,calls,receive:value => receive(value)};
 }
@@ -82,6 +82,26 @@ test('ZCode team quota and trend empty states retain actionable reasons without 
   assert.equal(content.textContent, '暂未提供额度明细');
   h.receive({ sourceId: 'codex', state: 'disconnected', statusCode: 'ZCODE_TEAM_KEY_MISSING', action: 'trend', items: [] });
   assert.equal(content.textContent, '暂无周期额度');
+});
+test('MAS ZCode device task details display latest terminal records instead of an empty in-progress list',()=>{
+ const {buildZcodeDetailsModel}=require('../lib/zcode-quota-view'),now=Date.now(),h=renderer(),content=h.nodes['details-content'];
+ const model=buildZcodeDetailsModel({enabled:true,quota:{state:'connected',stale:false,updatedAt:now,windows:[]},tasks:{scope:'authorized-device-cache',state:'unknown',items:[{id:'unknown',title:'待确认记录',state:'unknown',updatedAt:now-1000}],
+   results:[{id:'native',title:'真实任务验证',turnId:'turn-stop',state:'interrupted',updatedAt:now}]},history:{available:true,windows:[],results:[]}},{action:'tasks'},now);
+ h.receive(model);assert.equal(h.nodes['details-title'].textContent,'本机任务');assert.equal(h.nodes['details-title'].querySelector('.activity-count'),null);
+ assert.equal(content.querySelectorAll('.activity-item').length,2);assert.match(content.textContent,/真实任务验证.*已中断.*待确认记录.*状态未提供/);
+ assert.match(content.textContent,/所选目录.*其他账号.*进行中数量暂未知/);assert.doesNotMatch(content.textContent,/暂无进行中任务|暂未提供/);
+ const row=content.querySelector('.activity-item');assert.equal(row.title,'打开 ZCode');row.events.click();assert.deepEqual(h.calls.at(-1),['openThread','native','turn-stop']);
+ h.receive({...model,tasks:[]});assert.equal(h.nodes['details-title'].textContent,'本机任务');assert.match(content.textContent,/授权目录中暂无任务记录/);
+});
+test('device cache layout requires both the ZCode source and explicit MAS task scope',()=>{
+ const h=renderer(),tasks=[{id:'live',title:'已确认进行中',state:'active'},{id:'done',title:'已结束记录',state:'completed'}];
+ for(const value of [{sourceId:'zcode'},{sourceId:'codex',taskScope:'authorized-device-cache'}]){
+   h.receive({...value,action:'tasks',tasks,activity:{runningCount:1}});
+   assert.equal(h.nodes['details-title'].textContent,'进行中1');assert.equal(h.nodes['details-content'].querySelectorAll('.activity-item').length,1);
+   assert.doesNotMatch(h.nodes['details-content'].textContent,/已结束记录|其他账号/);
+ }
+ h.receive({sourceId:'zcode',taskScope:'authorized-device-cache',action:'results',results:[{id:'done',title:'待查看结果',state:'completed'}],activity:{unreadCount:1}});
+ assert.equal(h.nodes['details-title'].textContent,'待查看1');assert.match(h.nodes['details-content'].textContent,/待查看结果/);
 });
 
 test('ZCode custom and failed quota states survive model, window, preload and details rendering', () => {

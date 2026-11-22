@@ -122,7 +122,8 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
   listen('pet:zcode-details-thread', async (event, id) => {
     if (!details.owns(event) || !details.isVisible() || getSuppressed() || !['tasks', 'results'].includes(details.getAction())) return;
     const snapshot = service.getSnapshot();
-    const rows = details.getAction() === 'results' ? snapshot.history?.results : snapshot.tasks?.items;
+    const rows = details.getAction() === 'results' ? snapshot.history?.results
+      : snapshot.tasks?.scope === 'authorized-device-cache' ? model('tasks').tasks : snapshot.tasks?.items;
     if (!Array.isArray(rows) || !rows.some(row => row.id === id)) return;
     try { await openTask(id); } catch (error) { report(error); }
   });

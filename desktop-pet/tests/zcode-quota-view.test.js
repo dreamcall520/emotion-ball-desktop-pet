@@ -59,6 +59,33 @@ test('MAS device cache cannot become a verified running count and paid periods r
  assert.deepEqual(model.items.map(item=>item.label),['5 小时额度','每周额度']);
  assert.equal(model.activity.runningCount,null);
 });
+test('MAS recent device tasks merge exact terminal records with current items and keep the latest turn per task',()=>{
+ const source={...snapshot,tasks:{state:'unknown',scope:'authorized-device-cache',items:[
+   {id:'same',title:'旧索引',state:'unknown',updatedAt:now-3000},
+   {id:'pending',title:'本机待确认',state:'active',liveVerified:true,updatedAt:now-500}
+ ],results:[{id:'same',title:'取消验证任务',turnId:'turn-cancelled',state:'interrupted',updatedAt:now-100,prompt:'PRIVATE_BODY',token:'PRIVATE_TOKEN'}]},
+ history:{available:true,windows:[],results:[{id:'same',title:'先前完成',turnId:'turn-completed',state:'completed',updatedAt:now-2000,readAt:null}]}};
+ const before=JSON.stringify(source),model=buildZcodeDetailsModel(source,{action:'tasks'},now);
+ assert.equal(model.taskScope,'authorized-device-cache');assert.equal(model.activity.runningCount,null);
+ assert.deepEqual(model.tasks.map(row=>[row.id,row.state,row.turnId]),[['same','interrupted','turn-cancelled'],['pending','unknown',null]]);
+ assert.equal(model.tasks[0].title,'取消验证任务');assert.doesNotMatch(JSON.stringify(model.tasks),/PRIVATE_BODY|PRIVATE_TOKEN/);assert.equal(JSON.stringify(source),before);
+});
+test('device task read flags never imply completion, and unknown cache states cannot be advertised as running',()=>{
+ const model=buildZcodeDetailsModel({...snapshot,tasks:{state:'connected',scope:'authorized-device-cache',items:[
+   {id:'unread',title:'仅未读标记',state:'unknown',unread:true,updatedAt:now},
+   {id:'active',state:'active',liveVerified:true,turnId:'turn-active',updatedAt:now-1}],
+   results:[{id:'no-turn',state:'completed',updatedAt:now-2},{id:'done',state:'completed',turnId:'turn-done',updatedAt:now-3}]}},{action:'tasks'},now);
+ assert.deepEqual(model.tasks.map(row=>row.state),['unknown','unknown','unknown','completed']);assert.equal(model.activity.runningCount,null);
+});
+test('MAS task merging stays scope-gated and does not change website task or result behavior',()=>{
+ const tasks={state:'connected',items:[{id:'live',title:'网站已确认',state:'active',liveVerified:true,updatedAt:now}],results:[{id:'cache-only',turnId:'turn-one',state:'completed',updatedAt:now}]};
+ const website=buildZcodeDetailsModel({...snapshot,tasks},{action:'tasks'},now);
+ assert.equal(website.taskScope,null);assert.deepEqual(website.tasks.map(row=>row.id),['live']);assert.equal(website.tasks[0].state,'active');
+ const device=buildZcodeDetailsModel({...snapshot,enabled:false,tasks:{...tasks,scope:'authorized-device-cache'}},{action:'tasks'},now);
+ assert.equal(device.taskScope,null);assert.deepEqual(device.tasks,[]);
+ const ungranted=buildZcodeDetailsModel({...snapshot,tasks:{scope:'not-authorized',items:[],results:[]}},{action:'tasks'},now);
+ assert.deepEqual(ungranted.tasks,[]);assert.equal(ungranted.taskScope,null);
+});
 
 function forecastFixture({ remaining = 40, kind = 'daily', decline = 10 } = {}) {
   const row = { ...buckets[0], id: 'zcode:forecast:bucket', periodKind: kind,

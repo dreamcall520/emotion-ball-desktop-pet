@@ -24,6 +24,16 @@ test('closing the immediate client during async acquisition retires the late ori
   const late={start:async()=>{started++;},close:async()=>{closed++;}};release(late);await rejected;await closing;
   assert.equal(started,0);assert(closed>=1);await assert.rejects(client.readAccount(),{code:'CLOSED'});
 });
+test('immediate close prevents acquisition and in-flight initialization receives an abort',async()=>{
+  const {createMasZcodeOfficialChatClient}=require('../lib/mas-zcode-official-chat');let created=0;
+  const immediate=createMasZcodeOfficialChatClient({}, {createRpc:async()=>{created++;throw Error('must not run');}});
+  const starting=immediate.start(),rejected=assert.rejects(starting,{code:'CLOSED'});await immediate.close();await rejected;assert.equal(created,0);
+  let entered,aborted=false;const ready=new Promise(resolve=>{entered=resolve;});
+  const inFlight=createMasZcodeOfficialChatClient({}, {createRpc:options=>new Promise((resolve,reject)=>{
+    entered();options.signal.addEventListener('abort',()=>{aborted=true;reject(Object.assign(Error('cancelled'),{code:'CANCELLED'}));},{once:true});
+  })});
+  const pending=inFlight.start(),cancelled=assert.rejects(pending,{code:'CANCELLED'});await ready;await inFlight.close();await cancelled;assert.equal(aborted,true);
+});
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'zcode-official-bridge-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));

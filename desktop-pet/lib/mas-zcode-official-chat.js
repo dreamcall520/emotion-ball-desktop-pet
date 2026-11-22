@@ -148,14 +148,19 @@ async function createMasZcodeOfficialChatRpc({ access, installedAppAccess = acce
 }
 // ChatCompanion requires an immediate client object; acquiring native scopes
 // and starting the original process remain asynchronous until start().
-function createMasZcodeOfficialChatClient(options, { createRpc = createMasZcodeOfficialChatRpc } = {}) {
+function createMasZcodeOfficialChatClient(options = {}, { createRpc = createMasZcodeOfficialChatRpc } = {}) {
   let pending, target, closed = false, closing;
+  const controller = new AbortController();
+  const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
   function load() {
     if (closed) return Promise.reject(fail('CLOSED'));
-    if (!pending) pending = Promise.resolve().then(() => createRpc({ ...options,
+    if (!pending) pending = Promise.resolve().then(() => {
+      if (closed) throw fail('CLOSED');
+      return createRpc({ ...options, signal,
       onNotification: packet => { if (!closed) options.onNotification?.(packet); },
       onDisconnect: code => { if (!closed) options.onDisconnect?.(code); }
-    })).then(async value => {
+      });
+    }).then(async value => {
       target = value;
       if (closed) { await value.close(); throw fail('CLOSED'); }
       return value;
@@ -164,7 +169,7 @@ function createMasZcodeOfficialChatClient(options, { createRpc = createMasZcodeO
   }
   const client = { source: 'installed-zcode-official', close() {
     if (closing) return closing;
-    closed = true;
+    closed = true; controller.abort();
     closing = (async () => {
       try { if (pending) await pending; }
       catch (error) { if (error.code === 'PROCESS_EXIT_UNCONFIRMED') throw error; }
