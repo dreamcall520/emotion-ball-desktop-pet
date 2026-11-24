@@ -59,8 +59,10 @@ app.whenReady().then(async () => {
   for (const theme of ['blue','green','purple']) for (const appearance of ['light','dark']) {
     await evaluate("Object.assign(document.documentElement.dataset,"+JSON.stringify({uiTheme:theme,appearance})+")");
     await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
-    const layout = await evaluate("(()=>{const e=document.getElementById('location-disclosure'),r=e.getBoundingClientRect(),b=document.getElementById('use-location').getBoundingClientRect();return {width:innerWidth,height:r.height,right:r.right,bottom:r.bottom,buttonTop:b.top,color:getComputedStyle(e).color,scrollWidth:document.documentElement.scrollWidth};})()");
+    const layout = await evaluate("(()=>{const e=document.getElementById('location-disclosure'),r=e.getBoundingClientRect(),b=document.getElementById('use-location').getBoundingClientRect();const style=getComputedStyle(e);return {width:innerWidth,height:r.height,lineHeight:parseFloat(style.lineHeight),right:r.right,bottom:r.bottom,buttonTop:b.top,color:style.color,disclosureWidth:e.clientWidth,disclosureScrollWidth:e.scrollWidth,scrollWidth:document.documentElement.scrollWidth};})()");
     assert.equal(layout.width, 390); assert(layout.height > 0); assert(layout.right <= 390); assert(layout.bottom <= layout.buttonTop);
+    assert(layout.height <= layout.lineHeight + 1, 'the concise disclosure must fit on one line');
+    assert(layout.disclosureScrollWidth <= layout.disclosureWidth + 1, 'the full disclosure must remain visible');
     assert(layout.scrollWidth <= 390, 'disclosure must not widen the weather window');
     layouts.push({ theme, appearance, ...layout });
     if (process.env.QIUQIU_WEATHER_PICKER_CAPTURE_DIR) {
