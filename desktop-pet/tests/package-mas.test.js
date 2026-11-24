@@ -192,7 +192,7 @@ test('权限模板仅包含所需主权限，child为sandbox+inherit，没有临
   const permissionRoot = path.join(__dirname, '../packaging/mas');
   const main = plist.parse(fs.readFileSync(path.join(permissionRoot, 'main.entitlements.plist'), 'utf8'));
   const child = plist.parse(fs.readFileSync(path.join(permissionRoot, 'child.entitlements.plist'), 'utf8'));
-  assert.deepEqual(Object.keys(main).sort(), ['com.apple.security.app-sandbox', 'com.apple.security.files.bookmarks.app-scope', 'com.apple.security.files.user-selected.read-write', 'com.apple.security.files.user-selected.executable', 'com.apple.security.network.client', 'com.apple.security.network.server', 'com.apple.security.personal-information.location'].sort());
+  assert.deepEqual(Object.keys(main).sort(), ['com.apple.security.app-sandbox', 'com.apple.security.files.bookmarks.app-scope', 'com.apple.security.files.user-selected.read-write', 'com.apple.security.network.client', 'com.apple.security.network.server', 'com.apple.security.personal-information.location'].sort());
   assert.deepEqual(child, { 'com.apple.security.app-sandbox': true, 'com.apple.security.inherit': true });
   assert.equal(main['com.apple.security.network.server'],true,'required for fixed-loopback bundled service and official login callback; native probe verifies denial without it');
   assert.equal(Object.keys(main).some(key => /temporary|camera|microphone|disable-library-validation/.test(key)), false);
@@ -255,10 +255,10 @@ test('错SHA、仅有Darwin归档或链接缓存明确拒绝，在任何编译�
  assert.deepEqual(validateMasRuntimeCache(config),{used:false,validated:false});
 });
 
-test('商店分发配置不携带厂商组件，动画提醒具备必要的本机监听和脚本写权限',()=>{
+test('商店分发不携带厂商组件或可执行写权限，动画提醒仅写配置',()=>{
  const config={...configFor(pkg,env).config,releaseProfile:'mas-first'};
  assert.deepEqual(packagerOptions('/root',config,'/stage','/icon').extraResource,[]);
- assert.equal(entitlementsFor(config).main['com.apple.security.files.user-selected.executable'],true,'required only for the approved local WorkBuddy hook');
+ assert.equal(Object.hasOwn(entitlementsFor(config).main,'com.apple.security.files.user-selected.executable'),false,'event filters remain inside the signed App');
  assert.equal(entitlementsFor(config).main['com.apple.security.network.server'],true,'required for the fixed loopback WorkBuddy metadata receiver');
 });
 
@@ -269,3 +269,21 @@ test('商店分发配置不携带厂商组件，动画提醒具备必要的本�
  for(const name of ['qiuqiu-codex','qiuqiu-workbuddy'])assert.equal(fs.existsSync(path.join(h.captured.app,'Contents/Resources',name)),false);
  for(const name of ['Frameworks/Fixture Helper.app','Library/LoginItems/Fixture Login Helper.app','Resources/app.asar.unpacked/desktop-pet/native/weather-location.node'])assert.ok(h.calls.some(([cmd,args])=>cmd==='codesign'&&args[0]==='--verify'&&args.at(-1)===path.join(h.captured.app,'Contents',name)));
  });
+
+// The App Review rejection must be checked against the actual signed payload,
+// not merely the template supplied to the signing tool.
+test('实际主App或Helper签名意外保留被拒可执行写权限时不得生成installer',async t=>{
+ for(const target of ['main','helper']){
+  const f=buildFixture(t),run=f.dep.command,plist=require('plist');
+  fs.writeFileSync(path.join(f.root,'package.json'),JSON.stringify({...pkg,qiuqiuReleaseProfile:'mas-first'}));
+  f.dep.command=(name,args)=>{
+   const result=run(name,args);
+   if(name==='codesign'&&args[0]==='--display'&&((args.at(-1)===f.captured.app)===(target==='main'))){
+    const rights=plist.parse(result);rights['com.apple.security.files.user-selected.executable']=true;return plist.build(rights);
+   }
+   return result;
+  };
+  await assert.rejects(buildMas({root:f.root,env:f.env},f.dep),{code:'MAS_ENTITLEMENTS_UNVERIFIED'});
+  assert.equal(f.calls.some(([name])=>name==='flat'),false,target+' must fail before installer');
+ }
+});

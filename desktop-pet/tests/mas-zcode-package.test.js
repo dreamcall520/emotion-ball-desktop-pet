@@ -8,7 +8,7 @@ const { prepareStaging } = require('../scripts/package-mac');
 const release = require('../scripts/mas-release-profile');
 const ROOT = path.resolve(__dirname, '../..');
 const MODULES = [
-  'mas-installed-zcode-access.js', 'mas-installed-zcode.js', 'zcode-helper.cjs',
+  'mas-bundled-event-script.js', 'mas-installed-zcode-access.js', 'mas-installed-zcode.js', 'zcode-helper.cjs',
   'mas-zcode-provider.js', 'mas-zcode-quota-connection.js', 'mas-zcode-event-installation.js',
   'mas-zcode-task-notifications.js', 'mas-zcode-turn-status.js', 'zcode-desktop-task-state.js',
   'zcode-desktop-event-bridge.js', 'zcode-account.js', 'zcode-usage.js', 'zcode-team-auth.js',

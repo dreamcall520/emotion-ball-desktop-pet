@@ -4,7 +4,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const {createHash,X509Certificate}=require('node:crypto');
 const {execFileSync}=require('node:child_process');
-const {marketingVersion,identities,argumentsFor}=require('./package-mas');
+const {marketingVersion,identities,argumentsFor,MAS_ASAR_UNPACK}=require('./package-mas');
 const release=require('./mas-release-profile');
 const ROOT=path.resolve(__dirname,'../..'),NAME='球球桌宠-商店沙盒开发候选';
 const REQUIRED=['MAS_DEV_BUNDLE_ID','MAS_DEV_TEAM_ID','MAS_DEV_PROFILE','MAS_DEV_SIGN_IDENTITY','MAS_DEV_BUILD_VERSION','MAS_DEV_ELECTRON_ZIP_DIR'];
@@ -69,16 +69,16 @@ function readCurrentDeviceId(run){
 function entitlementsFor(config){
  const rights={main:{'com.apple.security.app-sandbox':true,'com.apple.application-identifier':`${config.teamId}.${config.bundleId}`,
   'com.apple.developer.team-identifier':config.teamId,'com.apple.security.application-groups':[`${config.teamId}.${config.bundleId}`],
-  'com.apple.security.get-task-allow':true,'com.apple.security.files.user-selected.read-write':true,'com.apple.security.files.user-selected.executable':true,'com.apple.security.files.bookmarks.app-scope':true,
+  'com.apple.security.get-task-allow':true,'com.apple.security.files.user-selected.read-write':true,'com.apple.security.files.bookmarks.app-scope':true,
   'com.apple.security.network.client':true,'com.apple.security.network.server':true,'com.apple.security.personal-information.location':true},
   child:{'com.apple.security.app-sandbox':true,'com.apple.security.inherit':true}};
- // Also required by the opt-in WorkBuddy filter script and loopback receiver.
+ // Match distribution: fixed filters remain in the bundle, external files are JSON.
  return rights;
 }
 function packagerOptions(root,config,staging,icon,base={}){
  const options={...base,dir:staging,out:path.join(root,'dist/mas-development',config.arch),platform:'mas',arch:config.arch,name:NAME,
   appBundleId:config.bundleId,appVersion:config.version,buildVersion:config.buildVersion,electronVersion:config.electronVersion,electronZipDir:config.zipDir,
-  asar:{unpack:'**/*.node'},overwrite:true,prune:true,quiet:true,osxSign:false,
+  asar:{unpack:MAS_ASAR_UNPACK},overwrite:true,prune:true,quiet:true,osxSign:false,
   extraResource:release.resourceNames(config).map(name=>path.join(root,'desktop-pet/build',name)),
   extendInfo:{...base.extendInfo,ElectronTeamID:config.teamId}};
  delete options.osxNotarize;return options;
@@ -186,7 +186,7 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  for(const target of ownTargets)run('codesign',['--verify','--strict',target.path]);
  for(const child of (release.isFirstRelease(config)?ownTargets.filter(t=>t.entitlements).map(t=>t.path):[path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex'),path.join(appPath,'Contents/Frameworks',NAME+' Helper.app')])){let e;try{e=parse(run('codesign',['--display','--entitlements',':-',child]));}catch{throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}if(e['com.apple.security.app-sandbox']!==true||e['com.apple.security.inherit']!==true)throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}
  let probe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-runtime-probe']);probe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');}
- if(probe?.mas!==true||probe.ownContainer!==true||!(release.isFirstRelease(config)?['known','sandbox','userSelectedReadWrite','appScopeBookmarks']:['known','sandbox','userSelectedReadWrite','userSelectedExecutable','appScopeBookmarks']).every(k=>probe.capabilities?.[k]===true))throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');
+ if(probe?.mas!==true||probe.ownContainer!==true||probe.capabilities?.userSelectedExecutable!==false||!['known','sandbox','userSelectedReadWrite','appScopeBookmarks'].every(k=>probe.capabilities?.[k]===true))throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');
  let helperProbe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-helper-probe'],{timeout:90000});helperProbe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_HELPER_PROBE_FAILED');}
  if(release.isFirstRelease(config)){
   if(helperProbe?.mas!==true||helperProbe.ownContainer!==true||helperProbe.codexRuntime!=='user-installed'||helperProbe.bundled!==false||helperProbe.installedProviderAcceptance!==false||helperProbe.validationScope!=='app-sandbox-container-only'||helperProbe.modelRequestsSent!==false||helperProbe.originalCredentialsRead!==false)throw fail('MAS_DEV_HELPER_PROBE_FAILED');

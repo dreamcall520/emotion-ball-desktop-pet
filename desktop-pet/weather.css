@@ -66,38 +66,5 @@ footer{justify-content:space-between}.footer-meta{flex:none}.footer-actions{flex
 /* Collapse paints inside a fixed native host, then commits compact bounds once. */
 #quota-label[data-collapsing=true]{pointer-events:none;will-change:opacity,transform}
 
-#location-consent {
-  position:absolute; z-index:1; inset:0; margin:auto; height:fit-content;
-  width:min(336px,calc(100% - 24px)); max-height:calc(100% - 24px);
-  padding:20px; border:1px solid var(--detail-edge); border-radius:18px;
-  color:var(--detail-ink); background:var(--detail-solid-bg); box-shadow:0 7px 24px #22334d24;
-}
-body:has(#location-consent[open]) #quota-beam { filter:brightness(.88); }
-#location-consent h2 { margin:0 0 10px; font-size:16px; line-height:1.4; color:var(--detail-blue); }
-#location-consent p { margin:0; color:var(--detail-muted); font-size:12px; line-height:1.6; }
-#location-consent p + p { margin-top:6px; }
-.location-consent-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
-.location-consent-actions button {
-  min-width:64px; min-height:32px; padding:5px 12px; border:1px solid var(--detail-line); border-radius:9px;
-  background:var(--detail-count); font-size:12px;
-}
-.location-consent-actions .primary { background:#365fa3; color:#fff; }
-:root[data-ui-theme=green] #location-consent {
-  --detail-solid-bg:linear-gradient(145deg,#f6fcf9,#e6f3ed); --detail-blue:#386e5f;
-}
-:root[data-ui-theme=green][data-appearance=dark] #location-consent {
-  --detail-solid-bg:linear-gradient(145deg,#30483e,#20352e); --detail-blue:#b3decd;
-}
-:root[data-ui-theme=green] .location-consent-actions .primary { background:#3b7161; }
-:root[data-ui-theme=purple][data-color-mode=standard] #location-consent {
-  background:var(--detail-solid-bg); color:var(--text);
-}
-:root[data-ui-theme=purple][data-color-mode=standard] #location-consent p { color:var(--muted); }
-:root[data-color-mode=accessible] #location-consent {
-  background:var(--accessible-panel); color:var(--accessible-text); border-color:var(--accessible-line);
-}
-:root[data-color-mode=accessible] #location-consent h2,
-:root[data-color-mode=accessible] #location-consent p { color:var(--accessible-text); }
-:root[data-color-mode=accessible] .location-consent-actions .primary {
-  background:var(--accessible-blue); color:var(--accessible-on-accent);
-}
+#location-disclosure { margin:0 20px 8px; color:var(--detail-subtle); font-size:10px; line-height:1.7; }
+:root[data-color-mode=accessible] #location-disclosure { color:var(--accessible-text); }

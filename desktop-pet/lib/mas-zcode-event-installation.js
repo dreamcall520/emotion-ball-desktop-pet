@@ -2,6 +2,7 @@
 
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {createHash,randomUUID}=require('node:crypto');
+const {resolveBundledEventScript}=require('./mas-bundled-event-script');
 const PURPOSE='zcode-animation-hook-install-v1',KIND='qiuqiu-zcode-animation-reminders-v1';
 const EVENTS=new Set(['SessionStart','UserPromptSubmit','PreToolUse','PostToolUse','PostToolUseFailure','PermissionRequest','Stop']);
 const fail=code=>Object.assign(new Error(code),{code});
@@ -31,8 +32,8 @@ function patchHooks(bytes,hooks){
 }
 
 // This is a separate installation purpose. Read-only task-cache grants cannot
-// authorize its writes. It only changes our standard global command-hook rows;
-// no marketplace, installed-plugin registry, vendor executable or account file.
+// authorize its writes. External changes are JSON configuration and pairing
+// only. The fixed source-side filter remains inside the signed App bundle.
 function createMasZcodeEventInstallation({app,dialog,storage,assetRoot,mas=process.mas===true,
  home=()=>process.mas===true?os.userInfo().homedir:app.getPath('home'),io=fs}={}){
  if(!app||!dialog||!storage||!path.isAbsolute(assetRoot||''))throw new TypeError('app, dialog, dedicated storage and assetRoot required');
@@ -83,20 +84,22 @@ function createMasZcodeEventInstallation({app,dialog,storage,assetRoot,mas=proce
    typeof raw.token!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(raw.token))throw fail('INVALID_RECEIVER');
   return Buffer.from(JSON.stringify({version:1,enabled:true,endpoint:address.href,token:raw.token})+'\n');
  }
- function commandFor(loc){return ['/usr/bin/env',quote('ZCODE_PLUGIN_ROOT='+loc.own),'/bin/sh',quote(loc.script)].join(' ');}
+ function commandFor(loc,script=loc.script){return ['/usr/bin/env',quote('ZCODE_PLUGIN_ROOT='+loc.own),'/bin/sh',quote(script)].join(' ');}
  function entryFor(command){return{hooks:[{type:'command',command,timeout:2}]};}
  function hasCommand(entry,command){return object(entry)&&Array.isArray(entry.hooks)&&entry.hooks.some(hook=>hook?.command===command);}
  function settingsSnapshot(loc){const snap=snapshot(loc.root,loc.settings),value=json(snap.bytes);if(value.hooks!==undefined&&(!object(value.hooks)||value.hooks.events!==undefined&&!object(value.hooks.events)||value.hooks.enabled!==undefined&&typeof value.hooks.enabled!=='boolean'))throw fail('UNSUPPORTED_SETTINGS');patchHooks(snap.bytes,value.hooks);return{...snap,value};}
  function hooksAllowed(settings){if(settings.value.disableAllHooks===true||settings.value.allowManagedHooksOnly===true)throw fail('HOOKS_DISABLED_BY_POLICY');}
  function manifestSnapshot(loc){const snap=snapshot(loc.root,loc.manifest,32768);if(!snap.bytes)return{...snap,value:null};const value=json(snap.bytes);
-  if(value.kind!==KIND||value.command!==commandFor(loc)||!Array.isArray(value.events)||!value.events.length||value.events.some(event=>!EVENTS.has(event))||!Array.isArray(value.originalEventKeys)||typeof value.hooksOriginallyAbsent!=='boolean'||typeof value.eventsOriginallyAbsent!=='boolean'||typeof value.enabledOriginallyAbsent!=='boolean'||typeof value.settingsOriginallyAbsent!=='boolean'||value.originalEnabled!==null&&typeof value.originalEnabled!=='boolean'||
+  if(value.kind!==KIND||![1,2].includes(value.version)||value.version===2&&(typeof value.scriptPath!=='string'||!path.isAbsolute(value.scriptPath)||path.resolve(value.scriptPath)!==value.scriptPath||value.scriptPath.length>8192||/[\r\n\0]/.test(value.scriptPath)||!value.scriptPath.endsWith('/plugins/qiuqiu-zcode-task-events/scripts/emit-metadata.sh'))||value.command!==commandFor(loc,value.version===2?value.scriptPath:loc.script)||value.legacyScriptSha256!==undefined&&!/^[a-f0-9]{64}$/.test(value.legacyScriptSha256)||!Array.isArray(value.events)||!value.events.length||value.events.some(event=>!EVENTS.has(event))||!Array.isArray(value.originalEventKeys)||typeof value.hooksOriginallyAbsent!=='boolean'||typeof value.eventsOriginallyAbsent!=='boolean'||typeof value.enabledOriginallyAbsent!=='boolean'||typeof value.settingsOriginallyAbsent!=='boolean'||value.originalEnabled!==null&&typeof value.originalEnabled!=='boolean'||
    !/^[a-f0-9]{64}$/.test(value.scriptSha256||'')||!/^[a-f0-9]{64}$/.test(value.receiverSha256||''))throw fail('INSTALL_CONFLICT');return{...snap,value};
  }
  function assets(){
   const base=path.join(assetRoot,'plugins/qiuqiu-zcode-task-events'),script=snapshot(assetRoot,path.join(base,'scripts/emit-metadata.sh'),256*1024),hooks=json(snapshot(assetRoot,path.join(base,'hooks/hooks.json'),32768).bytes).hooks;
   if(!script.bytes||!object(hooks))throw fail('INSTALL_CONFLICT');const events=Object.keys(hooks);
   if(!events.includes('UserPromptSubmit')||!events.includes('Stop')||events.some(event=>!EVENTS.has(event)||!Array.isArray(hooks[event])))throw fail('INSTALL_CONFLICT');
-  return{script:script.bytes,events};
+  const bundled=resolveBundledEventScript({assetRoot,pluginName:'qiuqiu-zcode-task-events',io});
+  if(!bundled.bytes.equals(script.bytes))throw fail('INSTALL_CONFLICT');
+  return{script:bundled.bytes,scriptPath:bundled.path,events};
  }
  function backupSettings(loc,before){if(!before)return;mkdir(loc.root,loc.backups);const file=path.join(loc.backups,'config-before-'+randomUUID()+'.json');io.writeFileSync(file,before,{mode:0o600,flag:'wx'});}
  function transact(loc,changes,signal,owner){
@@ -110,8 +113,9 @@ function createMasZcodeEventInstallation({app,dialog,storage,assetRoot,mas=proce
   }if(incomplete)throw fail('ROLLBACK_INCOMPLETE');throw error;}
  }
  function intact(loc,manifest,settings){
-  if(!manifest.value)return false;const value=manifest.value,script=snapshot(loc.root,loc.script,256*1024),receiver=snapshot(loc.root,loc.receiver,8192),entry=entryFor(value.command);
-  if(!script.bytes||digest(script.bytes)!==value.scriptSha256||!receiver.bytes||digest(receiver.bytes)!==value.receiverSha256)return false;
+  if(!manifest.value)return false;const value=manifest.value,receiver=snapshot(loc.root,loc.receiver,8192),entry=entryFor(value.command);
+  if(value.version===1){const script=snapshot(loc.root,loc.script,256*1024);if(!script.bytes||digest(script.bytes)!==value.scriptSha256)return false;}
+  if(!receiver.bytes||digest(receiver.bytes)!==value.receiverSha256)return false;
   return settings.value.hooks?.enabled===true&&value.events.every(event=>Array.isArray(settings.value.hooks?.events?.[event])&&settings.value.hooks.events[event].filter(row=>stable(row)===stable(entry)).length===1);
  }
  async function operation(signal,run){
@@ -130,27 +134,40 @@ function createMasZcodeEventInstallation({app,dialog,storage,assetRoot,mas=proce
   await storage.save('zcode',grant);try{current();}catch(error){if(before)await storage.save('zcode',before);else await storage.remove('zcode');throw error;}
   epoch++;state.authorized=true;return{status:'stored'};
  });}
- function install({receiver,signal}={}){return queue(()=>operation(signal,(loc,owner)=>{
-  const source=assets(),settings=settingsSnapshot(loc),manifest=manifestSnapshot(loc),command=commandFor(loc),entry=entryFor(command),next=structuredClone(settings.value);
-  hooksAllowed(settings);
-  if(manifest.value&&!intact(loc,manifest,settings))throw fail('INSTALL_CONFLICT');
-  if(!manifest.value&&(snapshot(loc.root,loc.script).bytes||snapshot(loc.root,loc.receiver).bytes))throw fail('INSTALL_CONFLICT');
+ function cleanupLegacy(loc,record){
+  // Run only after JSON commits. A rollback must never write a legacy program.
+  try{const before=snapshot(loc.root,loc.script,256*1024);if(!before.bytes)return false;
+   const expected=record.version===1?record.scriptSha256:record.legacyScriptSha256;
+   if(!expected||digest(before.bytes)!==expected)return true;safe(loc.root,loc.script);io.unlinkSync(loc.script);
+   try{io.rmdirSync(path.dirname(loc.script));}catch{}return false;
+  }catch{return true;}
+ }
+ function register(loc,owner,{source,settings,manifest,receiver,signal}){
+  const command=commandFor(loc,source.scriptPath),entry=entryFor(command),next=structuredClone(settings.value);
   const previousHooks=settings.value.hooks||{},previousEvents=previousHooks.events||{};
-  // ZCode has one global enabled switch. Enabling ours must not turn on other
-  // configured hooks that the user has left disabled.
   if(previousHooks.enabled!==true&&Object.values(previousEvents).some(rows=>!Array.isArray(rows)||rows.length))throw fail('HOOKS_DISABLED_BY_POLICY');
   next.hooks=next.hooks||{};next.hooks.events=next.hooks.events||{};next.hooks.enabled=true;
-  for(const event of source.events){const rows=next.hooks.events[event]??[];if(!Array.isArray(rows))throw fail('UNSUPPORTED_SETTINGS');const own=rows.filter(row=>hasCommand(row,command));if(own.some(row=>stable(row)!==stable(entry))||own.length>1||(!manifest.value&&own.length))throw fail('INSTALL_CONFLICT');next.hooks.events[event]=own.length?rows:[...rows,entry];}
-  const privateReceiver=receiverBytes(receiver),record={kind:KIND,version:1,command,events:source.events,scriptSha256:digest(source.script),receiverSha256:digest(privateReceiver),hooksOriginallyAbsent:manifest.value?.hooksOriginallyAbsent??settings.value.hooks===undefined,eventsOriginallyAbsent:manifest.value?.eventsOriginallyAbsent??previousHooks.events===undefined,enabledOriginallyAbsent:manifest.value?.enabledOriginallyAbsent??previousHooks.enabled===undefined,originalEnabled:manifest.value?manifest.value.originalEnabled:previousHooks.enabled??null,settingsOriginallyAbsent:manifest.value?.settingsOriginallyAbsent??settings.bytes===null,originalEventKeys:manifest.value?.originalEventKeys||Object.keys(previousEvents)};
+  const events=next.hooks.events;
+  if(manifest.value&&manifest.value.command!==command){const previous=entryFor(manifest.value.command);
+   for(const event of manifest.value.events){events[event]=events[event].filter(row=>stable(row)!==stable(previous));if(!events[event].length&&!manifest.value.originalEventKeys.includes(event)&&!source.events.includes(event))delete events[event];}
+  }
+  for(const event of source.events){const rows=events[event]??[];if(!Array.isArray(rows))throw fail('UNSUPPORTED_SETTINGS');const own=rows.filter(row=>hasCommand(row,command));if(own.some(row=>stable(row)!==stable(entry))||own.length>1||(!manifest.value&&own.length)||manifest.value&&manifest.value.command!==command&&own.length)throw fail('INSTALL_CONFLICT');events[event]=own.length?rows:[...rows,entry];}
+  const privateReceiver=receiverBytes(receiver),record={kind:KIND,version:2,command,events:source.events,scriptPath:source.scriptPath,scriptSha256:digest(source.script),receiverSha256:digest(privateReceiver),hooksOriginallyAbsent:manifest.value?.hooksOriginallyAbsent??settings.value.hooks===undefined,eventsOriginallyAbsent:manifest.value?.eventsOriginallyAbsent??previousHooks.events===undefined,enabledOriginallyAbsent:manifest.value?.enabledOriginallyAbsent??previousHooks.enabled===undefined,originalEnabled:manifest.value?manifest.value.originalEnabled:previousHooks.enabled??null,settingsOriginallyAbsent:manifest.value?.settingsOriginallyAbsent??settings.bytes===null,originalEventKeys:manifest.value?.originalEventKeys||Object.keys(previousEvents)};
+  const legacy=manifest.value?.version===1?manifest.value.scriptSha256:manifest.value?.legacyScriptSha256;if(legacy)record.legacyScriptSha256=legacy;
   const nextSettings=stable(settings.value.hooks)===stable(next.hooks)?settings.bytes:patchHooks(settings.bytes,next.hooks);
-  transact(loc,[{file:loc.script,before:snapshot(loc.root,loc.script),after:source.script,mode:0o700},{file:loc.receiver,before:snapshot(loc.root,loc.receiver),after:privateReceiver,mode:0o600},{file:loc.manifest,before:manifest,after:Buffer.from(JSON.stringify(record)+'\n'),mode:0o600},{file:loc.settings,before:settings,after:nextSettings}],signal,owner);
-  state={...state,authorized:true,installed:true,status:'installed'};return{status:'installed',requiresNewSession:true};
+  transact(loc,[{file:loc.receiver,before:snapshot(loc.root,loc.receiver),after:privateReceiver,mode:0o600},{file:loc.manifest,before:manifest,after:Buffer.from(JSON.stringify(record)+'\n'),mode:0o600},{file:loc.settings,before:settings,after:nextSettings}],signal,owner);
+  const retainedModifiedFiles=cleanupLegacy(loc,record);
+  state={...state,authorized:true,installed:true,status:'installed'};return{status:'installed',requiresNewSession:true,retainedModifiedFiles};
+ }
+ function install({receiver,signal}={}){return queue(()=>operation(signal,(loc,owner)=>{
+  const source=assets(),settings=settingsSnapshot(loc),manifest=manifestSnapshot(loc);hooksAllowed(settings);
+  if(manifest.value&&!intact(loc,manifest,settings))throw fail('INSTALL_CONFLICT');
+  if(!manifest.value&&(snapshot(loc.root,loc.script).bytes||snapshot(loc.root,loc.receiver).bytes))throw fail('INSTALL_CONFLICT');
+  return register(loc,owner,{source,settings,manifest,receiver,signal});
  }));}
  function restore({receiver,signal}={}){return queue(()=>operation(signal,(loc,owner)=>{
   const settings=settingsSnapshot(loc),manifest=manifestSnapshot(loc);hooksAllowed(settings);if(!intact(loc,manifest,settings)){state.installed=false;return{status:'not-installed'};}
-  const privateReceiver=receiverBytes(receiver),record={...manifest.value,receiverSha256:digest(privateReceiver)};
-  transact(loc,[{file:loc.receiver,before:snapshot(loc.root,loc.receiver),after:privateReceiver,mode:0o600},{file:loc.manifest,before:manifest,after:Buffer.from(JSON.stringify(record)+'\n'),mode:0o600}],signal,owner);
-  state={...state,authorized:true,installed:true,status:'installed'};return{status:'installed',requiresNewSession:true};
+  return register(loc,owner,{source:assets(),settings,manifest,receiver,signal});
  }));}
  function uninstall({signal}={}){return queue(async()=>{
   const current=epoch;check(signal,current);
@@ -170,8 +187,9 @@ function createMasZcodeEventInstallation({app,dialog,storage,assetRoot,mas=proce
   if(record.hooksOriginallyAbsent&&next.hooks&&!Object.keys(next.hooks).length)delete next.hooks;
   const nextSettings=record.settingsOriginallyAbsent&&!Object.keys(next).length?null:patchHooks(settings.bytes,next.hooks);
   const changes=[{file:loc.settings,before:settings,after:nextSettings}];
-  for(const [file,expected]of [[loc.script,record.scriptSha256],[loc.receiver,record.receiverSha256]]){const before=snapshot(loc.root,file);if(before.bytes&&digest(before.bytes)===expected)changes.push({file,before,after:null});else if(before.bytes)retainedModifiedFiles=true;}
+  for(const [file,expected]of [[loc.receiver,record.receiverSha256]]){const before=snapshot(loc.root,file);if(before.bytes&&digest(before.bytes)===expected)changes.push({file,before,after:null});else if(before.bytes)retainedModifiedFiles=true;}
   changes.push({file:loc.manifest,before:manifest,after:null});transact(loc,changes,signal,owner);
+  retainedModifiedFiles=cleanupLegacy(loc,record)||retainedModifiedFiles;
   for(const directory of [path.dirname(loc.script),loc.own])try{io.rmdirSync(directory);}catch(error){if(!['ENOENT','ENOTEMPTY','EEXIST'].includes(error.code))throw error;}
   state={...state,installed:false,status:'uninstalled'};return{status:'uninstalled',retainedModifiedFiles};
   });
