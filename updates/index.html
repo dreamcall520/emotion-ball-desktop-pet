@@ -33,7 +33,7 @@
         else if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
       } catch (_error) {}
     </script>
-    <link rel="stylesheet" href="../styles.css?v=20261006-clean-anchor">
+    <link rel="stylesheet" href="../styles.css?v=20261127-menu-anchor">
     <link rel="stylesheet" href="../dark-theme.css?v=20261006-native">
     <link rel="stylesheet" href="../updates.css?v=20261101-compact-notes">
     <link rel="stylesheet" href="../feedback-entry.css?v=20261011-refine">
@@ -50,18 +50,19 @@
         <a href="../product/#install" target="_blank" rel="noopener">安装指南</a>
         <a href="./" aria-current="page">更新日志</a>
       </nav>
-      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">更多</button>
-      <nav class="site-nav" id="site-nav" aria-label="更多导航">
-        <a class="mobile-main-nav" href="../" target="_blank" rel="noopener">首页</a>
-        <a class="mobile-main-nav" href="../product/" target="_blank" rel="noopener">功能介绍</a>
-        <a class="mobile-main-nav" href="../product/#download" target="_blank" rel="noopener">下载球球</a>
-        <a class="mobile-main-nav" href="../product/#install" target="_blank" rel="noopener">安装指南</a>
-        <a class="mobile-main-nav" href="./" aria-current="page">更新日志</a>
-        <a href="../feedback/" target="_blank" rel="noopener">意见反馈</a>
-        <a href="../product/#privacy" target="_blank" rel="noopener">隐私</a>
-        <a href="../product/#license" target="_blank" rel="noopener">开源与许可</a>
-        <button class="theme-toggle theme-toggle-mobile" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
-      </nav>
+      <div class="nav-more">
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">更多</button>
+        <nav class="site-nav" id="site-nav" aria-label="更多导航">
+          <a class="mobile-main-nav" href="../" target="_blank" rel="noopener">首页</a>
+          <a class="mobile-main-nav" href="../product/" target="_blank" rel="noopener">功能介绍</a>
+          <a class="mobile-main-nav" href="../product/#download" target="_blank" rel="noopener">下载球球</a>
+          <a class="mobile-main-nav" href="../product/#install" target="_blank" rel="noopener">安装指南</a>
+          <a class="mobile-main-nav" href="./" aria-current="page">更新日志</a>
+          <a href="../feedback/" target="_blank" rel="noopener">意见反馈</a>
+          <a href="../product/#privacy" target="_blank" rel="noopener">隐私</a>
+          <button class="theme-toggle theme-toggle-mobile" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
+        </nav>
+      </div>
       <button class="theme-toggle" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
     </header>
     <main class="updates-layout" id="main" data-protect-copy>

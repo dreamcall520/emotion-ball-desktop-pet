@@ -46,7 +46,7 @@
         else if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
       } catch (_error) {}
     </script>
-    <link rel="stylesheet" href="../styles.css?v=20261006-clean-anchor">
+    <link rel="stylesheet" href="../styles.css?v=20261127-menu-anchor">
     <link rel="stylesheet" href="../motion-showcase.css?v=20261006-center">
     <link rel="stylesheet" href="../dark-theme.css?v=20261006-native">
     <link rel="stylesheet" href="../chat-showcase.css?v=20261006-native">
@@ -55,7 +55,7 @@
     <link rel="stylesheet" href="../review-refinements.css?v=20261006-type">
     <link rel="stylesheet" href="../native-demos.css?v=20261006-both-edges-floor">
     <link rel="stylesheet" href="../image-preview.css?v=20261006">
-    <link rel="stylesheet" href="../product-layout.css?v=20261116-app-store">
+    <link rel="stylesheet" href="../product-layout.css?v=20261127-menu-anchor">
     <link rel="stylesheet" href="../flow-border.css?v=20261007-nav-6-6">
     <link rel="stylesheet" href="../feedback-entry.css?v=20261011-refine">
 
@@ -73,25 +73,26 @@
         <a href="#customize">定制球球</a>
         <a href="#download" class="nav-download">下载</a>
       </nav>
-      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">更多</button>
-      <nav class="site-nav" id="site-nav" aria-label="更多导航">
-        <div class="mobile-primary-nav">
-          <a href="#features">桌面互动</a>
-          <a href="#notes">便签待办</a>
-          <a href="#codex">应用联动</a>
-          <a href="#chat">聊天</a>
-          <a href="#customize">定制球球</a>
-        </div>
-        <a href="#appearance">主题与配色</a>
-        <a href="#install">安装指南</a>
-        <a href="../thanks/">致谢与支持</a>
-        <a href="../shop/">球球商城</a>
-        <a href="../privacy/" target="_blank" rel="noopener">隐私说明</a>
-        <a href="../feedback/" target="_blank" rel="noopener">意见反馈</a>
-        <a href="../updates/" target="_blank" rel="noopener">更新日志</a>
-        <a href="#license">开源与许可</a>
-        <button class="theme-toggle theme-toggle-mobile" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
-      </nav>
+      <div class="nav-more">
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">更多</button>
+        <nav class="site-nav" id="site-nav" aria-label="更多导航">
+          <div class="mobile-primary-nav">
+            <a href="#features">桌面互动</a>
+            <a href="#notes">便签待办</a>
+            <a href="#codex">应用联动</a>
+            <a href="#chat">聊天</a>
+            <a href="#customize">定制球球</a>
+          </div>
+          <a href="#appearance">主题与配色</a>
+          <a href="#install">安装指南</a>
+          <a href="../thanks/">致谢与支持</a>
+          <a href="../shop/">球球商城</a>
+          <a href="../privacy/" target="_blank" rel="noopener">隐私说明</a>
+          <a href="../feedback/" target="_blank" rel="noopener">意见反馈</a>
+          <a href="../updates/" target="_blank" rel="noopener">更新日志</a>
+          <button class="theme-toggle theme-toggle-mobile" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
+        </nav>
+      </div>
     </header>
 
     <main id="main" data-protect-copy>

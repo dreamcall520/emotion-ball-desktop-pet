@@ -238,10 +238,17 @@ code {
   white-space: nowrap;
 }
 
+.nav-more {
+  position: relative;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+}
+
 .site-nav {
   position: absolute;
   top: calc(100% + 8px);
-  right: var(--page-gutter);
+  right: 0;
   display: none;
   grid-template-columns: 1fr;
   width: min(240px, calc(100vw - 32px));
