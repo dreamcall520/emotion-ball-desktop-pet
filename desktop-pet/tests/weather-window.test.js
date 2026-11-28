@@ -208,6 +208,17 @@ test('store weather waits for explicit consent before using current coordinates'
   assert.equal(JSON.parse(fs.readFileSync(f.filePath)).city.locationSharingAccepted, true);
 });
 
+test('store system location denial cannot persist sharing acceptance or send weather coordinates', async t => {
+ let locationCalls=0;
+ const f=fixture(t,{requireLocationConsent:true,locationBridge:{locate:async()=>{locationCalls++;throw Object.assign(Error('denied'),{code:'LOCATION_DENIED'});}}});
+ const before=fs.readFileSync(f.filePath,'utf8');
+ const result=await f.invoke('location',true);
+ assert.equal(result.locationError.code,'LOCATION_DENIED');assert.equal(locationCalls,1);
+ assert.equal(f.requests.length,0,'no coordinates may reach the weather provider after denial');
+ assert.equal(fs.readFileSync(f.filePath,'utf8'),before,'denial must not create a current city or sharing acceptance');
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(locationCalls,1,'denial is not automatically retried');
+});
+
 test('city settings opens its picker after first load even when the compact card is disabled', t => {
  const f=fixture(t);f.controller.setCardVisible(false);f.controller.openCity();const win=f.controller.getWindow();
  assert.equal(win.isVisible(),true);assert.equal(win.getBounds().width,390);

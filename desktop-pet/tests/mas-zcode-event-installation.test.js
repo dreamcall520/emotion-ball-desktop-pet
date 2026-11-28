@@ -47,7 +47,7 @@ test('unsafe paths, arbitrary receiver addresses and cancelled authorization can
  await f.installer.ensure({interactive:true});await assert.rejects(f.installer.install({receiver:{...receiver,endpoint:'https://example.com/events'}}),{code:'INVALID_RECEIVER'});assert.equal(fs.existsSync(f.settings),false);
  const outside=path.join(f.base,'outside.json');fs.writeFileSync(outside,'{}');fs.symlinkSync(outside,f.settings);await assert.rejects(f.installer.install({receiver}),{code:'UNSAFE_PATH'});assert.equal(fs.readFileSync(outside,'utf8'),'{}');
 });
-test('a failed final settings commit rolls back script/pairing registration and preserves the exact original settings',async t=>{
+test('a failed final settings commit rolls back pairing registration and preserves the exact original settings',async t=>{
  let target,failed=false;const io=new Proxy(fs,{get(base,key){if(key==='renameSync')return(from,to)=>{if(to===target&&!failed){failed=true;throw Object.assign(Error('synthetic I/O failure'),{code:'EIO'});}return fs.renameSync(from,to);};return base[key];}});
  const f=await fixture(t,{io});target=f.settings;const original='{"hooks":{"enabled":true,"events":{"Stop":[]}},"keep":true}\n';fs.writeFileSync(target,original);await f.installer.ensure({interactive:true});
  await assert.rejects(f.installer.install({receiver}));assert.equal(fs.readFileSync(target,'utf8'),original);assert.equal(fs.existsSync(path.join(f.owned,'receiver.json')),false);assert.equal(fs.existsSync(path.join(f.owned,'scripts/emit-metadata.sh')),false);
@@ -76,13 +76,13 @@ test('uninstall removes our command from a user-extended row without deleting th
  const settings=JSON.parse(fs.readFileSync(f.settings));settings.hooks.events.Stop[0].matcher='*';settings.hooks.events.Stop[0].hooks.push({type:'command',command:'echo user-added'});fs.writeFileSync(f.settings,JSON.stringify(settings));
  await f.installer.uninstall();const after=JSON.parse(fs.readFileSync(f.settings));assert.deepEqual(after.hooks.events.Stop,[{matcher:'*',hooks:[{type:'command',command:'echo user-added'}]}]);
 });
-test('repeated authorize/install/restore and disable/re-enable use three fixed files and never duplicate hooks or other plugin settings',async t=>{
+test('repeated authorize/install/restore and disable/re-enable use two fixed JSON files and never duplicate hooks or other plugin settings',async t=>{
  const f=await fixture(t),original={theme:'dark',enabledPlugins:{'other@market':true},hooks:{enabled:true,events:{Stop:[{hooks:[{type:'command',command:'echo keep'}]}]}}};
  fs.writeFileSync(f.settings,JSON.stringify(original));fs.mkdirSync(path.join(f.root,'plugins'));const plugins=path.join(f.root,'plugins/installed_plugins.json');fs.writeFileSync(plugins,'unrelated plugin bytes');
  const files=directory=>fs.existsSync(directory)?fs.readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(path.join(directory,entry.name)).map(name=>entry.name+'/'+name):[entry.name]).sort():[];
  const diskSnapshot=()=>Object.fromEntries(files(f.root).map(name=>[name,fs.readFileSync(path.join(f.root,name),'hex')]));
  const countBackups=()=>files(path.join(f.root,'.qiuqiu-animation-backups')).length;
- const fixedFiles=['installation.json','receiver.json','scripts/emit-metadata.sh'];
+ const fixedFiles=['installation.json','receiver.json'];
  const assertSingleHooks=()=>{const settings=JSON.parse(fs.readFileSync(f.settings));const record=JSON.parse(fs.readFileSync(path.join(f.owned,'installation.json')));
   for(const event of record.events)assert.equal(settings.hooks.events[event].flatMap(entry=>entry.hooks||[]).filter(hook=>hook.command===record.command).length,1,event);
   assert.deepEqual(settings.enabledPlugins,original.enabledPlugins);assert.deepEqual(settings.hooks.events.Stop[0],original.hooks.events.Stop[0]);assert.equal(fs.readFileSync(plugins,'utf8'),'unrelated plugin bytes');

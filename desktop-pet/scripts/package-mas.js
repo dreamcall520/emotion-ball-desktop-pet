@@ -8,6 +8,8 @@ const { execFileSync } = require('node:child_process');
 const DEFAULT_ROOT = path.resolve(__dirname, '../..');
 const release = require('./mas-release-profile');
 const APP_NAME = '球球桌宠';
+// Fixed filters stay in the signed App; external integration writes only JSON.
+const MAS_ASAR_UNPACK = '{**/*.node,**/desktop-pet/assets/workbuddy-desktop-hook/plugins/qiuqiu-task-events/scripts/emit-metadata.sh,**/desktop-pet/assets/zcode-desktop-hook/plugins/qiuqiu-zcode-task-events/scripts/emit-metadata.sh}';
 // Explicit cache opt-in is pinned to a separately verified official MAS archive.
 const MAS_RUNTIME_SHA256 = Object.freeze({ '43.4.1/arm64': '84e562785040616029df3d562f3193c8b3953948a095d8b8611c990b45a69b98' });
 const REQUIRED = ['MAS_BUNDLE_ID', 'MAS_TEAM_ID', 'MAS_PROFILE', 'MAS_SIGN_IDENTITY', 'MAS_INSTALLER_IDENTITY', 'MAS_BUILD_VERSION'];
@@ -102,11 +104,11 @@ function entitlementsFor(config) {
   const rights = { main: { 'com.apple.security.app-sandbox': true,
     'com.apple.application-identifier': `${config.teamId}.${config.bundleId}`,
     'com.apple.developer.team-identifier': config.teamId, 'com.apple.security.application-groups': [`${config.teamId}.${config.bundleId}`],
-    'com.apple.security.files.user-selected.read-write': true, 'com.apple.security.files.user-selected.executable': true,
+    'com.apple.security.files.user-selected.read-write': true,
     'com.apple.security.files.bookmarks.app-scope': true, 'com.apple.security.network.client': true,
     'com.apple.security.network.server': true, 'com.apple.security.personal-information.location': true, 'com.apple.security.personal-information.calendars': true },
     child: { 'com.apple.security.app-sandbox': true, 'com.apple.security.inherit': true } };
-  // Also required by the opt-in WorkBuddy filter script and loopback receiver.
+  // User-approved integrations write JSON only; the receiver binds to loopback.
   return rights;
 }
 function distributionEntry() { return "'use strict';\nif(process.mas!==true){process.stderr.write('MAS_RUNTIME_REQUIRED\\n');process.exit(2);}else require('./desktop-pet/main.js');\n"; }
@@ -139,7 +141,7 @@ function packagerOptions(root, config, staging, icon, baseOptions = {}) {
     name: APP_NAME, platform: 'mas', arch: config.arch, appBundleId: config.bundleId,
     appVersion: config.marketingVersion, buildVersion: config.buildVersion, electronVersion: config.electronVersion,
     appCategoryType: 'public.app-category.entertainment', icon,
-    asar: { unpack: '**/*.node' }, overwrite: true, prune: true, quiet: true,
+    asar: { unpack: MAS_ASAR_UNPACK }, overwrite: true, prune: true, quiet: true,
     extraResource: release.resourceNames(config).map(name => path.join(root, 'desktop-pet/build', name)),
     extendInfo: { ...baseOptions.extendInfo, ElectronTeamID: config.teamId },
     // Sign explicitly after staging every helper; refresh signed binary hashes
@@ -232,7 +234,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   for(const file of [appPath,...(release.isFirstRelease(config)?ownTargets.filter(t=>t.entitlements).map(t=>t.path):[codexBinary,path.join(appPath,'Contents/Frameworks',APP_NAME+' Helper.app')])]) {
     let actual; try { actual=parseSealed(run('codesign',['--display','--entitlements',':-',file])); } catch (_) { throw failure('MAS_ENTITLEMENTS_UNVERIFIED'); }
     const expected=file===appPath?rights.main:rights.child;
-    if(Object.entries(expected).some(([key,value])=>JSON.stringify(actual?.[key])!==JSON.stringify(value))||['get-task-allow','com.apple.security.get-task-allow'].some(key=>actual?.[key]===true))throw failure('MAS_ENTITLEMENTS_UNVERIFIED');
+    if(!actual||Object.keys(actual).length!==Object.keys(expected).length||Object.entries(expected).some(([key,value])=>JSON.stringify(actual?.[key])!==JSON.stringify(value))||['get-task-allow','com.apple.security.get-task-allow'].some(key=>actual?.[key]===true))throw failure('MAS_ENTITLEMENTS_UNVERIFIED');
   }
   const pkgPath = path.join(options.out, `Qiuqiu-${config.marketingVersion}-${config.buildVersion}-mas-${config.arch}.pkg`);
   await flatAsync({ app: appPath, pkg: pkgPath, platform: 'mas', identity: config.installerIdentity,
@@ -264,4 +266,4 @@ if (require.main === module) {
     } else process.stdout.write(JSON.stringify(await buildMas({ arch }), null, 2) + '\n');
   })().catch(error => { process.stderr.write(`${error?.code?.startsWith('MAS_') ? error.code : 'MAS_BUILD_FAILED'}\n`); process.exitCode = 2; });
 }
-module.exports = { marketingVersion, configFor, planFor, identities, validateProfile, validateCertificate, installerCertificate, entitlementsFor, distributionEntry, validateMasRuntimeCache, packagerOptions, buildMas, argumentsFor };
+module.exports = { MAS_ASAR_UNPACK, marketingVersion, configFor, planFor, identities, validateProfile, validateCertificate, installerCertificate, entitlementsFor, distributionEntry, validateMasRuntimeCache, packagerOptions, buildMas, argumentsFor };

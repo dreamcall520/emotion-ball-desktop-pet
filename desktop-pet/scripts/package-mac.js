@@ -229,6 +229,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/zcode-desktop-task-state.js',
     'desktop-pet/lib/mas-workbuddy-quota-connection.js',
     'desktop-pet/lib/mas-workbuddy-task-access.js',
+    'desktop-pet/lib/mas-bundled-event-script.js',
     'desktop-pet/lib/mas-workbuddy-event-installation.js',
     'desktop-pet/lib/mas-workbuddy-task-notifications.js',
     'desktop-pet/lib/mas-workbuddy-chat-connection.js',

@@ -68,3 +68,29 @@ test('a late location loading acknowledgement cannot replace already delivered l
  assert.equal(f.element('refresh').disabled, false);
  assert.equal(f.element('city-picker').hidden, true);
 });
+
+test('store current-location action reaches system permission once and leaves manual search available after denial', async () => {
+ const f=fixture(),requests=[];let complete;
+ f.api.useLocation=confirmed=>{requests.push(confirmed);return new Promise(resolve=>{complete=resolve;});};
+ f.publish({status:'unconfigured',city:null,requireLocationConsent:true});f.choose();
+ assert.equal(requests.length,0,'opening the location choices must not request device location');
+ assert.equal(f.element('location-disclosure').hidden,false,'sharing explanation is visible before the action');
+ const pending=f.element('use-location').onclick();
+ assert.deepEqual(requests,[true],'explicit action directly reaches the system request without another prompt');
+ f.element('use-location').onclick();assert.equal(requests.length,1,'pending system request is not repeated');
+ complete({locationError:{code:'LOCATION_DENIED'}});await pending;await flush();
+ assert.equal(requests.length,1,'denial never causes an automatic retry');
+ assert.equal(f.element('search-status').textContent,'定位未授权');
+ assert.equal(f.element('city-picker').hidden,false);
+ assert.equal(f.element('use-location').disabled,false);
+ f.element('close-picker').onclick();f.choose();assert.equal(requests.length,1,'closing and reopening choices must not request again');
+});
+
+test('unconfigured weather offers location choices before any device-location request', () => {
+ const f=fixture(),requests=[];f.api.useLocation=confirmed=>{requests.push(confirmed);return new Promise(()=>{});};
+ f.publish({status:'unconfigured',city:null,requireLocationConsent:true});f.open();
+ f.element('empty-retry').onclick();
+ assert.equal(requests.length,0,'empty weather must not bypass the city sharing disclosure');
+ assert.equal(f.element('empty-retry').textContent,'选择位置');
+ assert.equal(f.element('city-picker').hidden,false);assert.equal(f.element('location-disclosure').hidden,false);
+});
