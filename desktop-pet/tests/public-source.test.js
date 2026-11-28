@@ -47,6 +47,12 @@ test('公开源码保留六形态、六瓣配置与内嵌主体，打包文件�
       [...text.matchAll(/(?:src|href)=["']([^"']+)["']/g)].filter(match => !/^(?:\w+:|#)/.test(match[1]));
     for (const [, ref] of refs) {
       const local = path.resolve(path.dirname(file), ref);
+      // MAS packaging compiles and stages this optional macOS 14 module before ASAR creation.
+      if (relative === 'desktop-pet/lib/native-widget-reload.js' && ref === '../native/widget-center.node') {
+        assert.match(read('desktop-pet/scripts/package-native-widgets.js'), /stageWidgetModule/);
+        assert.match(read('desktop-pet/scripts/build-native-widgets.js'), /function buildWidgetCenter/);
+        continue;
+      }
       assert.ok(fs.existsSync(local) || fs.existsSync(`${local}.js`), `${relative} 缺少 ${ref}`);
     }
   }
