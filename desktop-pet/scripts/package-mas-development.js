@@ -70,7 +70,7 @@ function entitlementsFor(config){
  const rights={main:{'com.apple.security.app-sandbox':true,'com.apple.application-identifier':`${config.teamId}.${config.bundleId}`,
   'com.apple.developer.team-identifier':config.teamId,'com.apple.security.application-groups':[`${config.teamId}.${config.bundleId}`],
   'com.apple.security.get-task-allow':true,'com.apple.security.files.user-selected.read-write':true,'com.apple.security.files.user-selected.executable':true,'com.apple.security.files.bookmarks.app-scope':true,
-  'com.apple.security.network.client':true,'com.apple.security.network.server':true,'com.apple.security.personal-information.location':true},
+  'com.apple.security.network.client':true,'com.apple.security.network.server':true,'com.apple.security.personal-information.location':true,'com.apple.security.personal-information.calendars':true},
   child:{'com.apple.security.app-sandbox':true,'com.apple.security.inherit':true}};
  // Also required by the opt-in WorkBuddy filter script and loopback receiver.
  return rights;
@@ -153,6 +153,7 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  (deps.validateBuildTools||require('./mas-development-tools').validateMasDevelopmentTools)({run,io});
  const mac=deps.mac||require('./package-mac'),makeIcon=deps.makeIcon||require('./make-icon').makeIcon;
  (deps.buildWeatherLocation||require('./build-weather-location').buildWeatherLocation)(root);
+ (deps.buildCalendarEvents||require('./build-calendar-events').buildCalendarEvents)(root,{targetArch:config.arch});
  (deps.buildPluginHost||require('./build-plugin-host').buildPluginHost)(root);
  const icon=makeIcon(root),staging=mac.prepareStaging(root,path.join(root,'desktop-pet/build/mas-development-staging',config.arch),{pluginNative:true});
  const staged=JSON.parse(io.readFileSync(path.join(staging,'package.json'),'utf8'));release.trimStaging(staging,config,io);if(release.isFirstRelease(config))staged.qiuqiuReleaseProfile=release.FIRST_RELEASE;Object.assign(staged,{version:config.version,qiuqiuAcceptance:'mas',qiuqiuDistribution:'mas-development',main:'mas-development-entry.js'});

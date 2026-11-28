@@ -161,8 +161,8 @@ const TEN_MINUTES = 600000;
 const CODEX_TONES = new Set(['normal', 'strong', 'urgent']);
 const codexTone = value => CODEX_TONES.has(value) ? value : 'normal';
 
-function validCodexText(text) {
-  if (typeof text !== 'string' || Array.from(text).length > 48) return false;
+function validCodexText(text, maxLength = 48) {
+  if (typeof text !== 'string' || Array.from(text).length > maxLength) return false;
   const lines = text.split('\n');
   return lines.length <= 2 && lines.every(line => line.trim());
 }
@@ -227,6 +227,18 @@ class DialogueDirector {
       sourceGeneration: alert.generation, actions, priority: -1, expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
     return { id, text: alert.text, actions: actions.map(action => ({ ...action })), durationMs };
+  }
+
+  offerCalendarReminder(text, nowMs, durationMs = 8000) {
+    if (!this.enabled || !Number.isFinite(nowMs) || !validCodexText(text, 200) ||
+      !Number.isFinite(durationMs) || durationMs <= 0) return null;
+    this._expire(nowMs);
+    if (this._current) return null;
+    const id = this._nextId++;
+    durationMs = Math.min(12000, durationMs);
+    this._current = { id, event: 'calendar-reminder', actions: [], priority: -1, expiresAt: nowMs + durationMs };
+    this._lastBubbleAt = nowMs;
+    return { id, text, actions: [], durationMs };
   }
 
   offerUpdate(version, nowMs) {

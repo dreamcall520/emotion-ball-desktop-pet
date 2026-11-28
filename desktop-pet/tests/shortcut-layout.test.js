@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { layoutShortcuts } = require('../lib/shortcut-layout');
+const { PANEL_ACTIONS } = require('../lib/shortcuts');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
 const overlap = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -219,4 +220,77 @@ test('普通工作区列表采用320×326紧凑窗，五行坐标与44px行高�
   assert.deepEqual({ width: layout.bounds.width, height: layout.bounds.height }, { width: 320, height: 326 });
   assert.deepEqual(layout.items.map(({ x, y, width, height }) => ({ x, y, width, height })),
     Array.from({ length: 5 }, (_, index) => ({ x: 15, y: 55 + index * 45, width: 290, height: 44 })));
+});
+
+test('自选0至6入口在两种形态与四角保持边界、顺序和可达管理；六项经典几何不变', () => {
+  const order = ['calendar', 'weather', 'todo', 'note', 'chat', 'custom', 'settings', 'pomodoro'];
+  const areas = [{ x: 0, y: 24, width: 1440, height: 876 }, { x: -640, y: -480, width: 640, height: 480 }];
+  for (const area of areas) for (const count of [0, 1, 2, 3, 4, 5, 6]) for (const shape of ['floating', 'list']) {
+    for (const size of [60, 108, 180, 260]) for (const px of [0, .5, 1]) for (const py of [0, .5, 1]) {
+      const pet = { x: area.x + Math.round((area.width - size) * px), y: area.y + Math.round((area.height - size) * py), width: size, height: size };
+      const selected = order.slice(0, count), hidden = PANEL_ACTIONS.filter(id => !selected.includes(id));
+      const layout = layoutShortcuts({ petBounds: pet, workArea: area, shape, side: px === 0 ? 'left' : px === 1 ? 'right' : undefined, order, hidden });
+      assert.deepEqual(layout.items.map(item => item.id), selected);
+      assert([layout.bounds.x, layout.bounds.y, layout.bounds.width, layout.bounds.height].every(Number.isFinite));
+      assert(layout.bounds.x >= area.x && layout.bounds.y >= area.y);
+      assert(layout.bounds.x + layout.bounds.width <= area.x + area.width && layout.bounds.y + layout.bounds.height <= area.y + area.height);
+      if (layout.shape === 'floating') {
+        const cards = globalCards(layout);
+        for (const [index, card] of cards.entries()) {
+          assert.equal(overlap(card, { x: pet.x - 12, y: pet.y - 12, width: pet.width + 24, height: pet.height + 24 }), false);
+          for (const other of cards.slice(index + 1)) assert(distance(card, other) >= 6);
+        }
+      } else assert.equal(overlap(layout.bounds, pet), false);
+      if (!count) assert.equal(layout.shape, 'list', 'all hidden retains a managed empty list rather than an invisible canvas');
+    }
+  }
+  const input = { petBounds: { x: 680, y: 410, width: 80, height: 80 }, workArea: areas[0] };
+  assert.deepEqual(layoutShortcuts(input), layoutShortcuts({ ...input, order: [...PANEL_ACTIONS], hidden: ['weather', 'calendar'] }));
+});
+
+test('浮动入口为2或4个时保持经典六卡相邻槽位，不再横跨整个半圆', () => {
+  const order = ['chat', 'custom', 'calendar', 'note', 'todo', 'weather', 'settings', 'pomodoro'];
+  const area = { x: 0, y: 24, width: 1440, height: 876 };
+  for (const size of [60, 80, 108, 120, 180, 260]) for (const side of ['left', 'right', 'top', 'bottom']) {
+    const pet = { x: 680, y: 410, width: size, height: size };
+    const six = layoutShortcuts({ petBounds: pet, workArea: area, side, order, hidden: order.slice(6) });
+    assert.equal(six.shape, 'floating');
+    const sixCards = globalCards(six);
+    for (const count of [2, 4]) {
+      const selected = order.slice(0, count);
+      const compact = layoutShortcuts({ petBounds: pet, workArea: area, side, order, hidden: order.filter(id => !selected.includes(id)) });
+      const start = Math.floor((6 - count) / 2);
+      assert.deepEqual(compact.items.map(item => item.id), selected);
+      assert.deepEqual(globalCards(compact).map(({ x, y, width, height }) => ({ x, y, width, height })),
+        sixCards.slice(start, start + count).map(({ x, y, width, height }) => ({ x, y, width, height })), 'the smaller set uses contiguous existing slots');
+      assert.deepEqual(compact.bounds, six.bounds, 'transparent native canvas keeps existing safe edge placement');
+    }
+  }
+});
+
+test('3与5个浮动入口绕宠物中轴对称，以36度等间距从中央向两侧展开', () => {
+  const order = ['chat', 'custom', 'calendar', 'note', 'todo', 'weather', 'settings', 'pomodoro'];
+  for (const area of [{ x: 0, y: 24, width: 1440, height: 876 }, { x: -1920, y: -1080, width: 1920, height: 1040 }]) {
+    for (const size of [60, 80, 108, 120, 180, 260]) for (const side of ['left', 'right', 'top', 'bottom']) for (const count of [3, 5]) {
+      const pet = { x: area.x + Math.round((area.width - size) / 2), y: area.y + Math.round((area.height - size) / 2), width: size, height: size };
+      const layout = layoutShortcuts({ petBounds: pet, workArea: area, side, order, hidden: order.slice(count) });
+      assert.equal(layout.shape, 'floating'); assert.deepEqual(layout.items.map(card => card.id), order.slice(0, count));
+      const centers = globalCards(layout).map(card => ({ x: card.x + card.width / 2, y: card.y + card.height / 2 }));
+      const horizontal = ['above', 'below'].includes(layout.direction), cx = pet.x + pet.width / 2, cy = pet.y + pet.height / 2;
+      const middle = centers[(count - 1) / 2];
+      assert(Math.abs(horizontal ? middle.x - cx : middle.y - cy) <= .5, 'one middle card sits on the pet axis');
+      for (let index = 0; index < (count - 1) / 2; index++) {
+        const a = centers[index], b = centers[count - 1 - index];
+        assert(Math.abs(horizontal ? a.x + b.x - 2 * cx : a.y + b.y - 2 * cy) <= 1, 'paired cards mirror across the axis');
+        assert(Math.abs(horizontal ? a.y - b.y : a.x - b.x) <= 1, 'paired cards share their normal-axis position');
+      }
+      const radii = centers.map(point => Math.hypot(point.x - cx, point.y - cy));
+      assert(Math.max(...radii) - Math.min(...radii) <= 1.5, 'all cards share a circle centered on the pet');
+      const angles = centers.map(point => Math.atan2(point.y - cy, point.x - cx));
+      for (let index = 1; index < angles.length; index++) {
+        const delta = Math.abs(Math.atan2(Math.sin(angles[index] - angles[index - 1]), Math.cos(angles[index] - angles[index - 1])));
+        assert(Math.abs(delta - Math.PI / 5) < .02, 'angular spacing stays equal despite integer coordinates');
+      }
+    }
+  }
 });

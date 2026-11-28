@@ -3,6 +3,7 @@ const path = require('node:path');
 const { packager } = require('@electron/packager');
 const { prepareStaging, buildPackagerOptions, findElectronZipDir, signWeatherApp } = require('./package-mac');
 const { buildWeatherLocation } = require('./build-weather-location');
+const { buildCalendarEvents } = require('./build-calendar-events');
 const { makeIcon } = require('./make-icon');
 function weatherAcceptanceOptions(root, icon, electronZipDir = findElectronZipDir()) {
   return { ...buildPackagerOptions(root, icon, electronZipDir),
@@ -12,6 +13,7 @@ function weatherAcceptanceOptions(root, icon, electronZipDir = findElectronZipDi
 }
 async function packageWeather(root = path.resolve(__dirname, '../..')) {
   buildWeatherLocation(root);
+  buildCalendarEvents(root);
   const options = weatherAcceptanceOptions(root, makeIcon(root));
   prepareStaging(root, options.dir, { weatherNative: true });
   const pkg = path.join(options.dir, 'package.json');

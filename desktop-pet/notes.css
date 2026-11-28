@@ -320,3 +320,25 @@ dialog .dialog-footer{position:sticky;bottom:0;z-index:1;background:var(--surfac
 :root[data-color-mode="accessible"] .tabs .active{box-shadow:none}
 
 :root[data-color-mode="accessible"] .category-dialog .delete-confirm:hover{background:var(--accessible-warning);color:var(--accessible-yellow)}
+
+/* Let the note's top wash fade through the heading instead of ending at 38px. */
+:root[data-ui-window="notes"]{--notes-card-top:#ddf4ea;--notes-card-mid:#ecf8f1;--notes-glass-highlight:#ffffff85}
+:root[data-ui-window="notes"][data-notes-appearance="dark"]{--notes-card-top:#263d42;--notes-card-mid:#202e35;--notes-glass-highlight:#ffffff18}
+:root[data-ui-window="notes"][data-ui-theme="blue"]{--notes-card-top:#e6f5ff;--notes-card-mid:#f4fbff}
+:root[data-ui-window="notes"][data-ui-theme="blue"][data-notes-appearance="dark"]{--notes-card-top:#203347;--notes-card-mid:#1a2938}
+:root[data-ui-window="notes"][data-ui-theme="purple"]{--notes-card-top:#eee7f7;--notes-card-mid:#faf7fd}
+:root[data-ui-window="notes"][data-ui-theme="purple"][data-notes-appearance="dark"]{--notes-card-top:#3b3048;--notes-card-mid:#2e2839}
+:root[data-ui-window="notes"][data-color-mode="standard"] body[data-mode="note"] .desktop-note{background:linear-gradient(180deg,var(--notes-card-top) 0,var(--notes-card-mid) 38px,var(--surface) 96px)}
+:root[data-ui-window="notes"][data-color-mode="standard"] body[data-mode="note"] .desktop-note .note-toolbar{background:transparent}
+
+/* Match the calendar's light glass selector without changing tab hit targets. */
+:root[data-ui-window="notes"] .panel .list-toolbar .tabs{border-color:color-mix(in srgb,var(--line) 75%,transparent);border-radius:11px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 86%,transparent),color-mix(in srgb,var(--selected) 16%,var(--surface)));box-shadow:inset 0 1px 0 var(--notes-glass-highlight),0 1px 4px color-mix(in srgb,var(--text) 5%,transparent);backdrop-filter:blur(10px) saturate(1.12);-webkit-backdrop-filter:blur(10px) saturate(1.12)}
+:root[data-ui-window="notes"] .panel .list-toolbar .tabs button{appearance:none;-webkit-appearance:none;border-radius:8px;color:var(--muted);filter:none}
+:root[data-ui-window="notes"] .panel .list-toolbar .tabs button:hover{background:color-mix(in srgb,var(--selected) 65%,transparent);color:var(--accent-text)}
+:root[data-ui-window="notes"][data-color-mode] .panel .list-toolbar .tabs button.active{border-color:transparent;background:linear-gradient(180deg,var(--surface),color-mix(in srgb,var(--selected) 72%,var(--surface)));color:var(--accent-text);box-shadow:0 1px 3px color-mix(in srgb,var(--text) 12%,transparent),inset 0 1px 0 var(--notes-glass-highlight)}
+:root[data-ui-window="notes"][data-notes-appearance="dark"] .panel .list-toolbar .tabs,:root[data-ui-window="notes"][data-notes-appearance="dark"] .panel .list-toolbar .tabs button.active{box-shadow:inset 0 1px 0 var(--notes-glass-highlight),0 1px 4px #00000020}
+:root[data-ui-window="notes"][data-color-mode="accessible"] .panel .list-toolbar .tabs{background:var(--accessible-surface);border-color:var(--accessible-line);box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+:root[data-ui-window="notes"][data-color-mode="accessible"] .panel .list-toolbar .tabs button{color:var(--accessible-text)}
+:root[data-ui-window="notes"][data-color-mode="accessible"] .panel .list-toolbar .tabs button.active{background:var(--accessible-raised);color:var(--accessible-blue);border-color:transparent;box-shadow:none}
+:root[data-ui-window="notes"][data-color-mode="accessible"] .panel .list-toolbar .tabs button:hover{background:var(--accessible-raised);color:var(--accessible-blue)}
+@media(prefers-reduced-transparency:reduce){:root[data-ui-window="notes"] .panel .list-toolbar .tabs{background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none}:root[data-ui-window="notes"][data-color-mode] .panel .list-toolbar .tabs button.active{background:var(--selected)}}

@@ -33,14 +33,33 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const connections = [];
   const preferences = [];
   const groupTransition={requests:[],cancels:0,active:false,options:null,current:null};
-  const weather = { enabled: false, cardVisible: true, options: null, opens: 0, cityOpens: 0, repositions: 0, expanded: false,
+  const weather = { enabled: false, cardVisible: true, options: null, opens: 0, detailsOpens: 0, cityOpens: 0, repositions: 0, expanded: false,
     isEnabled() { return this.enabled; }, isExpanded() { return this.enabled && this.cardVisible && this.expanded; }, isCardVisible() { return this.cardVisible; }, getState: () => ({status:'unconfigured'}),
     setEnabled(value) { this.enabled = value === true; this.options.onChange({enabled:this.enabled}); },
-    setCardVisible(value) { this.cardVisible = value === true; this.options.onLayout(); }, open() { this.opens++; }, openCity() { this.cityOpens++; }, start() {},
+    setCardVisible(value) { this.cardVisible = value === true; this.options.onLayout(); }, open() { this.opens++; }, openCity() { this.cityOpens++; }, openDetails() { this.detailsOpens++; this.opens++; }, start() {},
     getWindow: () => null, getBounds: () => null, getVisibleBounds: () => null,
     getLayoutMetrics() { return this.enabled && this.cardVisible ? {width:128,height:32,inset:2}:null; },
     reposition() { this.repositions++; }, resetExpanded() { this.expanded=false; },setGroupTransitionMode() {},captureGroupTransitionFrames:async()=>[],
     setAlwaysOnTop(){},pause(){},resume(){},destroy(){} };
+  const calendar = { options: null, opens: [], pauses: 0, resumes: 0, destroys: 0, weatherUpdates: 0,
+    open(value = {}) { this.opens.push({ ...value }); return true; }, getWindows: () => [],
+    getPreferences: () => ({ holidayReminders: true, timeReminders: true }),
+    pause() { this.pauses++; }, resume() { this.resumes++; }, destroy() { this.destroys++; },
+    updateWeather() { this.weatherUpdates++; },
+    menu() { return { id: 'calendar-menu', label: '日历', submenu: [
+      { id: 'calendar-open', label: '打开日历', click: () => this.open() },
+      { id: 'calendar-widgets', label: '桌面小组件…', click: () => this.open({ page: 'widgets' }) },
+      { id: 'calendar-settings', label: '日历设置…', click: () => this.open({ page: 'settings' }) }
+    ] }; }
+  };
+  const calendarReminders = [];
+  const reminderFactory = options => {
+    const value = { options, starts: 0, pauses: 0, resumes: 0, disposes: 0, previews: [],
+      start() { this.starts++; return Promise.resolve(false); }, pause() { this.pauses++; },
+      resume() { this.resumes++; return Promise.resolve(false); }, dispose() { this.disposes++; },
+      preview(kind) { this.previews.push(kind); return Promise.resolve(true); } };
+    calendarReminders.push(value); return value;
+  };
   const iconPreference = { value: 'codex-system', dark: false, calls: [] };
   const clipboard={writes:[],writeText(text){this.writes.push(text)}};
   const dialogs = [];
@@ -129,6 +148,9 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   function createNativeBubbleWindow() {
     return Object.assign(new EventEmitter(), {
       visible: false, destroyed: false, bounds: { x: -610, y: 0, width: 224, height: 118 },
+      topmost: false, topmostCalls: [], movesToTop: 0,
+      setAlwaysOnTop(value, level, relativeLevel = 0) { this.topmost = value; this.relativeLevel = relativeLevel; this.topmostCalls.push(value); },
+      moveTop() { this.movesToTop++; },
       isDestroyed() { return this.destroyed; }, isVisible() { return this.visible; },
       getBounds() { return { ...this.bounds }; }, webContents: null
     });
@@ -137,7 +159,8 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const bubble = { shows: [], hides: 0, moves: 0, destroys: 0,
     show(payload) { this.shows.push(payload); bubbleWindow.visible = true; },
     hide() { this.hides++; bubbleWindow.visible = false; },
-    reposition() { this.moves++; }, destroy() { this.destroys++; bubbleWindow.visible = false; }, setAlwaysOnTop() {}, getWindow: () => bubbleWindow,
+    reposition() { this.moves++; }, destroy() { this.destroys++; bubbleWindow.visible = false; },
+    setAlwaysOnTop(value) { bubbleWindow.setAlwaysOnTop(value); }, getWindow: () => bubbleWindow,
     replaceWindow() {
       const previous = bubbleWindow;
       previous.destroyed = true;
@@ -227,6 +250,9 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     require(name) {
       if (name === './lib/feedback-reporting') return { ...require('../lib/feedback-reporting'), createFeedbackReporting: () => ({ context: () => ({diagnostic:{}}), getState: () => ({enabled:false,pending:0}), capture() {}, setEnabled() {}, dispose() {}, submit: async () => ({}) }) };
       if (name === './lib/weather-window') return {createWeatherWindow:options=>{weather.options=options;return weather;}};
+      if (name === './lib/calendar-window') return { createCalendarWindow: options => { calendar.options = options; return calendar; } };
+      if (name === './lib/calendar-holiday-reminders') return { createCalendarHolidayReminders: reminderFactory };
+      if (name === './lib/calendar-time-reminders') return { createCalendarTimeReminders: reminderFactory };
       if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray, net,
         clipboard, dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); }, showItemInFolder: file => revealed.push(file) },
@@ -363,7 +389,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const pet = vm.runInContext('petWindow', context);
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { clipboard, weather, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { clipboard, weather, calendar, calendarReminders, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     iconPreference, workbuddyCalls, workbuddyRecords, balanceCalls, balanceWatches, balanceRecoveries, workbuddyRecoveries,
     get balanceReads() { return balanceReads; }, get balanceUnwatches() { return balanceUnwatches; }, setOnline(value) { networkOnline = value; },
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
@@ -394,6 +420,213 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
 }
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
+
+test('日历管理器接入共享待办、菜单与预览入口，并跟随锁屏和退出生命周期', async t => {
+  const f = await fixture({ argv: ['--calendar-preview', '--calendar-widgets-preview'] });
+  t.after(() => f.app.emit('before-quit'));
+  assert.equal(f.call('calendarWindow'), f.calendar);
+  assert.equal(f.calendar.options.store.getState().todos, f.notes.todos, '日历复用便签待办 store');
+  assert.equal(f.calendar.options.filePath, '/fixture/calendar-preferences.json');
+  assert.deepEqual(f.calendar.opens, [{}, { page: 'widgets' }]);
+  assert.equal(f.call('compactMenuTemplate().some(item => item.id === "calendar-menu")'), true);
+  f.call('menuTemplate().find(item => item.id === "calendar-menu").submenu.find(item => item.id === "calendar-open").click()');
+  assert.equal(f.calendar.opens.length, 3);
+  const updates = f.calendar.weatherUpdates;
+  f.weather.setEnabled(true);
+  assert.equal(f.calendar.weatherUpdates, updates + 1);
+  assert.equal(f.calendar.options.getWeather().enabled, true);
+  assert.equal(f.calendar.options.isSuppressed(), false);
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(f.calendar.pauses, 1); assert.equal(f.calendar.options.isSuppressed(), true);
+  f.powerMonitor.emit('unlock-screen');
+  assert.equal(f.calendar.resumes, 1); assert.equal(f.calendar.options.isSuppressed(), false);
+  f.app.emit('before-quit');
+  assert.equal(f.calendar.destroys, 1); assert.equal(f.calendar.options.isSuppressed(), true);
+});
+
+test('日历互动的两个提醒器启动后读取实时日历设置，预览与设置变化委派到对应提醒器', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  assert.equal(f.calendarReminders.length, 2);
+  const holiday = f.calendarReminders.find(item => item.options.filePath === '/fixture/calendar-holiday-reminders.json');
+  const time = f.calendarReminders.find(item => item.options.filePath === '/fixture/calendar-time-reminders.json');
+  assert.ok(holiday); assert.ok(time); assert.equal(holiday.starts, 1); assert.equal(time.starts, 1);
+  let prefs = { holidayReminders: false, timeReminders: false, morningTime: '10:15', reminderWeekdaysOnly: false };
+  f.calendar.getPreferences = () => prefs;
+  assert.equal(holiday.options.isEnabled(), false); assert.equal(time.options.getPreferences(), prefs);
+  prefs = { ...prefs, holidayReminders: true, timeReminders: true, morningTime: '08:30' };
+  assert.equal(holiday.options.isEnabled(), true); assert.equal(time.options.getPreferences(), prefs, '不缓存首次创建时的设置');
+  assert.equal(await f.calendar.options.onHolidayPreview(), true);
+  assert.equal(await f.calendar.options.onTimePreview('offWork'), true);
+  assert.deepEqual(holiday.previews, [undefined]); assert.deepEqual(time.previews, ['offWork']);
+  const resumes = f.calendarReminders.map(item => item.resumes);
+  f.calendar.options.onChange();
+  assert.deepEqual(f.calendarReminders.map(item => item.resumes), resumes.map(value => value + 1));
+  assert.deepEqual(f.calendarReminders.map(item => item.starts), [1, 1]);
+});
+
+test('日历互动提醒跟随锁屏解锁与一次性退出，迟到通知不能在退出后显示', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const reminders = f.calendarReminders;
+  assert.ok(reminders.every(item => item.options.isSuppressed() === false));
+  const pauses = reminders.map(item => item.pauses), resumes = reminders.map(item => item.resumes);
+  f.powerMonitor.emit('lock-screen');
+  assert.deepEqual(reminders.map(item => item.pauses), pauses.map(value => value + 1));
+  assert.ok(reminders.every(item => item.options.isSuppressed() === true));
+  f.powerMonitor.emit('unlock-screen');
+  assert.deepEqual(reminders.map(item => item.resumes), resumes.map(value => value + 1));
+  assert.ok(reminders.every(item => item.options.isSuppressed() === false));
+  f.app.emit('before-quit'); f.app.emit('before-quit');
+  assert.deepEqual(reminders.map(item => item.disposes), [1, 1]);
+  const shown = f.bubble.shows.length, commands = f.commands.length;
+  for (const reminder of reminders) {
+    assert.equal(reminder.options.isSuppressed(), true);
+    assert.equal(reminder.options.notify({ message: '退出后的迟到提醒', motion: 'hop' }), false);
+  }
+  assert.equal(f.bubble.shows.length, shown); assert.equal(f.commands.length, commands);
+});
+
+test('日历节日和早中晚提醒通过真实对白气泡出口显示原文，并发送球球动作', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const [holiday, time] = f.calendarReminders;
+  const message = '早呀，今天也一起慢慢来。';
+  assert.equal(holiday.options.notify({ title: '节日问候', message, motion: 'hop' }), true);
+  assert.equal(f.bubble.shows.length, 1); assert.equal(f.bubble.shows[0].text, message);
+  assert.equal(f.bubble.shows[0].durationMs, 8000); assert.equal(f.call('dialogue.hasBubble(performance.now())'), true);
+  assert.equal(f.commands.at(-1).command, 'again'); assert.equal(f.commands.at(-1).motion, 'hop');
+  assert.equal(time.options.notify({ message: '暂不覆盖上一条', motion: 'bow' }), false);
+  f.call('dialogue.dismiss();hideBubble()');
+  assert.equal(time.options.notify({ message: '到你设置的下班时间啦。', motion: 'bow' }), true);
+  assert.equal(f.bubble.shows.at(-1).text, '到你设置的下班时间啦。'); assert.equal(f.commands.at(-1).motion, 'bow');
+  assert.equal(f.external.length, 0); assert.equal(f.dialogs.length, 0);
+});
+
+test('日历互动不会替换已有用户气泡，也不推进既有对白冷却或动作', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  f.send('pet:say', 'hello');
+  const previous = f.bubble.shows.at(-1), shows = f.bubble.shows.length, commands = f.commands.length;
+  assert.ok(previous); assert.equal(f.call('dialogue.hasBubble(performance.now())'), true);
+  const directAt = f.call('dialogue._lastDirectAt'), bubbleAt = f.call('dialogue._lastBubbleAt');
+  for (const reminder of f.calendarReminders) {
+    assert.equal(reminder.options.isSuppressed(), true);
+    assert.equal(reminder.options.notify({ message: '这条应延后', motion: 'hop' }), false);
+  }
+  assert.equal(f.bubble.shows.length, shows); assert.equal(f.bubble.shows.at(-1).id, previous.id);
+  assert.equal(f.bubble.shows.at(-1).text, previous.text); assert.equal(f.commands.length, commands);
+  assert.equal(f.call('dialogue._lastDirectAt'), directAt); assert.equal(f.call('dialogue._lastBubbleAt'), bubbleAt);
+});
+
+test('关闭气泡、睡眠、锁屏、专注、隐藏或动作忙碌时日历互动延后，恢复后可正常显示', async t => {
+  const scenarios = [
+    ['气泡关闭', f => f.call("setCompanionSetting('bubblesEnabled',false)"), f => f.call("setCompanionSetting('bubblesEnabled',true)")],
+    ['睡眠', f => f.send('pet:sleep-state', 'sleep'), f => f.send('pet:sleep-state', 'awake')],
+    ['锁屏', f => f.powerMonitor.emit('lock-screen'), f => f.powerMonitor.emit('unlock-screen')],
+    ['专注', f => f.pomodoro.change(true), f => f.pomodoro.change(false)],
+    ['球球隐藏', f => f.pet.hide(), f => f.pet.showInactive()],
+    ['动作忙碌', f => f.send('pet:motion-start', { token: 701, action: 'hop' }), f => f.call('stopMotion()')]
+  ];
+  for (const [label, suppress, restore] of scenarios) {
+    const f = await fixture(); t.after(() => f.app.emit('before-quit')); suppress(f);
+    const shows = f.bubble.shows.length, commands = f.commands.length;
+    for (const reminder of f.calendarReminders) {
+      assert.equal(reminder.options.isSuppressed(), true, label);
+      assert.equal(reminder.options.notify({ message: '现在不要打扰', motion: 'hop' }), false, label);
+    }
+    assert.equal(f.bubble.shows.length, shows, label); assert.equal(f.commands.length, commands, label);
+    restore(f);
+    assert.equal(f.calendarReminders[0].options.isSuppressed(), false, label + '恢复');
+    assert.equal(f.calendarReminders[0].options.notify({ message: '现在可以打个招呼啦', motion: 'hop' }), true, label + '恢复');
+    assert.equal(f.bubble.shows.at(-1).text, '现在可以打个招呼啦');
+  }
+});
+
+test('日历互动气泡显示失败时返回未投递，回滚对白占用并且不先播放动作', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const notify = f.calendarReminders[0].options.notify, show = f.bubble.show, commands = f.commands.length;
+  f.bubble.show = () => { throw Error('synthetic bubble unavailable'); };
+  assert.equal(notify({ message: '这次还没显示成功', motion: 'hop' }), false);
+  assert.equal(f.call('dialogue.hasBubble(performance.now())'), false); assert.equal(f.commands.length, commands);
+  f.bubble.show = show;
+  assert.equal(notify({ message: '重试后显示成功', motion: 'hop' }), true);
+  assert.equal(f.bubble.shows.at(-1).text, '重试后显示成功'); assert.equal(f.commands.at(-1).motion, 'hop');
+});
+
+test('清明一类温和节日问候只弹气泡，不触发欢快动作', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const commands = f.commands.length;
+  assert.equal(f.calendarReminders[0].options.notify({ title: '清明节', message: '愿思念有所寄托，也记得照顾好自己。', motion: null }), true);
+  assert.equal(f.bubble.shows.at(-1).text, '愿思念有所寄托，也记得照顾好自己。'); assert.equal(f.commands.length, commands);
+});
+
+test('显式日历预览只临时提升新气泡，隐藏后恢复原层级且不改变自动提醒', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit')); f.call('setAlwaysOnTop(false)');
+  const win = f.bubble.getWindow(), focus = f.pet.focused;
+  assert.equal(f.calendarReminders[0].options.notify({ message: '新的可见预览', motion: 'hop', preview: true }), true);
+  assert.equal(win.topmost, true); assert.equal(win.relativeLevel, 1); assert.equal(win.movesToTop, 1); assert.equal(f.call('settings.alwaysOnTop'), false);
+  assert.equal(f.pet.focused, focus); assert.equal(f.call('calendarPreviewBubble.id'), f.bubble.shows.at(-1).id);
+  f.call('dialogue.dismiss();hideBubble()'); assert.equal(win.topmost, false); assert.equal(win.relativeLevel, 0); assert.equal(f.call('calendarPreviewBubble'), null);
+  const moves = win.movesToTop;
+  assert.equal(f.calendarReminders[1].options.notify({ message: '真正的定时提醒', motion: 'bow' }), true);
+  assert.equal(win.topmost, false); assert.equal(win.movesToTop, moves, '自动提醒不继承预览临时置顶');
+});
+
+test('日历预览内部隐藏时恢复最新全局置顶选择，设置切换不让正在显示的预览掉层', async t => {
+  for (const finalTopmost of [false, true]) {
+    const f = await fixture(); t.after(() => f.app.emit('before-quit')); f.call('setAlwaysOnTop(false)');
+    const win = f.bubble.getWindow();
+    assert.equal(f.calendarReminders[0].options.notify({ message: '保持预览可见', preview: true }), true);
+    f.call('setAlwaysOnTop(true)'); f.call(`setAlwaysOnTop(${finalTopmost})`);
+    assert.equal(win.topmost, true); assert.equal(f.call('settings.alwaysOnTop'), finalTopmost);
+    win.visible = false; win.emit('hide');
+    assert.equal(win.topmost, finalTopmost); assert.equal(f.call('calendarPreviewBubble'), null);
+    const moves = win.movesToTop; win.emit('show'); assert.equal(win.movesToTop, moves, '旧show不能重新提升气泡');
+  }
+});
+
+test('迟到的旧hide不能降低仍可见的新预览，实际隐藏后才恢复原气泡层级', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit')); f.call('setAlwaysOnTop(false)');
+  const win = f.bubble.getWindow();
+  assert.equal(f.calendarReminders[0].options.notify({ message: '仍然显示的新预览', preview: true }), true);
+  const id = f.bubble.shows.at(-1).id; win.emit('hide');
+  assert.equal(win.topmost, true); assert.equal(win.relativeLevel, 1); assert.equal(f.call('calendarPreviewBubble.id'), id);
+  win.visible = false; win.emit('hide');
+  assert.equal(win.topmost, false); assert.equal(win.relativeLevel, 0); assert.equal(f.call('calendarPreviewBubble'), null);
+});
+
+test('用户新气泡替换预览时立即恢复层级，迟到原生事件不能抬升替代内容', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit')); f.call('setAlwaysOnTop(false)');
+  const win = f.bubble.getWindow();
+  assert.equal(f.calendarReminders[0].options.notify({ message: '即将被用户互动替换', preview: true }), true);
+  const previous = f.bubble.shows.at(-1).id; f.send('pet:say', 'hello');
+  assert.notEqual(f.bubble.shows.at(-1).id, previous); assert.equal(win.topmost, false); assert.equal(f.call('calendarPreviewBubble'), null);
+  const moves = win.movesToTop; win.emit('show'); assert.equal(win.movesToTop, moves);
+  const shown = f.bubble.shows.length, calls = win.topmostCalls.length;
+  assert.equal(f.calendarReminders[1].options.notify({ message: '不得抬升已有气泡', preview: true }), false);
+  assert.equal(f.bubble.shows.length, shown); assert.equal(win.topmostCalls.length, calls); assert.equal(win.movesToTop, moves);
+});
+
+test('显式预览在显示或提升层级失败时回滚，不播放动作且不遗留预览绑定', async t => {
+  for (const failure of ['show', 'topmost', 'moveTop']) {
+    const f = await fixture(); t.after(() => f.app.emit('before-quit')); f.call('setAlwaysOnTop(false)');
+    const win = f.bubble.getWindow(), commands = f.commands.length;
+    if (failure === 'show') f.bubble.show = () => { throw Error('synthetic preview show failure'); };
+    if (failure === 'topmost') win.setAlwaysOnTop = function(value) { if (value) throw Error('synthetic preview layer failure'); this.topmost = value; };
+    if (failure === 'moveTop') win.moveTop = () => { throw Error('synthetic preview order failure'); };
+    assert.equal(f.calendarReminders[0].options.notify({ message: '失败不应消耗预览', motion: 'hop', preview: true }), false, failure);
+    assert.equal(f.call('dialogue.hasBubble(performance.now())'), false, failure);
+    assert.equal(f.call('calendarPreviewBubble'), null, failure); assert.equal(win.topmost, false, failure); assert.equal(f.commands.length, commands, failure);
+  }
+});
+
+test('锁屏和退出都清理预览层级，旧窗口回调不能重新显示或提升气泡', async t => {
+  for (const event of ['lock-screen', 'before-quit']) {
+    const f = await fixture(); t.after(() => f.app.emit('before-quit')); f.call('setAlwaysOnTop(false)');
+    const win = f.bubble.getWindow();
+    assert.equal(f.calendarReminders[0].options.notify({ message: '即将结束的预览', preview: true }), true);
+    if (event === 'lock-screen') f.powerMonitor.emit(event); else f.app.emit(event);
+    assert.equal(f.call('calendarPreviewBubble'), null, event); assert.equal(win.topmost, false, event);
+    const moves = win.movesToTop; win.emit('show'); assert.equal(win.movesToTop, moves, event);
+  }
+});
 
 test('设置、定制、API 费用和关于窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
   const f = await fixture();
@@ -1049,7 +1282,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤  ✦ 定制', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤  ✦ 定制', '便签与待办', '快捷键设置', '番茄钟', '日历', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -4108,13 +4341,83 @@ test('全局快捷键保存校验来源、持久化并拒绝隐藏窗口操作',
   assert.equal((await f.invoke('pet:global-shortcuts-save', config, win.webContents)).ok, false);
 });
 
+test('日历功能快捷键从设置保存后复用日历入口，录制锁屏退出不触发且清除后释放', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  f.call('openGlobalSettings("shortcuts")');
+  const win = f.call('globalSettingsWindow'); win.emit('ready-to-show');
+  const config = f.call('shortcutRegistrar.getConfig()');
+  assert.equal(config.calendar, '');
+  const next = { ...config, calendar: 'Ctrl+Alt+L' };
+  assert.equal((await f.invoke('pet:global-shortcuts-save', next)).ok, false, 'pet renderer cannot write settings');
+  assert.equal((await f.invoke('pet:global-shortcuts-save', next, win.webContents)).ok, true);
+  assert.equal(f.saved.at(-1).shortcutSettings.calendar, next.calendar);
+  f.pressShortcut(next.calendar); assert.deepEqual(f.calendar.opens, [{}]);
+  f.send('pet:global-shortcuts-record', true, win.webContents);
+  f.pressShortcut(next.calendar); assert.equal(f.calendar.opens.length, 1, 'recording is suspended');
+  f.send('pet:global-shortcuts-record', false, win.webContents);
+  f.powerMonitor.emit('lock-screen');
+  f.pressShortcut(next.calendar); assert.equal(f.calendar.opens.length, 1, 'locked screen cannot open calendar');
+  f.powerMonitor.emit('unlock-screen');
+  f.pressShortcut(next.calendar); assert.equal(f.calendar.opens.length, 2);
+  f.call('openGlobalSettings("shortcuts")');
+  assert.equal((await f.invoke('pet:global-shortcuts-save', { ...next, calendar: '' }, win.webContents)).ok, true);
+  assert.equal(f.saved.at(-1).shortcutSettings.calendar, '');
+  f.pressShortcut(next.calendar); assert.equal(f.calendar.opens.length, 2, 'clearing unregisters the binding');
+  assert.equal((await f.invoke('pet:global-shortcuts-save', next, win.webContents)).ok, true);
+  f.app.emit('before-quit');
+  f.pressShortcut(next.calendar); assert.equal(f.calendar.opens.length, 2, 'quit releases the binding');
+});
+
+test('快捷面板可选日历天气复用原入口，隐藏日历面板项仍保留已设全局键', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const load = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function(file) { return file.endsWith('/shortcuts.html') ? Promise.resolve() : load.call(this, file); };
+  f.call('openGlobalSettings("shortcuts")');
+  const owner = f.call('globalSettingsWindow'); owner.emit('ready-to-show');
+  const config = { ...f.call('shortcutRegistrar.getConfig()'), calendar: 'Ctrl+Alt+L', hidden: ['custom', 'settings'],
+    order: ['calendar', 'weather', 'chat', 'note', 'todo', 'pomodoro', 'custom', 'settings'] };
+  assert.equal((await f.invoke('pet:global-shortcuts-save', config, owner.webContents)).ok, true);
+  f.call('openShortcuts()'); await flush();
+  const panel = f.call('shortcutWindow.getWindow()');
+  panel.webContents.getURL = () => require('node:url').pathToFileURL(path.resolve(__dirname, '../shortcuts.html')).href;
+  assert.equal(f.call('shortcutWindow.getState().layout.items[0].id'), 'calendar');
+  f.send('shortcut:action', 'calendar', panel.webContents); assert.equal(f.calendar.opens.length, 1);
+  f.call('openShortcuts()'); await flush(); f.send('shortcut:action', 'weather', panel.webContents);
+  assert.equal(f.weather.opens, 1);
+  assert.equal(f.weather.detailsOpens, 1, 'weather panel entry opens details instead of a folded card');
+  assert.equal(f.weather.enabled, true);
+  assert.equal((await f.invoke('pet:global-shortcuts-save', { ...config, hidden: [...config.hidden, 'calendar'] }, owner.webContents)).ok, true);
+  assert.equal(f.saved.at(-1).shortcutSettings.calendar, 'Ctrl+Alt+L');
+  f.call('openShortcuts()'); await flush();
+  f.send('shortcut:action', 'calendar', panel.webContents); assert.equal(f.calendar.opens.length, 1, 'hidden panel entry is not executable through panel IPC');
+  f.pressShortcut(config.calendar); assert.equal(f.calendar.opens.length, 2, 'the global key remains registered');
+});
+
+test('快捷面板及全局键打开天气详情时启用天气但保留隐藏天气卡选择', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  f.weather.cardVisible = false;
+  f.call("openShortcutAction('weather')");
+  assert.equal(f.weather.enabled, true); assert.equal(f.weather.detailsOpens, 1);
+  assert.equal(f.weather.cardVisible, false, 'explicit weather access does not enable the passive desktop card');
+  f.call('openGlobalSettings("shortcuts")');
+  const owner = f.call('globalSettingsWindow'); owner.emit('ready-to-show');
+  const config = { ...f.call('shortcutRegistrar.getConfig()'), weather: 'Ctrl+Alt+W' };
+  assert.equal((await f.invoke('pet:global-shortcuts-save', config, owner.webContents)).ok, true);
+  f.pressShortcut(config.weather);
+  assert.equal(f.weather.detailsOpens, 2); assert.equal(f.weather.cardVisible, false);
+  f.powerMonitor.emit('lock-screen'); f.pressShortcut(config.weather);
+  assert.equal(f.weather.detailsOpens, 2, 'locked screen does not open details');
+});
+
 
 test('原生菜单保留核心联动开关与独立入口，完整偏好仍可在设置中心访问', async t => {
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '专属皮肤  ✦ 定制', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
-  assert.ok(menu.every(item => !item.submenu));
+    ['和球球聊聊', '来定制球球', '专属皮肤  ✦ 定制', '便签与待办', '番茄钟', '日历', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
+  const calendarMenu = findMenuItem(menu, 'calendar-menu');
+  assert.ok(Array.isArray(calendarMenu.submenu));
+  assert.ok(menu.every(item => item === calendarMenu || !item.submenu), '既有三联动及其他入口仍保持直接操作，日历单独归组');
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
   assert.equal(findMenuItem(menu, 'workbuddy-refresh'), null);

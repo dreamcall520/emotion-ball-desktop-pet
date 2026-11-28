@@ -5,6 +5,7 @@ const toggle = { id: '/codex-menu/codex-enabled', label: '启用 Codex 联动', 
 const taskId = '/codex-menu/codex-tasks-open';
 const refreshId = '/codex-menu/codex-status/codex-refresh';
 const snapshot = { quotaCards:{order:['codex','api','zcode','workbuddy','balance','weather'],pinned:[]}, version: 'test', initialView:'openai-api', codexStatus: { enabled: true, connection: 'connected', quota: [{ label: '5小时', remaining: 47.6, resetsAt: 1800000000000 }], updatedAt: 1790000000000, tasks: { active: 2, waiting: 1 }, taskActionId: taskId }, entries: [
+  {id:'/size',label:'球球尺寸',children:[60,80,108,120,180,260].map(size=>({id:'/size/'+size,label:size+' × '+size,type:'radio',enabled:true,actionable:true,checked:size===120}))},
   {id:'/weather-enabled',label:'启用天气',enabled:true,actionable:true,type:'checkbox',checked:false},
   {id:'/weather-visible',label:'显示天气卡',enabled:true,actionable:true,type:'checkbox',checked:true},
   {id:'/weather-open',label:'天气与城市设置',enabled:true,actionable:true,type:'normal'},
@@ -153,6 +154,19 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     if(process.env.PET_SETTINGS_MEASUREMENTS)process.stdout.write('NAV_ART_BASELINE '+JSON.stringify(await run(`[...document.querySelectorAll('#navigation img.nav-icon')].filter(img=>getComputedStyle(img).display!=='none').map(measureIcon)`))+'\n');
 
     const nav = await run("[...document.querySelectorAll('#navigation button')].map(n=>n.textContent)");
+    await run(`document.querySelector('[data-view="/size"]').click()`);
+    const sizeCalls = await run('calls.length');
+    await run("document.querySelector('[data-size-option=\"/size/60\"] .row-title').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.deepEqual(await run('calls.slice('+sizeCalls+')'),[{id:'/size/60',checked:true}],'size row title activates the existing radio exactly once');
+    await run("document.querySelector('[data-size-option=\"/size/80\"]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.deepEqual(await run('calls.at(-1)'),{id:'/size/80',checked:true},'size row blank area selects the size');
+    const beforeRadio = await run('calls.length');
+    await run("document.querySelector('[data-action=\"/size/108\"]').click()");await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run('calls.length'),beforeRadio+1,'direct radio click does not double dispatch');
+    await run(`findEntry('/size/60').enabled=false;document.querySelector('[data-view="/size"]').click()`);const disabledCalls=await run('calls.length');
+    await run("document.querySelector('[data-size-option=\"/size/60\"]').click()");await run('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.equal(await run('calls.length'),disabledCalls,'unavailable size rows do not dispatch');
+    await run("findEntry('/size/60').enabled=true;window.calls=[];navigate('openai-api')");
     for (const name of ['Codex','WorkBuddy','ZCode','API 余额','快捷键','常规设置']) assert(nav.includes(name), name);
     assert(!nav.includes('ZCode 联动'));
     assert.deepEqual(nav.filter(name=>['天气','Codex','ZCode','WorkBuddy','联动样式管理'].includes(name)),['天气','Codex','ZCode','WorkBuddy','联动样式管理']);
@@ -447,7 +461,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.match(await run("document.querySelector('.store-codex-error').textContent"),/选错目录.*~\/\.codex/);
     await run("document.querySelector('.store-codex-error button').click()");
     await run("document.querySelector('dialog[open] button[value=cancel]').click()");
-    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await run(`new Promise((resolve,reject)=>{const end=Date.now()+3000;const check=()=>{if(linkActions.includes('cancel'))resolve();else if(Date.now()>end)reject(Error('Codex directory cancellation did not reach the connection API'));else setTimeout(check,10)};check()})`);
     assert.deepEqual(await run('linkActions'),['app','account','cancel']);
     await run("snapshot.firstReleaseWorkbuddyConnection={connected:false,enabled:false,status:'needs-authorization',message:'',tasks:{authorized:false,status:'needs-authorization',message:''}};snapshot.version='wb-link';window.wbLinkActions=[];window.qiuqiuSettings.workbuddyConnection=async action=>{wbLinkActions.push(action);return {status:action==='app'?'app-authorized':action==='account'?'stored':'ready'}};window.dispatchEvent(new Event('focus'))");
     await run('new Promise(resolve=>setTimeout(resolve,30))');

@@ -1,9 +1,12 @@
-const DIRECT_ACTIONS = Object.freeze(['chat', 'custom', 'note', 'todo', 'pomodoro', 'weather']);
+const DIRECT_ACTIONS = Object.freeze(['chat', 'custom', 'note', 'todo', 'pomodoro', 'weather', 'calendar']);
 const SHORTCUT_ACTIONS = Object.freeze(['launcher', ...DIRECT_ACTIONS]);
+const PANEL_ACTIONS = Object.freeze(['chat', 'custom', 'note', 'todo', 'pomodoro', 'settings', 'weather', 'calendar']);
+const DEFAULT_PANEL_HIDDEN = Object.freeze(['weather', 'calendar']);
+const MAX_PANEL_ACTIONS = 6;
 const DEFAULT_SHORTCUT_SETTINGS = Object.freeze({
   shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q',
-  chat: '', custom: '', note: '', todo: '', pomodoro: '', weather: '',
-  noteBehavior: 'panel', todoBehavior: 'panel'
+  chat: '', custom: '', note: '', todo: '', pomodoro: '', weather: '', calendar: '',
+  noteBehavior: 'panel', todoBehavior: 'panel', order: PANEL_ACTIONS, hidden: DEFAULT_PANEL_HIDDEN
 });
 const MODIFIERS = Object.freeze({ ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' });
 const MODIFIER_ORDER = Object.freeze(['Ctrl', 'Alt', 'Shift', 'Meta']);
@@ -36,6 +39,26 @@ function issue(field, code, message, accelerator) {
   return { field, code, message, ...(accelerator ? { accelerator } : {}) };
 }
 
+function normalizePanelSettings(raw = {}, { limit = true } = {}) {
+  if (!raw || typeof raw !== 'object') raw = {};
+  const savedOrder = Array.isArray(raw.order) ? raw.order : [];
+  const order = [...new Set(savedOrder.filter(id => PANEL_ACTIONS.includes(id)))];
+  order.push(...PANEL_ACTIONS.filter(id => !order.includes(id)));
+  const hidden = [...new Set((Array.isArray(raw.hidden) ? raw.hidden : DEFAULT_PANEL_HIDDEN).filter(id => PANEL_ACTIONS.includes(id)))];
+  hidden.push(...DEFAULT_PANEL_HIDDEN.filter(id => !savedOrder.includes(id) && !hidden.includes(id)));
+  // Historical files keep their explicit choices, with only excess visible items
+  // hidden in saved order. Loading never clears unrelated keyboard bindings.
+  const visible = order.filter(id => !hidden.includes(id));
+  if (limit) hidden.push(...visible.slice(MAX_PANEL_ACTIONS));
+  return { order, hidden };
+}
+
+function panelActions(config = {}, shape = 'floating') {
+  const { order, hidden } = normalizePanelSettings(config);
+  // The list's header already provides its fixed settings/management control.
+  return order.filter(id => !hidden.includes(id) && (shape !== 'list' || id !== 'settings'));
+}
+
 // Saving is strict; loading a missing or invalid historical object uses defaults.
 function validateShortcutSettings(raw) {
   const errors = [];
@@ -45,6 +68,18 @@ function validateShortcutSettings(raw) {
   const config = { shape: raw.shape, enabled: raw.enabled };
   if (!['floating', 'list'].includes(raw.shape)) errors.push(issue('shape', 'invalid_shape', '请选择悬浮按钮或列表。'));
   if (typeof raw.enabled !== 'boolean') errors.push(issue('enabled', 'invalid_enabled', '快捷入口开关必须为布尔值。'));
+  for (const field of ['order', 'hidden']) {
+    if (Object.hasOwn(raw, field) && (!Array.isArray(raw[field]) || raw[field].some(id => !PANEL_ACTIONS.includes(id)) || new Set(raw[field]).size !== raw[field].length)) {
+      errors.push(issue(field, 'invalid_panel_items', '快捷面板入口设置无效。'));
+    }
+  }
+  const panel = normalizePanelSettings(raw, { limit: false });
+  if (!errors.some(error => error.code === 'invalid_panel_items')) {
+    if (panel.order.filter(id => !panel.hidden.includes(id)).length > MAX_PANEL_ACTIONS) {
+      errors.push(issue('hidden', 'panel_limit', '快捷面板最多显示6个入口。'));
+    }
+  }
+  config.order = panel.order; config.hidden = panel.hidden;
   for (const field of ['noteBehavior', 'todoBehavior']) {
     const value = Object.hasOwn(raw, field) ? raw[field] : DEFAULT_SHORTCUT_SETTINGS[field];
     if (!['panel', 'create'].includes(value)) errors.push(issue(field, 'invalid_behavior', '请选择打开面板或直接新建。'));
@@ -74,7 +109,7 @@ function validateShortcutSettings(raw) {
 
 function normalizeShortcutSettings(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_SHORTCUT_SETTINGS };
-  const result = validateShortcutSettings({ ...DEFAULT_SHORTCUT_SETTINGS, ...raw });
+  const result = validateShortcutSettings({ ...DEFAULT_SHORTCUT_SETTINGS, ...raw, ...normalizePanelSettings(raw) });
   return result.ok ? result.config : { ...DEFAULT_SHORTCUT_SETTINGS };
 }
 
@@ -93,7 +128,7 @@ function createShortcutRegistrar({ globalShortcut, config: initialConfig, onActi
   let errors = [];
   let started = false, disposed = false, recording = false, applying = false;
   const owned = new Set();
-  const getConfig = () => ({ ...config });
+  const getConfig = () => ({ ...config, order: [...config.order], hidden: [...config.hidden] });
   const getErrors = () => errors.map(error => ({ ...error }));
   const getAction = raw => {
     const accelerator = normalizeAccelerator(raw);
@@ -223,6 +258,6 @@ function createShortcutRegistrar({ globalShortcut, config: initialConfig, onActi
 }
 
 module.exports = {
-  DIRECT_ACTIONS, SHORTCUT_ACTIONS, DEFAULT_SHORTCUT_SETTINGS,
+  DIRECT_ACTIONS, SHORTCUT_ACTIONS, PANEL_ACTIONS, MAX_PANEL_ACTIONS, DEFAULT_SHORTCUT_SETTINGS, normalizePanelSettings, panelActions,
   normalizeAccelerator, validateShortcutSettings, normalizeShortcutSettings, createShortcutRegistrar
 };

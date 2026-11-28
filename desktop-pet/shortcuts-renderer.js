@@ -8,10 +8,13 @@
     { id: 'custom', name: '装扮', icon: 'custom' },
     { id: 'note', name: '便签', icon: 'note' },
     { id: 'todo', name: '待办', icon: 'todo' },
-    { id: 'pomodoro', name: '番茄钟', icon: 'clock' }
+    { id: 'pomodoro', name: '番茄钟', icon: 'clock' },
+    { id: 'weather', name: '天气', icon: 'weather' },
+    { id: 'calendar', name: '日历', icon: 'calendar' }
   ];
-  const floatingActions = [...actions, { id: 'settings', name: '设置', icon: 'settings' }];
-  const defaults = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', chat: '', custom: '', note: '', todo: '', pomodoro: '', noteBehavior: 'panel', todoBehavior: 'panel' };
+  const floatingActions = [...actions.slice(0, 5), { id: 'settings', name: '设置', icon: 'settings' }, ...actions.slice(5)];
+  const defaultOrder = floatingActions.map(action => action.id), defaultHidden = ['weather', 'calendar'];
+  const defaults = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', chat: '', custom: '', note: '', todo: '', pomodoro: '', weather: '', calendar: '', noteBehavior: 'panel', todoBehavior: 'panel', order: defaultOrder, hidden: defaultHidden };
   const startBehaviors = { note: 'noteBehavior', todo: 'todoBehavior' };
   const bindingIds = ['launcher', ...actions.map(action => action.id)];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -21,9 +24,21 @@
   let saveNoticeTimer = null, saveGeneration = 0, confirmedConfig = { ...defaults };
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const system = window.matchMedia?.('(prefers-color-scheme: dark)');
-  const currentActions = () => state?.view === 'list' ? actions : floatingActions;
+  const currentActions = () => {
+    const config = configCopy(state?.config);
+    return config.order.filter(id => !config.hidden.includes(id) && (state?.view !== 'list' || id !== 'settings')).slice(0, 6)
+      .map(id => floatingActions.find(action => action.id === id)).filter(Boolean);
+  };
   const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
-  const configCopy = value => ({ ...defaults, ...(value || {}) });
+  const configCopy = value => {
+    const config = { ...defaults, ...(value || {}) };
+    const order = [...new Set((Array.isArray(config.order) ? config.order : defaultOrder).filter(id => defaultOrder.includes(id)))];
+    config.order = [...order, ...defaultOrder.filter(id => !order.includes(id))];
+    config.hidden = [...new Set((Array.isArray(config.hidden) ? config.hidden : defaultHidden).filter(id => defaultOrder.includes(id)))];
+    config.hidden.push(...defaultHidden.filter(id => !order.includes(id) && !config.hidden.includes(id)));
+    config.hidden.push(...config.order.filter(id => !config.hidden.includes(id)).slice(6));
+    return config;
+  };
 
   function renderKeys(node, binding) {
     node.replaceChildren();
@@ -51,11 +66,11 @@
 
   function select(index, focus = false) {
     const entries = currentActions();
-    selected = index < 0 ? -1 : ((index % entries.length) + entries.length) % entries.length;
+    selected = index < 0 || !entries.length ? -1 : ((index % entries.length) + entries.length) % entries.length;
     document.querySelectorAll('[data-action]').forEach(button => {
       const current = button.dataset.action === entries[selected]?.id;
       button.setAttribute('aria-current', String(current));
-      button.tabIndex = current || (selected < 0 && button.dataset.action === entries[0].id) ? 0 : -1;
+      button.tabIndex = current || (selected < 0 && button.dataset.action === entries[0]?.id) ? 0 : -1;
       if (focus && current && button.getClientRects().length) button.focus({ preventScroll: true });
     });
   }
@@ -248,7 +263,21 @@
       return;
     }
     renderKeys($('launcher-keys'), state.config.enabled ? state.config.launcher : '');
-    actions.forEach(action => renderKeys($('list-actions').querySelector(`[data-action="${action.id}"] .direct-key`), state.config[action.id]));
+    const visible = currentActions();
+    const visibleIds = visible.map(action => action.id);
+    for (const container of [$('floating'), $('list-actions')]) for (const button of [...container.querySelectorAll('[data-action]')]) {
+      const index = visibleIds.indexOf(button.dataset.action);
+      button.hidden = index < 0;
+      if (index < 0) continue;
+      button.querySelector('.number').textContent = String(index + 1);
+      const keys = button.querySelector('.direct-key');
+      if (keys) renderKeys(keys, state.config[button.dataset.action]);
+    }
+    for (const container of [$('floating'), $('list-actions')]) for (const id of visibleIds) {
+      const button = container.querySelector(`[data-action="${id}"]`);
+      if (button) container.append(button);
+    }
+    $('empty-actions').hidden = Boolean(visible.length);
     if (state.view === 'floating') {
       const size = Number(state.layout?.cardSize) || 58;
       $('floating').style.setProperty('--card-size', size + 'px');
@@ -283,7 +312,7 @@
   function choose(id) {
     resetActionSelection();
     if (id === 'settings') { setRecording(null); api?.openAction('settings'); }
-    else if (actions.some(action => action.id === id)) api?.openAction(id);
+    else if (currentActions().some(action => action.id === id)) api?.openAction(id);
   }
 
   for (const id of ['floating', 'list-actions']) {

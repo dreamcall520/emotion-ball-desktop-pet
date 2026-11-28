@@ -104,7 +104,7 @@ function entitlementsFor(config) {
     'com.apple.developer.team-identifier': config.teamId, 'com.apple.security.application-groups': [`${config.teamId}.${config.bundleId}`],
     'com.apple.security.files.user-selected.read-write': true, 'com.apple.security.files.user-selected.executable': true,
     'com.apple.security.files.bookmarks.app-scope': true, 'com.apple.security.network.client': true,
-    'com.apple.security.network.server': true, 'com.apple.security.personal-information.location': true },
+    'com.apple.security.network.server': true, 'com.apple.security.personal-information.location': true, 'com.apple.security.personal-information.calendars': true },
     child: { 'com.apple.security.app-sandbox': true, 'com.apple.security.inherit': true } };
   // Also required by the opt-in WorkBuddy filter script and loopback receiver.
   return rights;
@@ -191,6 +191,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   if (typeof flatAsync !== 'function') throw failure('MAS_FLAT_API_UNAVAILABLE');
   const sign = signing.signAsync || signing.sign; if (typeof sign !== 'function') throw failure('MAS_SIGN_API_UNAVAILABLE');
   buildWeatherLocation(root);
+  (dependencies.buildCalendarEvents || require('./build-calendar-events').buildCalendarEvents)(root, { targetArch: config.arch });
   (dependencies.buildPluginHost || require('./build-plugin-host').buildPluginHost)(root);
   const icon = makeIcon(root);
   const staging = mac.prepareStaging(root, path.join(root, 'desktop-pet/build/mas-staging', config.arch), {pluginNative:true});

@@ -1,11 +1,17 @@
 'use strict';
 
-const IDS = ['chat', 'custom', 'note', 'todo', 'pomodoro', 'settings'];
+const { panelActions } = require('./shortcuts');
 const PAD = 12, GAP = 12;
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const overlapsAxis = (start, length, otherStart, otherLength) => start < otherStart + otherLength && start + length > otherStart;
 
-function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', side }) {
+function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', side, order, hidden }) {
+  const ids = panelActions({ order, hidden }, shape);
+  // Fewer buttons occupy neighboring slots on the established six-card arc.
+  // Keep its proven corner/edge placement; unused transparent slots do not hit.
+  const firstSlot = Math.floor((6 - ids.length) / 2);
+  const slots = ids.length > 1 && ids.length < 6
+    ? Array.from({ length: 6 }, (_, index) => ids[index - firstSlot] || null) : ids;
   for (const rect of [pet, area]) {
     if (!rect || !['x', 'y', 'width', 'height'].every(key => Number.isFinite(rect[key])) || rect.width <= 0 || rect.height <= 0) {
       throw new TypeError('Shortcut layout requires finite, positive rectangles');
@@ -22,7 +28,7 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
       : room.right >= room.left ? 'right' : 'left');
   const directions = [preferred, ...Object.keys(room).filter(key => key !== preferred).sort((a, b) => room[b] - room[a])];
 
-  if (shape === 'floating') {
+  if (shape === 'floating' && ids.length) {
     const placed = (cards, direction) => {
       const x = Math.min(...cards.map(card => card.x)) - PAD, y = Math.min(...cards.map(card => card.y)) - PAD;
       const bounds = { x, y, width: Math.max(...cards.map(card => card.x + cardSize)) + PAD - x,
@@ -33,7 +39,7 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
       bounds.x = Math.floor(Math.min(bounds.x, pet.x)); bounds.y = Math.floor(Math.min(bounds.y, pet.y));
       bounds.width = right - bounds.x; bounds.height = bottom - bounds.y;
       return { shape: 'floating', direction, bounds, cardSize,
-        items: cards.map(card => ({ ...card, x: card.x - bounds.x, y: card.y - bounds.y })) };
+        items: cards.filter(card => card.id !== null).map(card => ({ ...card, x: card.x - bounds.x, y: card.y - bounds.y })) };
     };
     const cornerReach = reach + cardSize;
     const nearX = Math.min(room.left, room.right), nearY = Math.min(room.above, room.below);
@@ -56,9 +62,9 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
         // pet leaves the corner, this becomes that same 180-degree arc/order.
         const start = horizontal ? Math.max(0, limitY) : Math.max(-Math.PI / 2, limitY, -limitX);
         const end = horizontal ? Math.min(Math.PI, limitX, Math.PI - limitY) : Math.min(Math.PI / 2, limitX);
-        const cards = IDS.map((id, index) => {
-          const order = (horizontal ? sx === 1 : sy === -1) ? IDS.length - 1 - index : index;
-          const angle = start + (end - start) * order / (IDS.length - 1);
+        const cards = slots.map((id, index) => {
+          const position = (horizontal ? sx === 1 : sy === -1) ? slots.length - 1 - index : index;
+          const angle = slots.length === 1 ? (start + end) / 2 : start + (end - start) * position / (slots.length - 1);
           return { id, x: Math.round(cx + sx * Math.cos(angle) * r - cardSize / 2),
             y: Math.round(cy + sy * Math.sin(angle) * r - cardSize / 2), width: cardSize, height: cardSize };
         });
@@ -84,8 +90,9 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
             const angle = end - (end - start) * i / 3;
             return [Math.cos(angle) * outer, Math.sin(angle) * outer];
           }), [Math.sqrt(inner * inner - y0 * y0), y0]];
-        const cards = IDS.map((id, index) => {
-          const [x, y] = points[(horizontal ? sx === 1 : sy === -1) ? index : IDS.length - 1 - index];
+        const cards = slots.map((id, index) => {
+          const position = slots.length === 1 ? 2 : Math.round(index * (points.length - 1) / (slots.length - 1));
+          const [x, y] = points[(horizontal ? sx === 1 : sy === -1) ? position : points.length - 1 - position];
           return { id, x: Math.round(cx + sx * x - cardSize / 2),
             y: Math.round(cy + sy * y - cardSize / 2), width: cardSize, height: cardSize };
         });
@@ -107,8 +114,11 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
         area.x + area.width - PAD - radius - cardSize / 2) : pet.x + pet.width / 2;
       const cy = horizontal ? pet.y + pet.height / 2 : clamp(pet.y + pet.height / 2,
         area.y + PAD + radius + cardSize / 2, area.y + area.height - PAD - radius - cardSize / 2);
-      const cards = IDS.map((id, index) => {
-        const angle = (180 - index * 36) * Math.PI / 180;
+      const centeredOdd = ids.length === 3 || ids.length === 5;
+      const cards = (centeredOdd ? ids : slots).map((id, index) => {
+        const degrees = centeredOdd ? 90 + ((ids.length - 1) / 2 - index) * 36
+          : slots.length === 1 ? 90 : 180 - index * 180 / (slots.length - 1);
+        const angle = degrees * Math.PI / 180;
         return { id, x: Math.round(cx + (horizontal ? Math.cos(angle) : sign * Math.sin(angle)) * radius - cardSize / 2),
           y: Math.round(cy + (horizontal ? sign * Math.sin(angle) : Math.cos(angle)) * radius - cardSize / 2),
           width: cardSize, height: cardSize };
@@ -137,7 +147,8 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
   const candidates = directions.map(direction => {
     const horizontal = direction === 'above' || direction === 'below';
     const width = Math.max(1, Math.min(320, horizontal ? area.width - inset * 2 : room[direction] - GAP - inset));
-    const height = Math.max(1, Math.min(326, horizontal ? room[direction] - GAP - inset : area.height - inset * 2));
+    const listCount = ids.filter(id => id !== 'settings').length;
+    const height = Math.max(1, Math.min(listCount ? 101 + listCount * 45 : 145, horizontal ? room[direction] - GAP - inset : area.height - inset * 2));
     const cx = pet.x + pet.width / 2, cy = pet.y + pet.height / 2;
     return { direction, bounds: { x: Math.round(horizontal ? clamp(cx - width / 2, area.x + inset, area.x + area.width - inset - width)
       : direction === 'right' ? pet.x + pet.width + GAP : pet.x - GAP - width),
@@ -149,7 +160,7 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
   const placed = candidates[0];
   if (!placed) throw new RangeError('Work area has no space beside the pet for shortcuts');
   return { shape: 'list', ...placed, cardSize: 52,
-    items: IDS.slice(0, 5).map((id, index) => ({ id, x: 15, y: 55 + index * 45, width: Math.max(1, placed.bounds.width - 30), height: 44 })) };
+    items: ids.filter(id => id !== 'settings').map((id, index) => ({ id, x: 15, y: 55 + index * 45, width: Math.max(1, placed.bounds.width - 30), height: 44 })) };
 }
 
 module.exports = { layoutShortcuts };

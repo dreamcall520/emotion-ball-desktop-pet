@@ -6,6 +6,7 @@ process.env.ELECTRON_GET_USE_PROXY ||= '1';
 const { packager } = require('@electron/packager');
 const { makeIcon } = require('./make-icon');
 const { buildWeatherLocation } = require('./build-weather-location');
+const { buildCalendarEvents } = require('./build-calendar-events');
 
 const ELECTRON_ZIP = 'electron-v43.4.1-darwin-arm64.zip';
 
@@ -16,7 +17,7 @@ function copyFile(root, staging, relativePath) {
   fs.copyFileSync(source, destination);
 }
 
-function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/staging'), { weatherNative = true, pluginNative = false } = {}) {
+function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/staging'), { weatherNative = true, calendarNative = weatherNative, pluginNative = false } = {}) {
   const rootPackage = JSON.parse(
     fs.readFileSync(path.join(root, 'package.json'), 'utf8')
   );
@@ -35,8 +36,10 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     ...weatherIconFiles,
     ...['LICENSE', 'SOURCE.json', 'README.md'].map(file => `${weatherIconRoot}/${file}`),
     ...(weatherNative ? ['desktop-pet/native/weather-location.node'] : []),
+    ...(calendarNative ? ['desktop-pet/native/calendar-events.node'] : []),
     ...(pluginNative ? ['desktop-pet/native/plugin-host.node'] : []),
     'desktop-pet/main.js',
+    ...['calendar.html','calendar.css','calendar-renderer.js','calendar-views.js','calendar-preload.js','lib/calendar-window.js','lib/calendar-model.js','lib/system-calendar.js','lib/calendar-holiday-reminders.js','lib/calendar-time-reminders.js','assets/calendar-iconTemplate.png','assets/calendar-iconTemplate@2x.png'].map(file => `desktop-pet/${file}`),
     'desktop-pet/lib/builtin-pets.js',
     'desktop-pet/chunye-dream.html',
     'desktop-pet/chunye-dream.js',
@@ -470,7 +473,9 @@ function buildPackagerOptions(root, icon, electronZipDir = null) {
     appCategoryType: 'public.app-category.entertainment',
     icon,
     asar: { unpack: '**/*.node' },
-    extendInfo: { NSLocationWhenInUseUsageDescription: '用于查询当前位置的天气和空气质量。经纬度会发送给 Open-Meteo，也可改为手动选城。', NSLocationUsageDescription: '用于向 Open-Meteo 查询当前位置的天气和空气质量。' },
+    extendInfo: { NSLocationWhenInUseUsageDescription: '用于查询当前位置的天气和空气质量。经纬度会发送给 Open-Meteo，也可改为手动选城。', NSLocationUsageDescription: '用于向 Open-Meteo 查询当前位置的天气和空气质量。',
+      NSCalendarsFullAccessUsageDescription: '用于在球球日历和桌面小组件中显示你选择的日程。球球仅展示，不创建或修改系统日程。',
+      NSCalendarsUsageDescription: '用于在球球日历和桌面小组件中显示你选择的日程。球球仅展示，不创建或修改系统日程。' },
     overwrite: true,
     prune: true,
     quiet: true
@@ -504,11 +509,15 @@ function signWeatherApp(appPath) {
   const nativePath = path.join(appPath, 'Contents/Resources/app.asar.unpacked/desktop-pet/native/weather-location.node');
   if (!fs.existsSync(nativePath)) throw new Error('天气定位组件未解包');
   adhocSign(nativePath);
+  const calendarPath = path.join(appPath, 'Contents/Resources/app.asar.unpacked/desktop-pet/native/calendar-events.node');
+  if (!fs.existsSync(calendarPath)) throw new Error('日历读取组件未解包');
+  adhocSign(calendarPath);
   adhocSign(appPath);
 }
 
 async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, edgePeek = false, masCandidate = false, candidateBundleId = null } = {}) {
   buildWeatherLocation(root);
+  buildCalendarEvents(root);
   if(masCandidate)require('./build-plugin-host').buildPluginHost(root);
   const icon = makeIcon(root);
   const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined,{pluginNative:masCandidate});

@@ -2,7 +2,7 @@ const path=require('node:path');
 const {fileURLToPath,pathToFileURL}=require('node:url');
 const POPUPS=new Set(['chat','api-usage','about','codex-consent','workbuddy-consent','codex-details','workbuddy-details','api-balance-details','quota-guard']);
 // Persistent editing panels keep quota cards visible for live layout previews.
-const PASSIVE=new Set(['global-settings','customize']);
+const PASSIVE=new Set(['global-settings','customize','calendar']);
 const CARDS=new Set(['quota-label','api-usage-label','workbuddy-label','api-balance-label','workbuddy-guard-entry','quota-card-group','quota-card-transition','weather']);
 function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{},schedule=fn=>setImmediate(fn),cancel=clearImmediate}){
   root=path.resolve(root);

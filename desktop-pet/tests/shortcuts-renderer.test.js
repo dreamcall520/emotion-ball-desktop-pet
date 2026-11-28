@@ -12,7 +12,7 @@ if (process.versions.electron && process.argv.includes('--shortcut-dom-child')) 
     await win.loadURL('data:text/html,'+encodeURIComponent(html));
     await win.webContents.insertCSS(read('shortcuts.css'));
     const run = code => win.webContents.executeJavaScript(code), settle = () => run('new Promise(resolve=>setTimeout(resolve,15))');
-    await run(`window.current={view:'settings',session:1,config:{enabled:true,shape:'floating',launcher:'Ctrl+Alt+Q',chat:'Meta+C',custom:'',note:'',todo:'',pomodoro:'',noteBehavior:'panel',todoBehavior:'panel'},registrationErrors:[]};window.calls=[];window.failNext=false;window.deferNext=false;window.qiuShortcuts={getState:async()=>current,onState:callback=>{window.receive=callback;return ()=>{}},onColorMode:()=>()=>{},recording:value=>calls.push({type:'record',value}),save:async config=>{calls.push({type:'save',config});if(deferNext){deferNext=false;return new Promise((resolve,reject)=>{window.resolveSave=resolve;window.rejectSave=reject})}if(failNext){failNext=false;return {ok:false,error:'快捷键被占用，原设置已保留',state:current}}current={...current,config:{...config}};return {ok:true,state:current}},pointer(){},close(){calls.push({type:'close'})},openAction(){},openSettings(){}};true`);
+    await run(`window.current={view:'settings',session:1,config:{enabled:true,shape:'floating',launcher:'Ctrl+Alt+Q',chat:'Meta+C',custom:'',note:'',todo:'',pomodoro:'',noteBehavior:'panel',todoBehavior:'panel'},registrationErrors:[]};window.calls=[];window.failNext=false;window.deferNext=false;window.qiuShortcuts={getState:async()=>current,onState:callback=>{window.receive=callback;return ()=>{}},onColorMode:()=>()=>{},recording:value=>calls.push({type:'record',value}),save:async config=>{calls.push({type:'save',config});if(deferNext){deferNext=false;return new Promise((resolve,reject)=>{window.resolveSave=resolve;window.rejectSave=reject})}if(failNext){failNext=false;return {ok:false,error:'快捷键被占用，原设置已保留',state:current}}current={...current,config:{...config}};return {ok:true,state:current}},pointer(){},close(){calls.push({type:'close'})},openAction:id=>calls.push({type:'action',id}),openSettings(){}};true`);
     await run(read('shortcuts-renderer.js')); await settle();
     await run('Promise.allSettled(document.getAnimations().filter(animation=>animation.effect.getComputedTiming().iterations!==Infinity).map(animation=>animation.finished))');
     await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
@@ -22,10 +22,10 @@ if (process.versions.electron && process.argv.includes('--shortcut-dom-child')) 
     const headerControls=await run("[...document.querySelectorAll('#settings .panel-header button')].map(n=>({id:n.id,label:n.getAttribute('aria-label'),title:n.title,x:n.getBoundingClientRect().x}))");
     assert.equal(headerControls[0].id,'restore'); assert.equal(headerControls[0].label,'恢复默认'); assert.equal(headerControls[0].title,'恢复默认');
     assert.equal(headerControls[1].label,'关闭快捷键设置'); assert(headerControls[0].x<headerControls[1].x);
-    assert.equal(await run("(()=>{const b=document.querySelector('.settings-body');return b.scrollHeight<=b.clientHeight+1})()"),true,'600px window fits normal content');
+    assert.equal(await run("(()=>{const b=document.querySelector('.settings-body');return getComputedStyle(b).overflowY==='auto'&&b.scrollWidth<=b.clientWidth})()"),true,'expanded feature bindings scroll within the settings body');
 
     const positions = await run("[...document.querySelectorAll('#settings [data-clear]')].map(n=>({x:n.getBoundingClientRect().right,width:n.getBoundingClientRect().width,visibility:getComputedStyle(n).visibility,icon:n.querySelector('use').getAttribute('href')}))");
-    assert.equal(positions.length,6); assert(positions.every(p=>Math.abs(p.width-28)<.5 && p.icon==='#i-trash'),JSON.stringify(positions));
+    assert.equal(positions.length,8); assert(positions.every(p=>Math.abs(p.width-28)<.5 && p.icon==='#i-trash'),JSON.stringify(positions));
     assert(positions.every(p=>Math.abs(p.x-positions[0].x)<.5),'删除列全部右边缘对齐'); assert.equal(positions[2].visibility,'hidden');
     await run("document.querySelector('[data-clear=chat]').click()"); await settle();
     assert.equal(await run("current.config.chat"),'');
@@ -75,6 +75,46 @@ if (process.versions.electron && process.argv.includes('--shortcut-dom-child')) 
     fs.writeFileSync(path.join(out,'shortcuts-settings-small.png'),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
     await run("document.querySelector('#settings .panel-header [data-close]').click()");
     assert.equal(await run("calls.at(-1).type"),'close');
+    const { layoutShortcuts } = require('../lib/shortcut-layout');
+    const all = ['calendar', 'weather', 'todo', 'note', 'chat', 'custom', 'settings', 'pomodoro'];
+    for (const shape of ['floating', 'list']) for (const count of [0, 1, 6]) {
+      const order = [...all], selected = order.slice(0, count), hidden = order.filter(id => !selected.includes(id));
+      const layout = layoutShortcuts({ petBounds: { x: 680, y: 410, width: 80, height: 80 }, workArea: { x: 0, y: 24, width: 1440, height: 876 }, shape, order, hidden });
+      win.setSize(layout.bounds.width, layout.bounds.height);
+      await run(`current={...current,view:${JSON.stringify(layout.shape)},session:current.session+1,layout:${JSON.stringify(layout)},config:{...current.config,shape:${JSON.stringify(shape)},order:${JSON.stringify(order)},hidden:${JSON.stringify(hidden)}},animation:{phase:'opening',duration:1}};receive(current);true`); await settle();
+      const container = layout.shape === 'floating' ? '#floating' : '#list-actions';
+      assert.deepEqual(await run(`[...document.querySelectorAll('${container} [data-action]')].filter(n=>!n.hidden).map(n=>n.dataset.action)`), selected, `${shape}/${count} follows configured order`);
+      assert.deepEqual(await run(`[...document.querySelectorAll('${container} [data-action]')].filter(n=>!n.hidden).map(n=>n.querySelector('.number').textContent)`), selected.map((_, i) => String(i + 1)));
+      if (!count) {
+        assert.equal(await run("!document.getElementById('empty-actions').hidden"), true);
+        assert.equal(await run("document.getElementById('settings-open').getClientRects().length>0"), true);
+        await run("document.getElementById('settings-open').click()"); assert.equal(await run('calls.at(-1).id'), 'settings');
+      } else {
+        await run("document.dispatchEvent(new KeyboardEvent('keydown',{key:'1',bubbles:true}))"); assert.equal(await run('calls.at(-1).id'), 'calendar');
+        await run("document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))");
+        assert.equal(await run('document.activeElement.dataset.action'), 'calendar');
+        await run("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))"); assert.equal(await run('calls.at(-1).id'), 'calendar');
+        if (count === 6) {
+          await run("document.dispatchEvent(new KeyboardEvent('keydown',{key:'6',bubbles:true}))"); assert.equal(await run('calls.at(-1).id'), 'custom');
+          await run(`document.querySelector('${container} [data-action=weather]').click()`); assert.equal(await run('calls.at(-1).id'), 'weather');
+        }
+      }
+      if (count === 6) {
+        await run('Promise.allSettled(document.getAnimations().filter(animation=>animation.effect.getComputedTiming().iterations!==Infinity).map(animation=>animation.finished))');
+        await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+        fs.writeFileSync(path.join(out, `shortcut-panel-${shape}-custom-order.png`), (await win.webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+      }
+    }
+    for (const count of [2, 3, 4, 5]) {
+      const order = ['chat', 'custom', 'calendar', 'note', 'todo', 'weather', 'settings', 'pomodoro'];
+      const selected = order.slice(0, count), hidden = order.filter(id => !selected.includes(id));
+      const layout = layoutShortcuts({ petBounds: { x: 680, y: 410, width: 80, height: 80 }, workArea: { x: 0, y: 24, width: 1440, height: 876 }, shape: 'floating', order, hidden });
+      win.setSize(layout.bounds.width, layout.bounds.height);
+      await run(`current={...current,view:'floating',session:current.session+1,layout:${JSON.stringify(layout)},config:{...current.config,shape:'floating',order:${JSON.stringify(order)},hidden:${JSON.stringify(hidden)}},animation:{phase:'opening',duration:1}};receive(current);true`); await settle();
+      await run('Promise.allSettled(document.getAnimations().filter(a=>a.effect.getComputedTiming().iterations!==Infinity).map(a=>a.finished))');
+      assert.deepEqual(await run("[...document.querySelectorAll('#floating [data-action]')].filter(n=>!n.hidden).map(n=>n.dataset.action)"), selected);
+      fs.writeFileSync(path.join(out, `shortcut-panel-floating-${count}-compact.png`), (await win.webContents.capturePage(undefined, { stayHidden: true })).toPNG());
+    }
     win.destroy(); process.stdout.write('SHORTCUT_SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error=>{process.stderr.write(error.stack+'\n');app.exit(1)});
 } else {

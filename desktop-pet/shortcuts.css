@@ -25,6 +25,7 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 
 body[data-phase=closing] :is(.panel,.floating){pointer-events:none}
+.empty-actions{margin:0;padding:8px 15px;color:var(--muted);font-size:12px;line-height:1.5}
 .start-behavior-select{flex:none;width:78px;height:26px;padding:0 5px;border:1px solid transparent;border-radius:6px;background:var(--control);color:var(--muted);font:11px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;cursor:pointer}.start-behavior-select:hover{border-color:var(--line);color:var(--text)}.start-behavior-select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 :root[data-color-mode=accessible] .start-behavior-select{border-color:var(--accessible-line);background:var(--accessible-surface);color:var(--accessible-text)}:root[data-color-mode=accessible] .start-behavior-select:focus-visible{outline-color:var(--accessible-yellow)}
 

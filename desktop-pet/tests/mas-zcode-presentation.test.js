@@ -155,12 +155,14 @@ test('actual first-release native ZCode toggle opens settings without changing t
     const items = vm.runInNewContext(declaration(main, 'menuTemplate') + '\nmenuTemplate();', {
       FIRST_RELEASE: true, IS_STORE_BUILD: true, FirstRelease: require('../lib/mas-first-release'), process: { mas: true },
       availableUpdate: null, updateCheck: false, settings: normalizeSettings({}), app: { isPackaged: false, quit: noop },
+      calendarWindow: { menu: () => ({ id: 'calendar-menu', label: '日历', submenu: [] }) },
       zcodeLink: { isEnabled: () => enabled, menu: () => ({ id: 'zcode-menu', submenu: [original] }) },
       openGlobalSettings: view => destinations.push(view), codexMenu: () => ({ id: 'codex-menu', submenu: [] }), sizeMenu: () => [],
       storeLoginItems: () => ({ getState: () => ({ supported: false }) }), loginItemEnabled: () => false, edgeTuck: null,
       openStoreConnections: noop, openChat: noop, openCustomization: noop, openPomodoro: noop, restorePet: noop,
       resetPosition: noop, setAlwaysOnTop: noop, setOpenAtLogin: noop, setAutoUpdateCheck: noop });
     const selected = items.find(item => item.id === 'zcode-menu').submenu.find(item => item.id === 'zcode-enabled');
+    assert.ok(items.some(item => item.id === 'calendar-menu'), 'calendar entry coexists with the existing ZCode connection');
     const checkbox = { checked: !enabled }; selected.click(checkbox);
     assert.equal(checkbox.checked, enabled); assert.deepEqual(destinations, ['/zcode-menu']); assert.deepEqual(directToggles, []);
   }

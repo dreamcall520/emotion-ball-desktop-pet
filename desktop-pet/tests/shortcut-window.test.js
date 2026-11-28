@@ -558,3 +558,25 @@ test('settings tile closes launcher and delegates to global settings; explicit s
  f.manager.open();await flush();f.send('shortcut:settings');await flush();
  assert.equal(f.manager.isOpen(),true);assert.equal(f.manager.getState().view,'settings');assert.deepEqual(f.actions,['settings']);
 });
+
+test('自选入口保存后按两种形态重新布局，隐藏项不能由面板执行，空面板仍能打开管理', async t => {
+  const f = fixture(); t.after(() => f.manager.dispose());
+  const order = ['calendar', 'weather', 'todo', 'note', 'chat', 'custom', 'settings', 'pomodoro'];
+  f.manager.open({ settings: true }); await flush();
+  assert.equal(f.invoke('shortcut:save', { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', order, hidden: ['settings', 'pomodoro'] }).ok, true);
+  f.manager.close({ immediate: true }); f.manager.open(); await flush();
+  assert.deepEqual(f.manager.getState().layout.items.map(item => item.id), order.slice(0, 6));
+  f.send('shortcut:action', 'pomodoro'); assert.deepEqual(f.actions, []);
+  f.send('shortcut:action', 'calendar'); assert.deepEqual(f.actions, ['calendar']);
+  f.manager.open({ settings: true }); await flush();
+  assert.equal(f.invoke('shortcut:save', { shape: 'list', enabled: true, launcher: 'Ctrl+Alt+Q', order, hidden: ['settings', 'pomodoro'] }).ok, true);
+  f.manager.close({ immediate: true }); f.manager.open(); await flush();
+  assert.deepEqual(f.manager.getState().layout.items.map(item => item.id), order.slice(0, 6));
+  f.send('shortcut:action', 'weather'); assert.deepEqual(f.actions, ['calendar', 'weather']);
+  f.manager.open({ settings: true }); await flush();
+  assert.equal(f.invoke('shortcut:save', { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', order, hidden: [...order] }).ok, true);
+  f.manager.close({ immediate: true }); f.manager.open(); await flush();
+  assert.equal(f.manager.getState().view, 'list'); assert.deepEqual(f.manager.getState().layout.items, []);
+  f.send('shortcut:action', 'calendar'); assert.deepEqual(f.actions, ['calendar', 'weather']);
+  f.send('shortcut:action', 'settings'); assert.deepEqual(f.actions, ['calendar', 'weather', 'settings']);
+});

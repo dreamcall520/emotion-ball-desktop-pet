@@ -21,7 +21,7 @@
       section.append(group);
     }
     if (panelOnly) startGroup('快捷面板', '鼠标悬停球球时出现的功能入口，也可以用快捷键唤起。');
-    if (bindingsOnly) startGroup('唤起面板快捷键', '使用组合键唤起快捷面板。');
+    if (bindingsOnly) startGroup('快捷面板', '设置快捷面板的形态与唤起方式。');
     const notice = node('p', '点击组合键后，按下想使用的快捷键。Esc 取消，退格清除。', 'description');
     notice.setAttribute('role', 'status');
     function feedback(message) {
@@ -50,10 +50,66 @@
     }
     const enabled = node('button', '', 'toggle'); enabled.type = 'button'; enabled.setAttribute('role', 'switch'); enabled.setAttribute('aria-label', '启用快捷面板'); enabled.setAttribute('aria-checked', String(draft.enabled));
     enabled.onclick = () => { if (saving) return; draft.enabled = !draft.enabled; void persist(); };
-    if (panelOnly) row('启用快捷面板', enabled);
-    if (panelOnly) choice('面板形态', 'shape', [['floating', '悬浮按钮'], ['list', '列表面板']]);
+    if (panelOnly || bindingsOnly) row('启用快捷面板', enabled);
+    if (panelOnly || bindingsOnly) choice('面板形态', 'shape', [['floating', '悬浮按钮'], ['list', '列表面板']]);
     let active = null;
-    const labels = { launcher: '唤起快捷面板', chat: '和球球聊聊', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟', weather: '天气' };
+    const labels = { launcher: '唤起快捷面板', chat: '和球球聊聊', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟', weather: '天气', calendar: '日历' };
+    const panelLabels = { chat: '和球球聊聊', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟', settings: '设置中心', weather: '天气', calendar: '日历' };
+    const panelOrder = () => {
+      const order = [...new Set((Array.isArray(draft.order) ? draft.order : []).filter(id => Object.hasOwn(panelLabels, id)))];
+      return [...order, ...Object.keys(panelLabels).filter(id => !order.includes(id))];
+    };
+    const panelHidden = () => (Array.isArray(draft.hidden) ? draft.hidden : ['weather', 'calendar']).filter(id => Object.hasOwn(panelLabels, id));
+    let panelGroup = null;
+    function paintPanel() {
+      if (!panelGroup) return;
+      const order = panelOrder(), hidden = panelHidden(), count = order.filter(id => !hidden.includes(id)).length;
+      panelGroup.replaceChildren(node('h3', '快捷面板显示'), node('p', '选择快捷面板里的入口并拖动排序，最多显示6个。隐藏入口不会清除功能快捷键。', 'description group-intro'));
+      panelGroup.append(node('p', `已显示 ${count}/6`, 'description shortcut-panel-count'));
+      for (const [index, id] of order.entries()) {
+        const item = node('div', '', 'row'); item.dataset.shortcutPanel = id; item.draggable = !saving;
+        const heading = node('div', '', 'quota-card-name'), handle = node('span', '⠿', 'quota-card-drag-handle');
+        handle.title = '拖拽调整顺序'; handle.setAttribute('aria-hidden', 'true');
+        heading.append(handle, node('span', panelLabels[id], 'row-title')); item.append(heading);
+        let dragFromControl = false;
+        item.onpointerdown = event => { dragFromControl = Boolean(event.target.closest?.('button,input,label')); };
+        item.ondragstart = event => {
+          if (saving || dragFromControl || event.target.closest?.('button,input,label')) { event.preventDefault(); return; }
+          event.dataTransfer.setData('application/x-qiuqiu-shortcut-panel', id); event.dataTransfer.effectAllowed = 'move'; item.classList.add('dragging');
+        };
+        item.ondragend = () => panelGroup.querySelectorAll('.dragging,.drag-over').forEach(n => n.classList.remove('dragging', 'drag-over'));
+        item.ondragover = event => {
+          if (saving || !Array.from(event.dataTransfer.types).includes('application/x-qiuqiu-shortcut-panel')) return;
+          event.preventDefault(); event.dataTransfer.dropEffect = 'move'; item.classList.add('drag-over');
+        };
+        item.ondragleave = event => { if (!item.contains(event.relatedTarget)) item.classList.remove('drag-over'); };
+        item.ondrop = event => {
+          event.preventDefault(); item.classList.remove('drag-over');
+          const moved = event.dataTransfer.getData('application/x-qiuqiu-shortcut-panel');
+          if (saving || moved === id || !order.includes(moved)) return;
+          draft.order = order.filter(value => value !== moved); draft.order.splice(index, 0, moved); draft.hidden = [...hidden]; void persist();
+        };
+        const controls = node('div', '', 'quota-card-controls');
+        for (const [label, offset] of [['上移', -1], ['下移', 1]]) {
+          const button = node('button', label, 'action'); button.type = 'button'; button.setAttribute('aria-label', `快捷面板${panelLabels[id]}${label}`);
+          button.disabled = saving || index + offset < 0 || index + offset >= order.length;
+          button.onclick = () => {
+            if (saving || index + offset < 0 || index + offset >= order.length) return;
+            draft.order = [...order]; [draft.order[index], draft.order[index + offset]] = [draft.order[index + offset], draft.order[index]]; draft.hidden = [...hidden]; void persist();
+          };
+          controls.append(button);
+        }
+        const display = node('label', '', 'quota-card-pin'), checkbox = node('input'); checkbox.type = 'checkbox';
+        checkbox.setAttribute('aria-label', `快捷面板显示${panelLabels[id]}`); checkbox.checked = !hidden.includes(id);
+        checkbox.disabled = saving || !checkbox.checked && count >= 6;
+        if (!checkbox.checked && count >= 6) display.title = '最多显示6个，请先关闭一个入口。';
+        checkbox.onchange = () => {
+          if (saving || checkbox.checked && count >= 6) { checkbox.checked = !hidden.includes(id); return; }
+          draft.order = [...order]; draft.hidden = checkbox.checked ? hidden.filter(value => value !== id) : [...hidden, id]; void persist();
+        };
+        display.append(checkbox, document.createTextNode('显示')); controls.append(display); item.append(controls); panelGroup.append(item);
+      }
+    }
     const buttons = {}, clears = {};
     function paint(field) {
       const button = buttons[field]; button.replaceChildren();
@@ -65,7 +121,10 @@
     }
     const finish = () => { if (active) paint(active); active = null; api.recordShortcuts(false); };
     for (const [field, label] of Object.entries(bindingsOnly ? labels : {})) {
-      if (field === 'chat') startGroup('功能快捷键', '直接打开对应功能，无需先唤起快捷面板。');
+      if (field === 'chat') {
+        panelGroup = node('section', '', 'group shortcut-panel-settings'); section.append(panelGroup);
+        startGroup('功能快捷键', '直接打开对应功能，无需先唤起快捷面板。');
+      }
       const button = node('button', '', 'binding-button'); button.type = 'button';
       button.setAttribute('aria-label', `${label}快捷键`); buttons[field] = button;
       const controls = node('div', '', 'binding-controls');
@@ -113,6 +172,7 @@
       enabled.setAttribute('aria-checked', String(draft.enabled));
       for (const [field, select] of Object.entries(selects)) select.value = String(draft[field]);
       for (const field of Object.keys(buttons)) paint(field);
+      paintPanel();
       feedback(message);
     };
     section.append(notice);

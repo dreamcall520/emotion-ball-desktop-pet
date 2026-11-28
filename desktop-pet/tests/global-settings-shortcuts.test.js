@@ -35,7 +35,35 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
       window.key=(key,code,extra={})=>document.dispatchEvent(new KeyboardEvent('keydown',{key,code,bubbles:true,cancelable:true,...extra}));true;`);
     assert.equal(await run("document.querySelectorAll('.shortcut-footer,.shortcut-save-controls').length"), 0);
     assert.equal(await run("document.getElementById('content').textContent.includes('保存更改')"), false);
-    assert.equal(await run("control('启用快捷面板')===null&&control('面板形态')===null"),true,'shortcut page contains bindings only');
+    assert.equal(await run("!!control('启用快捷面板')&&!!control('面板形态')&&!!control('唤起快捷面板快捷键')"),true,'shortcut page groups shared panel preferences with launcher binding');
+    await run("change('面板形态','list')"); await settle();
+    assert.equal(await run('config.shape'), 'list', 'shortcut page shape uses the shared saved configuration');
+    await run("saveMode='conflict';change('面板形态','floating')"); await settle();
+    assert.equal(await run("control('面板形态').value"), 'list', 'shape save failure rolls back on shortcut page');
+    await run("saveMode='ok';change('面板形态','floating');"); await settle();
+    await run("control('启用快捷面板').click()"); await settle();
+    assert.equal(await run('config.enabled'), false);
+    await run("control('启用快捷面板').click()"); await settle();
+    assert.equal(await run('config.enabled'), true);
+    assert.equal(await run("document.querySelectorAll('[data-shortcut-panel]').length"), 8);
+    assert.equal(await run("document.querySelectorAll('.shortcut-panel-settings input:checked').length"), 6);
+    assert.equal(await run("control('快捷面板显示日历').disabled"), true, 'seventh entry cannot be enabled');
+    await run("control('快捷面板显示定制球球').click()"); await settle();
+    assert.equal(await run("control('快捷面板显示日历').disabled"), false);
+    await run("control('快捷面板显示日历').click()"); await settle();
+    assert.equal(await run("config.hidden.includes('custom')&&!config.hidden.includes('calendar')"), true);
+    assert.equal(await run("document.querySelectorAll('.binding-button').length"), 8, 'visibility never removes keyboard binding controls');
+    const limitedCount = await run('calls.length');
+    await run("{const c=control('快捷面板显示天气');c.checked=true;c.dispatchEvent(new Event('change'));}"); await settle();
+    assert.equal(await run('calls.length'), limitedCount, 'a synthetic seventh selection is also rejected');
+    await run("control('快捷面板日历上移').click()"); await settle();
+    assert.equal(await run("config.order.indexOf('calendar')<config.order.indexOf('weather')"), true);
+    await run("{const source=document.querySelector('[data-shortcut-panel=calendar]'),target=document.querySelector('[data-shortcut-panel=chat]'),transfer=new DataTransfer();source.dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:transfer}));target.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer}));target.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));}"); await settle();
+    assert.equal(await run('config.order[0]'), 'calendar');
+    assert.equal(await run("document.querySelector('[data-shortcut-panel]').dataset.shortcutPanel"), 'calendar');
+    await run("saveMode='conflict';control('快捷面板显示待办').click()"); await settle();
+    assert.equal(await run("control('快捷面板显示待办').checked"), true, 'failed visibility save restores prior selection');
+    await run("saveMode='ok'");
     await run("window.interactions=()=>[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='球球与互动').click();interactions()");
     assert.equal(await run("document.querySelectorAll('.binding-button').length"),0,'interaction page contains panel preferences only');
     await run("control('启用快捷面板').click()"); await settle();
@@ -97,7 +125,7 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
     assert.equal(await run("control('启用快捷面板').disabled"), false);
     await run("saveMode='defer';change('面板形态','list');navigate('shortcuts')");await settle();
     assert.equal(await run("control('唤起快捷面板快捷键').disabled"),true,'panel-to-shortcuts pending save guards bindings');
-    assert.equal(await run("control('面板形态')===null"),true,'shortcut page never duplicates panel preferences during save');
+    assert.equal(await run("control('面板形态').disabled"),true,'the shared shape control is disabled during cross-page save');
     await run("resolveSave();saveMode='ok'");await settle();
     assert.equal(await run("control('唤起快捷面板快捷键').disabled"),false);
     await run("interactions()");await settle();
@@ -118,15 +146,45 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
     await run("control('天气快捷键').click();key('w','KeyW',{ctrlKey:true,altKey:true})");await settle();
     assert.equal(await run('config.weather'),'Ctrl+Alt+W');
     await run("control('删除天气快捷键').click()");await settle();assert.equal(await run('config.weather'),'');
+    assert.equal(await run("control('日历快捷键').textContent"), '设置快捷键', 'calendar shortcut starts unset for a legacy snapshot');
+    await run("control('日历快捷键').click();key('l','KeyL',{metaKey:true})");await settle();
+    assert.equal(await run('config.calendar'), 'Meta+L');
+    assert.equal(await run('recordings.at(-1)'), false);
+    const beforeDuplicateCalendar = await run('calls.length');
+    await run("control('天气快捷键').click();key('l','KeyL',{metaKey:true})");await settle();
+    assert.equal(await run('calls.length'), beforeDuplicateCalendar, 'calendar participates in duplicate detection');
+    assert.match(await run("document.querySelector('.shortcut-settings-group [role=status]').textContent"), /其他功能/);
+    await run("key('Escape','Escape');control('删除日历快捷键').click()");await settle();
+    assert.equal(await run('config.calendar'), '');
+    await run("control('日历快捷键').click();key('l','KeyL',{ctrlKey:true,altKey:true})");await settle();
+    assert.equal(await run('config.calendar'), 'Ctrl+Alt+L');
+    await run("control('日历快捷键').click();key('Backspace','Backspace')");await settle();
+    assert.equal(await run('config.calendar'), '', 'recording Backspace clears the calendar binding');
     const geometry = await run(`[...document.querySelectorAll('.binding-clear')].map(n=>({x:n.getBoundingClientRect().x,width:n.getBoundingClientRect().width,visibility:getComputedStyle(n).visibility}))`);
-    assert(geometry.length === 7 && geometry.every(r => r.width === 28 && Math.abs(r.x - geometry[0].x) < 1), JSON.stringify(geometry));
+    assert(geometry.length === 8 && geometry.every(r => r.width === 28 && Math.abs(r.x - geometry[0].x) < 1), JSON.stringify(geometry));
     assert(geometry.some(r => r.visibility === 'visible') && geometry.some(r => r.visibility === 'hidden'));
+    await run("document.querySelector('.shortcut-panel-settings').scrollIntoView({block:'start'})"); await settle();
+    assert.equal(await run("(()=>{const panel=document.querySelector('.shortcut-panel-settings').getBoundingClientRect(),count=document.querySelector('.shortcut-panel-count').getBoundingClientRect();return count.right>panel.left+panel.width*.7&&count.top>=panel.top&&count.bottom<panel.top+48})()"),true,'visible count is a badge at the upper right');
+    await run("document.getElementById('content').querySelector('.shortcut-settings-group').firstElementChild.scrollIntoView({block:'start'})"); await settle();
+    await capture('shortcut-panel-shape-controls.png');
+    await run("document.querySelector('.shortcut-panel-settings').scrollIntoView({block:'start'})"); await settle();
+    await capture('shortcut-panel-visibility-order.png');
+    const keyboardBeforeHidden = await run("JSON.stringify(Object.fromEntries(['launcher','chat','custom','note','todo','pomodoro','weather','calendar'].map(id=>[id,config[id]])))");
+    while (await run("document.querySelectorAll('.shortcut-panel-settings input:checked').length")) {
+      await run("document.querySelector('.shortcut-panel-settings input:checked').click()"); await settle();
+    }
+    assert.equal(await run("document.querySelectorAll('.shortcut-panel-settings input:checked').length"), 0);
+    assert.equal(await run("JSON.stringify(Object.fromEntries(['launcher','chat','custom','note','todo','pomodoro','weather','calendar'].map(id=>[id,config[id]])))"), keyboardBeforeHidden, 'all hidden retains every keyboard binding');
+    for (const label of ['日历','和球球聊聊','便签','待办','番茄钟','设置中心']) {
+      await run(`control(${JSON.stringify('快捷面板显示'+label)}).click()`); await settle();
+    }
+    await run("document.querySelector('.shortcut-panel-settings').scrollIntoView({block:'start'})"); await settle();
     const out = process.env.PET_SMOKE_ARTIFACT_DIR;
     if (out) {
       fs.mkdirSync(out,{recursive:true});
       fs.writeFileSync(path.join(out,'shortcuts-autosave.png'), (await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
       fs.writeFileSync(path.join(out,'shortcuts-autosave-report.json'),JSON.stringify({passed:true,sourceRoot:root,nativeWindowHidden:!win.isVisible(),fixtureApi:true,
-        checks:['no-save-footer','enabled-and-shape-autosave','notes-page-exclusive-behavior-controls','note-and-todo-behavior-autosave','notes-open-and-default-tab-preserved','notes-behavior-failure-rollback','notes-behavior-stale-refresh-rejected','notes-to-shortcuts-pending-save-preserved','record-and-clear-autosave','duplicate-guard','conflict-feedback-and-rollback','exception-rollback-and-retry','stale-refresh-rejected','pending-events-blocked','pending-remount-updated','clear-column-aligned'],geometry},null,2));
+        checks:['no-save-footer','enabled-and-shape-autosave','notes-page-exclusive-behavior-controls','note-and-todo-behavior-autosave','notes-open-and-default-tab-preserved','notes-behavior-failure-rollback','notes-behavior-stale-refresh-rejected','notes-to-shortcuts-pending-save-preserved','record-and-clear-autosave','calendar-record-clear-and-duplicate-guard','duplicate-guard','conflict-feedback-and-rollback','exception-rollback-and-retry','stale-refresh-rejected','pending-events-blocked','pending-remount-updated','clear-column-aligned'],geometry},null,2));
     }
     assert.equal(win.isVisible(), false); win.destroy();
     process.stdout.write('SHORTCUT_SETTINGS_AUTOSAVE_DOM_OK\n'); app.exit(0);

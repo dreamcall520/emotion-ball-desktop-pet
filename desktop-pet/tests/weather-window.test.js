@@ -214,6 +214,7 @@ test('city settings opens its picker after first load even when the compact card
  win.webContents.emit('did-finish-load');
  assert(win.sent.some(item=>item.channel==='weather:choose-city'));
  assert.equal(f.controller.isCardVisible(),false);assert.equal(f.controller.isExpanded(),true);
+ f.invoke('resize',{expanded:true,picker:true,height:210});
  f.invoke('resize',{expanded:false});assert.equal(win.isVisible(),false);
 });
 test('city settings immediately opens a picker in an already loaded window', t => {
@@ -238,6 +239,118 @@ test('settings city picker floats independently of its owner and restores the no
   assert(win.sent.some(item => item.channel === 'weather:choose-city'));
   f.controller.resetExpanded();
   assert.equal(win.topmost, false);
+});
+
+test('owned weather details reuse existing weather on first load without opening city selection or requesting data', t => {
+  let locationCalls = 0;
+  const f = fixture(t, { saved: { enabled: true, city: cityA }, cached: diskCache(), alwaysOnTop: false,
+    locationBridge: { locate: async () => { locationCalls++; return cityB; } } });
+  const owner = { isDestroyed: () => false, isVisible: () => true, getBounds: () => ({ x: 100, y: 80, width: 700, height: 600 }) };
+  const requests = f.requests.length, saved = fs.readFileSync(f.filePath, 'utf8');
+  f.controller.setCardVisible(false); f.setPetVisible(false); f.controller.setGroupTransitionMode('masked');
+  assert.equal(f.controller.openDetails(owner), true);
+  const win = f.controller.getWindow();
+  assert.equal(win.isVisible(), true); assert.equal(win.topmost, true); assert.equal(win.getBounds().width, 390); assert.equal(win.getBounds().height, 620);
+  assert.equal(win.sent.some(item => item.channel === 'weather:details'), false, 'initial details wait for the renderer');
+  win.webContents.emit('did-finish-load');
+  assert.equal(win.sent.filter(item => item.channel === 'weather:details').length, 1);
+  assert.equal(win.sent.some(item => item.channel === 'weather:choose-city'), false);
+  assert.equal(win.focused, true); assert.equal(win.movesToTop, 1);
+  assert.equal(f.controller.getState().current.temperature, -3);
+  assert.equal(f.requests.length, requests); assert.equal(locationCalls, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.filePath)), { ...JSON.parse(saved), cardVisible: false });
+  f.invoke('resize', { expanded: true, picker: false, height: 620 });
+  f.invoke('resize', { expanded: false });
+  assert.equal(win.topmost, false); assert.equal(win.isVisible(), false);
+});
+
+test('details replace queued or already loaded city picker requests and retire an old location result', async t => {
+  const location = deferred(), f = fixture(t, { saved: { enabled: true, city: cityA }, cached: diskCache(),
+    locationBridge: { locate: () => location.promise } });
+  const win = f.controller.getWindow(), requests = f.requests.length;
+  f.controller.openCity(); f.controller.openDetails(); win.webContents.emit('did-finish-load');
+  assert.equal(win.sent.some(item => item.channel === 'weather:choose-city'), false, 'the latest view wins before load');
+  assert.equal(win.sent.filter(item => item.channel === 'weather:details').length, 1);
+  f.controller.openCity();
+  const pickerMessages = win.sent.filter(item => item.channel === 'weather:choose-city').length;
+  const pending = f.invoke('location');
+  assert.equal(f.controller.openDetails(), true);
+  assert.equal(win.sent.filter(item => item.channel === 'weather:details').length, 2);
+  assert.equal(win.sent.filter(item => item.channel === 'weather:choose-city').length, pickerMessages);
+  location.resolve({ ...cityB, accuracy: 10 });
+  assert.equal((await pending).cancelled, true);
+  assert.equal(f.controller.getState().city.name, cityA.name); assert.equal(f.requests.length, requests);
+});
+
+test('details honor lock/suppression and never enable or refresh disabled configured weather', t => {
+  let blocked = false;
+  const f = fixture(t, { saved: { enabled: true, city: cityA }, cached: diskCache(), getCityPickerSuppressed: () => blocked });
+  const win = f.controller.getWindow(), requests = f.requests.length;
+  win.webContents.emit('did-finish-load');
+  blocked = true; assert.equal(f.controller.openDetails(), false);
+  blocked = false; f.controller.pause(); assert.equal(f.controller.openDetails(), false);
+  assert.equal(win.sent.some(item => item.channel === 'weather:details'), false);
+  assert.equal(f.requests.length, requests);
+  const disabled = fixture(t, { saved: { enabled: true, city: cityA }, cached: diskCache() });
+  disabled.controller.setEnabled(false);
+  const disabledRequests = disabled.requests.length;
+  assert.equal(disabled.controller.openDetails(), false); assert.equal(disabled.controller.isEnabled(), false);
+  assert.equal(disabled.requests.length, disabledRequests);
+});
+
+test('details fall back to the existing city chooser only when no city is configured', t => {
+  const f = fixture(t), win = f.controller.getWindow(); win.webContents.emit('did-finish-load');
+  assert.equal(f.controller.openDetails(), true);
+  assert.equal(win.sent.some(item => item.channel === 'weather:choose-city'), true);
+  assert.equal(win.sent.some(item => item.channel === 'weather:details'), false);
+  assert.equal(f.requests.length, 0);
+});
+
+test('first explicit weather open ignores the initial folded renderer resize until details or city view acknowledges expansion', t => {
+  for (const city of [cityA, null]) {
+    const f = fixture(t, { saved: { enabled: false, city, cardVisible: false }, getCityPickerSuppressed: () => false });
+    f.suppress(true); f.groupHidden(true);
+    const win = f.controller.getWindow();
+    assert.equal(f.controller.openDetails(), true);
+    assert.equal(win.isVisible(), true); assert.equal(f.controller.isExpanded(), true);
+    assert.equal(f.invoke('resize', { expanded: false }).width, 390, 'initial default size cannot clear explicit open');
+    win.webContents.emit('did-finish-load');
+    assert.equal(f.invoke('resize', { expanded: false }).width, 390, 'late initial size before the requested view paints is ignored');
+    assert.equal(win.isVisible(), true); assert.equal(f.controller.isCardVisible(), false);
+    assert.equal(win.sent.some(item => item.channel === (city ? 'weather:details' : 'weather:choose-city')), true);
+    f.invoke('resize', { expanded: true, height: city ? 436 : 250, picker: !city });
+    f.invoke('resize', { expanded: false });
+    assert.equal(win.isVisible(), false, 'a later user collapse restores the passive-card visibility choice');
+    assert.equal(JSON.parse(fs.readFileSync(f.filePath)).city?.name || null, city?.name || null);
+    win.destroy(); assert.equal(f.controller.openDetails(), true);
+    const recreated = f.controller.getWindow();
+    assert.notEqual(recreated, win);
+    assert.equal(f.invoke('resize', { expanded: false }).width, 390, 'a recreated renderer has the same first-paint guard');
+    recreated.webContents.emit('did-finish-load');
+    f.invoke('resize', { expanded: true, height: city ? 436 : 250, picker: !city });
+    assert.equal(recreated.isVisible(), true);
+  }
+});
+
+test('reopening a weather view after its initial paint does not block a later user collapse', t => {
+  const f = fixture(t, { saved: { enabled: true, city: cityA, cardVisible: false }, getCityPickerSuppressed: () => false });
+  const win = f.controller.getWindow(); win.webContents.emit('did-finish-load');
+  f.invoke('resize', { expanded: false });
+  assert.equal(f.controller.openDetails(), true);
+  f.invoke('resize', { expanded: true, height: 436, picker: false });
+  assert.equal(f.controller.openDetails(), true);
+  f.invoke('resize', { expanded: false });
+  assert.equal(win.isVisible(), false); assert.equal(f.controller.isExpanded(), false);
+});
+
+test('real preload forwards the details event without exposing the Electron event and removes its listener', () => {
+  const ipcRenderer = new EventEmitter(); let api, calls = 0;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../weather-preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } }, ipcRenderer })
+  });
+  const unsubscribe = api.onDetails((...args) => { calls++; assert.deepEqual(args, []); });
+  ipcRenderer.emit('weather:details', { sender: 'private' }); assert.equal(calls, 1);
+  unsubscribe(); ipcRenderer.emit('weather:details', {}); assert.equal(calls, 1);
 });
 
 test('successful native location returns immediately while weather fetch remains pending', async t => {
@@ -385,7 +498,7 @@ test('an endpoint collection change cancels a stale morph and a hidden renderer 
  const hanging=morphFixture();hanging.hangDom=true;const timed=fixture(t,{morph:hanging});timed.invoke('resize',{expanded:true,height:400});const result=await timed.invoke('collapse');assert.equal(result.animated,false);assert.equal(timed.controller.isClosing(),false);assert.equal(timed.controller.getWindow().isVisible(),true,'bounded fallback restores a painted real compact card');
 });
 
-test('主动选城市不被设置窗口的卡片隐藏规则挡住，安全阻塞和普通卡隐藏仍有效',t=>{let blocked=false;const f=fixture(t,{getCityPickerSuppressed:()=>blocked});const win=f.controller.getWindow();win.webContents.emit('did-finish-load');f.suppress(true);f.controller.reposition();assert.equal(win.isVisible(),false);f.controller.openCity();assert.equal(win.isVisible(),true);blocked=true;f.controller.reposition();assert.equal(win.isVisible(),false);blocked=false;f.controller.reposition();assert.equal(win.isVisible(),true);f.invoke('resize',{expanded:false});assert.equal(win.isVisible(),false);});
+test('主动选城市不被设置窗口的卡片隐藏规则挡住，安全阻塞和普通卡隐藏仍有效',t=>{let blocked=false;const f=fixture(t,{getCityPickerSuppressed:()=>blocked});const win=f.controller.getWindow();win.webContents.emit('did-finish-load');f.suppress(true);f.controller.reposition();assert.equal(win.isVisible(),false);f.controller.openCity();assert.equal(win.isVisible(),true);blocked=true;f.controller.reposition();assert.equal(win.isVisible(),false);blocked=false;f.controller.reposition();assert.equal(win.isVisible(),true);f.invoke('resize',{expanded:true,picker:true,height:210});f.invoke('resize',{expanded:false});assert.equal(win.isVisible(),false);});
 
 
 test('city selection confirms its persistence before weather completes and failure retains the selected city', async t => {

@@ -399,6 +399,13 @@
           button.disabled = !item.enabled || busy;
           button.onclick = () => item.id === '/shortcut-settings' ? selectView('shortcuts') : item.id === '/shortcut-panel-settings' ? selectView(interaction.id) : act(item);
           row.append(button);
+          if (category.label === '球球尺寸' && item.type === 'radio') {
+            row.dataset.sizeOption = item.id;
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', event => {
+              if (!event.target.closest('button,input,select,textarea,a') && !button.disabled) button.click();
+            });
+          }
         }
         if (category.label === '便签与待办') {
           if (item.type === 'select') { row.classList.add('notes-preference'); text.querySelector('.row-title').textContent = '主面板默认显示'; }

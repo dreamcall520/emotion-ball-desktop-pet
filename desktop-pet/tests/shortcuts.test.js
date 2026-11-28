@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   DEFAULT_SHORTCUT_SETTINGS: defaults, normalizeAccelerator, normalizeShortcutSettings,
-  validateShortcutSettings, createShortcutRegistrar
+  validateShortcutSettings, createShortcutRegistrar, PANEL_ACTIONS, panelActions
 } = require('../lib/shortcuts');
 const { DEFAULTS, normalizeSettings, loadSettings, saveSettings } = require('../lib/settings');
 
@@ -126,7 +126,7 @@ test('启动有占用时只降级对应快捷键，保留配置和其他可用�
   assert.equal(state.ok, false);
   assert.equal(state.errors[0].field, 'launcher');
   assert.deepEqual(state.config, { ...defaults, note: 'Alt+N' });
-  assert.deepEqual(registrar.getState().active, { launcher: false, chat: false, custom: false, note: true, todo: false, pomodoro: false, weather: false });
+  assert.deepEqual(registrar.getState().active, { launcher: false, chat: false, custom: false, note: true, todo: false, pomodoro: false, weather: false, calendar: false });
   globalShortcut.fire('Alt+N');
   assert.deepEqual(actions, ['note']);
   globalShortcut.blocked.clear();
@@ -264,4 +264,76 @@ test('weather shortcut is opt-in, persists independently and routes through the 
  const registrar=createShortcutRegistrar({globalShortcut,config:{...defaults,weather:'Meta+W'},onAction:action=>actions.push(action)});
  registrar.start();globalShortcut.fire('Meta+W');assert.deepEqual(actions,['weather']);
  assert.equal(registrar.getConfig().weather,'Meta+W');registrar.dispose();
+});
+
+test('calendar shortcut is opt-in, preserves legacy bindings and registers only after a successful save', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-calendar-shortcut-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  const legacy = { enabled: false, shape: 'list', launcher: '', chat: 'Meta+J', note: 'Meta+N' };
+  fs.writeFileSync(file, JSON.stringify({ shortcutSettings: legacy }));
+  const config = loadSettings(file).shortcutSettings;
+  assert.equal(defaults.calendar, '');
+  assert.equal(config.calendar, '');
+  assert.equal(config.chat, legacy.chat); assert.equal(config.note, legacy.note);
+  const globalShortcut = fakeGlobalShortcut(), actions = [];
+  const registrar = createShortcutRegistrar({ globalShortcut, config, onAction: action => actions.push(action) });
+  registrar.start();
+  const duplicate = registrar.apply({ ...config, calendar: legacy.note }, () => assert.fail('duplicate cannot save'));
+  assert.equal(duplicate.ok, false); assert.equal(duplicate.errors[0].field, 'calendar');
+  assert.equal(duplicate.errors[0].conflictWith, 'note');
+  globalShortcut.blocked.add('Meta+L');
+  assert.equal(registrar.apply({ ...config, calendar: 'Meta+L' }, () => assert.fail('registration conflict cannot save')).ok, false);
+  assert.equal(registrar.getConfig().calendar, '');
+  globalShortcut.blocked.clear();
+  const save = shortcutSettings => saveSettings(file, { ...loadSettings(file), shortcutSettings });
+  assert.equal(registrar.apply({ ...config, calendar: 'Meta+L' }, save).ok, true);
+  assert.equal(loadSettings(file).shortcutSettings.calendar, 'Meta+L');
+  globalShortcut.fire('Meta+L'); globalShortcut.fire(legacy.chat); globalShortcut.fire(legacy.note);
+  assert.deepEqual(actions, ['calendar', 'chat', 'note']);
+  registrar.setRecording(true); globalShortcut.fire('Meta+L');
+  assert.deepEqual(actions, ['calendar', 'chat', 'note'], 'recording does not activate the calendar');
+  registrar.setRecording(false);
+  assert.equal(registrar.apply({ ...registrar.getConfig(), calendar: '' }, save).ok, true);
+  assert.equal(loadSettings(file).shortcutSettings.calendar, '');
+  assert.equal(globalShortcut.registered.has('Meta+L'), false);
+  globalShortcut.fire('Meta+L'); globalShortcut.fire(legacy.chat);
+  assert.deepEqual(actions, ['calendar', 'chat', 'note', 'chat']);
+  registrar.dispose();
+});
+
+test('快捷面板 order/hidden 保持既有六项，显式排序隐藏可保存，超六项拒绝且不清除热键', t => {
+  assert.deepEqual(panelActions(normalizeShortcutSettings({ chat: 'Meta+C' })), ['chat', 'custom', 'note', 'todo', 'pomodoro', 'settings']);
+  const legacyPanel = normalizeShortcutSettings({ ...defaults, order: ['todo', 'chat', 'custom', 'note', 'pomodoro', 'settings'], hidden: ['chat'], chat: 'Meta+C' });
+  assert.deepEqual(panelActions(legacyPanel), ['todo', 'custom', 'note', 'pomodoro', 'settings'], 'new entries stay hidden for a saved legacy order/hidden choice');
+  assert.equal(legacyPanel.chat, 'Meta+C');
+  const order = ['calendar', 'weather', 'todo', 'note', 'chat', 'custom', 'settings', 'pomodoro'];
+  const hidden = ['settings', 'pomodoro'];
+  const config = { ...defaults, chat: 'Meta+C', calendar: 'Meta+L', order, hidden };
+  assert.deepEqual(validateShortcutSettings(config).config.order, order);
+  assert.deepEqual(validateShortcutSettings(config).config.hidden, hidden);
+  assert.deepEqual(panelActions(config), order.slice(0, 6));
+  const invalid = validateShortcutSettings({ ...config, hidden: ['pomodoro'] });
+  assert.equal(invalid.ok, false); assert.equal(invalid.errors[0].code, 'panel_limit');
+  const cleaned = normalizeShortcutSettings({ ...config, order: ['calendar', 'calendar', 'bogus'], hidden: ['bogus'], chat: 'Meta+C' });
+  assert.equal(cleaned.chat, 'Meta+C'); assert.equal(cleaned.calendar, 'Meta+L');
+  assert.equal(cleaned.order[0], 'calendar'); assert.equal(new Set(cleaned.order).size, 8);
+  assert.equal(panelActions(cleaned).length, 6);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-panel-items-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json'), keys = fakeGlobalShortcut(), calls = [];
+  const registrar = createShortcutRegistrar({ globalShortcut: keys, config, onAction: id => calls.push(id) }); registrar.start();
+  const registrations = keys.calls.length;
+  const allHidden = { ...registrar.getConfig(), hidden: [...PANEL_ACTIONS] };
+  assert.equal(registrar.apply(allHidden, shortcutSettings => saveSettings(file, { shortcutSettings })).ok, true);
+  assert.deepEqual(loadSettings(file).shortcutSettings.order, order);
+  assert.deepEqual(loadSettings(file).shortcutSettings.hidden, PANEL_ACTIONS);
+  assert.deepEqual(panelActions(registrar.getConfig()), []);
+  assert.equal(keys.calls.length, registrations, 'hiding/reordering never releases keyboard shortcuts');
+  keys.fire('Meta+C'); keys.fire('Meta+L'); assert.deepEqual(calls, ['chat', 'calendar']);
+  const snapshot = registrar.getConfig(); snapshot.order.reverse(); snapshot.hidden.pop();
+  assert.deepEqual(registrar.getConfig().order, order); assert.deepEqual(registrar.getConfig().hidden, PANEL_ACTIONS);
+  assert.equal(registrar.apply({ ...allHidden, hidden: [] }, () => assert.fail('over-limit save cannot persist')).ok, false);
+  assert.deepEqual(registrar.getConfig().hidden, PANEL_ACTIONS);
+  registrar.dispose();
 });

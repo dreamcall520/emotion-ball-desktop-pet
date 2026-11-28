@@ -11,6 +11,93 @@ const events = ['hello', 'pet', 'drag', 'drop', 'welcome', 'wake', 'thought', 'w
 const codexAlert = (overrides = {}) => ({ id: 7, generation: 2, kind: 'completed',
   text: '这轮有结果啦，去看看？', taskIds: ['11111111-1111-4111-8111-111111111111'], ...overrides });
 
+test('本地日历问候和节日提醒共用气泡编号，默认八秒且到期自动消失', () => {
+  const director = new DialogueDirector();
+  const update = director.offerUpdate('1.0.3', 0); director.dismiss();
+  const greeting = director.offerCalendarReminder('早上好，今天也慢慢来。', 10);
+  assert.deepEqual(greeting, { id: update.id + 1, text: '早上好，今天也慢慢来。', actions: [], durationMs: 8000 });
+  assert.equal(director.hasBubble(8009), true); assert.equal(director.hasBubble(8010), false);
+  const holiday = director.offerCalendarReminder('今天是小雪，记得添件衣服。', 8010, 500);
+  assert.equal(holiday.id, greeting.id + 1); assert.equal(holiday.durationMs, 500);
+  assert.equal(director.hasBubble(8509), true); assert.equal(director.hasBubble(8510), false);
+  assert.equal(director.offerCodex(codexAlert(), 8510).id, holiday.id + 1);
+});
+
+test('日历提醒不抢占现有互动、三联动、更新或另一条日历气泡', () => {
+  const providers = [
+    director => director.offer('play', 0),
+    director => director.offerCodex(codexAlert(), 0),
+    director => director.offerProviderTask({ provider: 'workbuddy', id: 1, generation: 2, text: '任务有结果啦' }, 0),
+    director => director.offerProviderTask({ provider: 'zcode', id: 1, generation: 2, text: '任务有结果啦' }, 0),
+    director => director.offerUpdate('1.0.3', 0),
+    director => director.offerCalendarReminder('午安，休息一会儿吧。', 0)
+  ];
+  for (const offer of providers) {
+    const director = new DialogueDirector(), current = offer(director);
+    assert.ok(current);
+    assert.equal(director.offerCalendarReminder('今天有个节日', 100), null);
+    assert.equal(director.hasBubble(100), true);
+    if (current.actions.length) assert.notEqual(director.respond(current.id, current.actions[0].id, 101), null, '原气泡操作权限保留');
+    else director.dismiss();
+    assert.equal(director.offerCalendarReminder('晚安，今天辛苦啦。', 102).id, current.id + 1, '被拒提醒不消耗编号');
+  }
+});
+
+test('日历提醒无可执行按钮，返回数据伪造动作无效且直接互动仍能替换它', () => {
+  const director = new DialogueDirector();
+  const reminder = director.offerCalendarReminder('今天是中秋节。', 0);
+  reminder.actions.push({ id: 'again', label: '伪造' }, { id: 'rest', label: '伪造' });
+  for (const action of ['again', 'rest', 'codex-open', 'app-update-open', 'zcode-dismiss', 'unknown']) assert.equal(director.respond(reminder.id, action, 1), null);
+  assert.equal(director.hasBubble(1), true, '非法回应不会关闭合法气泡');
+  const interaction = director.offer('play', 100);
+  assert.ok(interaction); assert.equal(interaction.id, reminder.id + 1);
+  assert.equal(director.respond(reminder.id, 'again', 101), null);
+  assert.equal(director.respond(interaction.id, 'again', 101), 'again');
+  assert.equal(director.offer('calendar-reminder', 102), null, '不增加外部互动命令');
+});
+
+test('日历文案按 Unicode 限制两百字和两行，原三联动文案仍保留四十八字上限', () => {
+  const text = '😀'.repeat(100) + '\n' + '节'.repeat(99), director = new DialogueDirector();
+  assert.equal(Array.from(text).length, 200);
+  assert.ok(text.length > 200);
+  assert.equal(director.offerCalendarReminder(text, 0).text, text);
+  const invalid = [null, undefined, 1, {}, '', '  ', '\n节日', '节日\n', '一\n二\n三', '节'.repeat(201), '😀'.repeat(201)];
+  for (const value of invalid) {
+    const rejected = new DialogueDirector();
+    assert.equal(rejected.offerCalendarReminder(value, 0), null);
+    assert.equal(rejected.offerCalendarReminder('有效问候', 1).id, 1);
+  }
+  const external = new DialogueDirector();
+  assert.equal(external.offerCodex(codexAlert({ text: '字'.repeat(49) }), 0), null);
+  assert.equal(external.offerProviderTask({ provider: 'zcode', id: 1, generation: 1, text: '字'.repeat(49) }, 0), null);
+});
+
+test('日历提醒拒绝无效时间与时长、上限十二秒，关闭气泡时不改变当前状态', () => {
+  const invalid = [
+    [NaN, 8000], [Infinity, 8000], [-Infinity, 8000], ['0', 8000], [null, 8000],
+    [0, NaN], [0, Infinity], [0, -Infinity], [0, 0], [0, -1], [0, '8000'], [0, null]
+  ];
+  const director = new DialogueDirector();
+  for (const [now, duration] of invalid) assert.equal(director.offerCalendarReminder('问候', now, duration), null);
+  const capped = director.offerCalendarReminder('问候', 100, 20000);
+  assert.equal(capped.id, 1); assert.equal(capped.durationMs, 12000);
+  assert.equal(director.hasBubble(12099), true); assert.equal(director.hasBubble(12100), false);
+  const disabled = new DialogueDirector({ enabled: false });
+  assert.equal(disabled.offerCalendarReminder('问候', 0), null);
+  disabled.setEnabled(true); assert.equal(disabled.offerCalendarReminder('问候', 1).id, 1);
+  disabled.setEnabled(false); assert.equal(disabled.hasBubble(2), false);
+  assert.equal(disabled.offerCalendarReminder('节日提醒', 2), null);
+});
+
+test('日历气泡结束后沿用十五秒普通工作对白间隔，不影响新的直接互动', () => {
+  const director = new DialogueDirector({ now: 0 });
+  assert.ok(director.offerCalendarReminder('忙里也留一点休息。', 600000, 1));
+  assert.equal(director.hasBubble(600001), false);
+  assert.equal(director.offer('work', 614999), null, '日历提醒更新最后气泡时间，避免紧接着自动冒泡');
+  assert.ok(director.offer('work', 615000));
+  assert.ok(director.offer('pet', 615001), '正常直接互动优先级不变');
+});
+
 test('新版气泡复用对白编号和按钮权限，过期、关闭、已被替换的按钮失效', () => {
   const director = new DialogueDirector();
   assert.equal(director.offerUpdate('https://untrusted.invalid/', 0), null);

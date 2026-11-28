@@ -3,9 +3,10 @@ const { pathToFileURL } = require('node:url');
 const { adjacentBounds } = require('./window-placement');
 const { petVisualBounds } = require('./pet-visual-bounds');
 const { layoutShortcuts } = require('./shortcut-layout');
+const { PANEL_ACTIONS, panelActions } = require('./shortcuts');
 
 const FILE = path.join(__dirname, '../shortcuts.html');
-const ACTIONS = new Set(['chat', 'custom', 'note', 'todo', 'pomodoro', 'settings']);
+const ACTIONS = new Set(PANEL_ACTIONS);
 const OPEN_DURATION = 260, CLOSE_DURATION = 180;
 const sameBounds = (a, b) => a && b && ['x', 'y', 'width', 'height'].every(key => a[key] === b[key]);
 const contains = (r, p, margin = 0) => Boolean(r && p && p.x >= r.x - margin && p.y >= r.y - margin &&
@@ -142,7 +143,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       } : adjacentBounds(visual, workArea, size);
       layout = { bounds: placement, items: [] };
     } else {
-      try { layout = layoutShortcuts({ petBounds: visual, workArea: area, shape: getConfig().shape, side: presentation?.side }); }
+      try { const config = getConfig(); layout = layoutShortcuts({ petBounds: visual, workArea: area, shape: config.shape, side: presentation?.side, order: config.order, hidden: config.hidden }); }
       catch (error) { close({ immediate: true }); onError(error); return; }
       view = layout.shape || getConfig().shape;
       settingsPositioned = false;
@@ -229,6 +230,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   }
   function action(id) {
     if (!ACTIONS.has(id)) return;
+    if (id !== 'settings' && !panelActions(getConfig(), view).includes(id)) return;
     cancelEdgeIdle();
     close(); onAction(id);
   }

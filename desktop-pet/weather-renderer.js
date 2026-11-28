@@ -312,6 +312,7 @@
     if (event.key === 'Escape') picker ? showPicker(false) : setExpanded(false, true);
   });
   api.onChooseCity?.(() => showPicker(true));
+  api.onDetails?.(() => { showPicker(false); if (locationConsent.open) locationConsent.close(); });
   api.onCollapse?.(() => { picker = false; clearTimeout(searchTimer); searchRevision++; locationGeneration++; setExpanded(false); });
   let liveRevision = 0;
   api.onState(next => { liveRevision++; render(next); });

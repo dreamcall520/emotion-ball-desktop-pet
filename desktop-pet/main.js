@@ -98,6 +98,9 @@ const { normalizeCustomization, normalizeAppearance, effectiveAppearance } = req
 const QuotaDisplay = require('./lib/quota-display');
 
 const { createWeatherWindow } = require('./lib/weather-window');
+const { createCalendarWindow } = require('./lib/calendar-window');
+const { createCalendarHolidayReminders } = require('./lib/calendar-holiday-reminders');
+const { createCalendarTimeReminders } = require('./lib/calendar-time-reminders');
 const { createLocationBridge } = require('./lib/weather-location');
 const { normalizeWeatherDiagnostic: normalizeDiagnostic } = require('./lib/error-diagnostics');
 const { weatherContext, weatherReminder } = require('./lib/weather-context');
@@ -113,13 +116,13 @@ let weatherWindow = null;
 const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
-const IS_STORE_BUILD = process.mas === true || ACCEPTANCE_KIND === 'mas' || process.argv.includes('--mas-candidate');
+const IS_STORE_BUILD = process.mas === true || ['mas', 'calendar'].includes(ACCEPTANCE_KIND) || process.argv.includes('--mas-candidate');
 const FIRST_RELEASE = IS_STORE_BUILD && require('../package.json').qiuqiuReleaseProfile === 'mas-first';
 const STORE_PROVIDERS = ['codex','zcode','workbuddy'];
 const STORE_CONNECTIONS_PAGE = 'store-connections.html';
 const FirstRelease = require('./lib/mas-first-release');
 const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek','bubble','feedback','mas'].includes(ACCEPTANCE_KIND) || (IS_STORE_BUILD && process.mas !== true);
-const ACCEPTANCE_NAME = IS_STORE_BUILD ? '球球桌宠-商店联调候选' : ACCEPTANCE_KIND === 'feedback' ? '球球桌宠-反馈验收' : ACCEPTANCE_KIND === 'edge-peek' ? '球球桌宠-贴边候选' : ACCEPTANCE_KIND === 'bubble' ? '球球桌宠-气泡验收' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
+const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'calendar' ? '球球桌宠-日历开发候选' : IS_STORE_BUILD ? '球球桌宠-商店联调候选' : ACCEPTANCE_KIND === 'feedback' ? '球球桌宠-反馈验收' : ACCEPTANCE_KIND === 'edge-peek' ? '球球桌宠-贴边候选' : ACCEPTANCE_KIND === 'bubble' ? '球球桌宠-气泡验收' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -151,6 +154,7 @@ let thoughts = null, dogDream = null, dogSleepPose = 'sleep', dogSleepReady = nu
 let sheepOfferingWindow = null;
 let sheepQuotaInk = null, sheepBarInk = null, sheepCapsuleInk = null, sheepCapsuleRead = null, sheepCapsuleReadAt = 0, sheepCapsuleRevision = 0, sheepCapsuleReadKey = null, sheepCapsuleReadCount = 0;
 let bubbleVisibilityBinding = null;
+let calendarPreviewBubble = null;
 let quotaLabel = null;
 let quotaGuard = null;
 let quotaGuardSource = 'codex';
@@ -192,6 +196,8 @@ let chatWindow = null;
 let zcodeLink = null;
 let zcodeConsent = null;
 let notesCompanion = null;
+let calendarWindow = null;
+let calendarHolidayReminders = null, calendarTimeReminders = null;
 let pomodoro = null;
 let pomodoroWindows = null;
 let shortcutRegistrar = null;
@@ -368,7 +374,11 @@ function openShortcutAction(id) {
     notesCompanion?.openPanel({ tab: id, ...(create ? { create: true } : {}) });
   }
   else if (id === 'pomodoro') openPomodoro();
-  else if (id === 'weather') weatherWindow?.open();
+  else if (id === 'weather') {
+    if (weatherWindow && !weatherWindow.isEnabled()) weatherWindow.setEnabled(true);
+    weatherWindow?.openDetails();
+  }
+  else if (id === 'calendar') calendarWindow?.open();
 }
 
 function saveShortcutConfig(config) {
@@ -469,7 +479,7 @@ function functionWindowObstacles() {
   return [quotaLabel, apiUsageLabel, workbuddyLabel, apiBalanceLabel, apiBalanceDetails, shortcutWindow, quotaGuard, zcodeLink, weatherWindow].flatMap(controller => {
     const win = controller?.getWindow();
     return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
-  });
+  }).concat((calendarWindow?.getWindows() || []).filter(win => !win.isDestroyed() && win.isVisible()).map(win => win.getBounds()));
 }
 
 function showPetMessageBox(options) {
@@ -2156,9 +2166,54 @@ function shortcutDialogueSuppressed() {
   return Boolean(shortcutWindow?.isPresenting());
 }
 
+function clearCalendarPreviewBubble(expected = null) {
+  const binding = calendarPreviewBubble;
+  if (!binding || expected && binding !== expected) return;
+  calendarPreviewBubble = null;
+  for (const [event, listener] of [['show', binding.onShow], ['hide', binding.onHide], ['closed', binding.onHide]]) {
+    safelyInvokeWindow('日历预览气泡解绑', () => binding.win.removeListener(event, listener));
+  }
+  safelyInvokeWindow('日历预览气泡恢复层级', () => {
+    if (!binding.win.isDestroyed()) binding.win.setAlwaysOnTop(Boolean(settings?.alwaysOnTop), 'floating');
+  });
+}
+
+function raiseCalendarPreviewBubble(binding) {
+  if (!binding || calendarPreviewBubble !== binding) return false;
+  const raised = safelyInvokeWindow('日历预览气泡层级', () => {
+    if (isQuitting || screenLocked || binding.win.isDestroyed() || bubble?.getWindow() !== binding.win) throw Error('日历预览气泡已失效');
+    binding.win.setAlwaysOnTop(true, 'floating', 1);
+    binding.win.moveTop();
+  });
+  if (!raised) clearCalendarPreviewBubble(binding);
+  return raised;
+}
+
+function presentCalendarPreviewBubble(payload) {
+  clearCalendarPreviewBubble();
+  let binding;
+  const bound = safelyInvokeWindow('日历预览气泡绑定', () => {
+    const win = bubble?.getWindow();
+    if (!win || win.isDestroyed()) throw Error('日历预览气泡尚未准备好');
+    binding = { id: payload.id, win, onShow: null, onHide: null };
+    binding.onShow = () => raiseCalendarPreviewBubble(binding);
+    binding.onHide = () => {
+      // macOS can deliver an old hide after the same native window is shown
+      // for a newer bubble. Its current visibility owns the cleanup decision.
+      if (!win.isDestroyed() && win.isVisible()) return;
+      clearCalendarPreviewBubble(binding);
+    };
+    calendarPreviewBubble = binding;
+    win.on('show', binding.onShow); win.on('hide', binding.onHide); win.on('closed', binding.onHide);
+  });
+  if (!bound) { clearCalendarPreviewBubble(binding); return false; }
+  return raiseCalendarPreviewBubble(binding);
+}
+
 function showBubble(payload) {
   if (!payload || pomodoroQuiet || weatherWindow?.isExpanded?.() || shortcutDialogueSuppressed() ||
     presentationSuppressed() || chatWindow?.isVisible()) return false;
+  if (calendarPreviewBubble && calendarPreviewBubble.id !== payload.id) clearCalendarPreviewBubble();
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
   repositionQuotaLabel();
@@ -2167,6 +2222,7 @@ function showBubble(payload) {
 }
 
 function hideBubble() {
+  clearCalendarPreviewBubble();
   safelyInvokeWindow('气泡隐藏', () => bubble?.hide());
   repositionQuotaLabel();
 }
@@ -2182,6 +2238,7 @@ function destroyBubbleSafely() {
   if (bubbleDestroying) return false;
   bubbleDestroying = true;
   try {
+    clearCalendarPreviewBubble();
     detachBubbleVisibilityEvents();
     return safelyInvokeWindow('气泡销毁', () => bubble?.destroy());
   } finally {
@@ -3146,6 +3203,22 @@ function showDialogue(event, sheepAction) {
   return payload;
 }
 
+function calendarInteractionSuppressed() {
+  return isQuitting || screenLocked || pomodoroQuiet || !settings?.bubblesEnabled ||
+    !petWindow || petWindow.isDestroyed() || !petWindow.isVisible() || petSleepState === 'sleep' ||
+    Boolean(dragState || hostMotion || bounceState) || shortcutDialogueSuppressed() || presentationSuppressed() ||
+    weatherWindow?.isExpanded?.() || chatWindow?.isVisible() || !dialogue || !bubble || dialogue.hasBubble(performance.now());
+}
+function notifyCalendarInteraction(packet) {
+  if (calendarInteractionSuppressed()) return false;
+  const payload = dialogue.offerCalendarReminder(packet.message, performance.now());
+  if (!payload) return false;
+  if (!showBubble(payload)) { dialogue.dismiss(); return false; }
+  if (packet.preview === true && !presentCalendarPreviewBubble(payload)) { hideBubble(); dialogue.dismiss(); return false; }
+  if (packet.motion) sendCommand({ command: 'again', motion: packet.motion });
+  return true;
+}
+
 function setPetSize(sizeName) {
   if (!SIZES[sizeName] || !petWindow || petWindow.isDestroyed()) return;
   stopMotion();
@@ -3183,6 +3256,7 @@ function setAlwaysOnTop(enabled) {
     if (petWindow && !petWindow.isDestroyed()) petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   });
   safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
+  if (calendarPreviewBubble) raiseCalendarPreviewBubble(calendarPreviewBubble);
   safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('守护战置顶', () => quotaGuard?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('Codex 详情置顶', () => codexDetails?.setAlwaysOnTop(settings.alwaysOnTop));
@@ -3364,7 +3438,7 @@ function menuTemplate() {
     click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
   const items = [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
-    ...(IS_STORE_BUILD ? [{ id: 'store-connections', label: FIRST_RELEASE ? '连接本机 Codex' : '工具连接（商店接入）', click: openStoreConnections }] : []),
+    ...(IS_STORE_BUILD ? [{ id: 'store-connections', label: '连接本机工具', click: openStoreConnections }] : []),
     { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'feedback-open', label: '意见反馈', click: () => openGlobalSettings('feedback') },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
@@ -3396,6 +3470,7 @@ function menuTemplate() {
     ] },
     { id: 'shortcut-settings', label: '快捷键设置', click: () => openGlobalSettings('shortcuts') },
     { id: 'pomodoro-open', label: '番茄钟', click: openPomodoro },
+    ...(calendarWindow ? [calendarWindow.menu()] : []),
     { type: 'separator' },
     { label: '球球与互动', submenu: [
       { label: '随机表情', click: () => sendCommand('random') },
@@ -3485,9 +3560,10 @@ function compactMenuTemplate() {
   const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
   const codex = items.find(item => item.id === 'codex-menu').submenu;
   const codexEnabled = codex.find(item => item.id === 'codex-enabled');
-  return [...(IS_STORE_BUILD ? [find('store-connections')] : []), find('chat-open'), { ...find('customize-open'), label: '来定制球球' }, find('custom-skin-promotion'),
-    notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
+  return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' }, find('custom-skin-promotion'),
+    notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'), find('calendar-menu'),
     ...(IS_STORE_BUILD?[]:[{ type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled')]),
+    ...(IS_STORE_BUILD ? [find('store-connections')] : []),
     { id: 'quota-cards-settings', label: '联动样式管理', click: () => openGlobalSettings('quota-cards') },
     { type: 'separator' }, find('global-settings'), find('feedback-open'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
@@ -5216,6 +5292,14 @@ async function bootstrap() {
     onReminderLayout: () => pomodoroWindows?.sync(),
     onError: error => writeError('便签与待办', error) });
   nativeTheme?.on('updated', () => { if (settings.codexQuotaAppearance === 'system') notesCompanion?.syncAppearance(); });
+  calendarWindow = createCalendarWindow({ BrowserWindow, Tray, nativeImage, screen, ipcMain, shell,
+    filePath: path.join(app.getPath('userData'), 'calendar-preferences.json'), store: notesCompanion.getStore(),
+    trackWindow: win => colorModes.track(win), getWeather: currentWeatherState,
+    openWeatherCity: owner => weatherWindow?.openCity(owner), openWeatherDetail: owner => weatherWindow?.openDetails(owner), isSuppressed: () => screenLocked || isQuitting,
+    onHolidayPreview: () => calendarHolidayReminders?.preview() || false,
+    onTimePreview: kind => calendarTimeReminders?.preview(kind) || false,
+    onChange: () => { refreshTrayMenu(); void calendarHolidayReminders?.resume(); void calendarTimeReminders?.resume(); },
+    onError: error => writeError('日历', error) });
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getAppearance: () => effectiveAppearance(settings?.customization?.appearance),
     getCodexPet: appearance => codexPetDescriptor(appearance),
@@ -5674,7 +5758,7 @@ async function bootstrap() {
     },
     onError: error => writeError('活动状态检测', error)
   });
-  const pause = () => { cancelCustomizationPromotion(); quotaPopups.cancelPending(); weatherWindow?.pause();
+  const pause = () => { cancelCustomizationPromotion(); quotaPopups.cancelPending(); weatherWindow?.pause(); calendarWindow?.pause(); calendarHolidayReminders?.pause(); calendarTimeReminders?.pause();
     if(localPetImportSession)localPetImportSession.invalid=true;
     screenLocked = true;pauseDogDreamCycle();
     quotaCardGroupTransition?.cancel();
@@ -5712,7 +5796,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时 ZCode 窗口隐藏', () => zcodeLink?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; syncDogDream(); weatherWindow?.resume(); void codexIconPreference?.start(); notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
+  const resume = () => { screenLocked = false; syncDogDream(); weatherWindow?.resume(); calendarWindow?.resume(); void codexIconPreference?.start(); notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); void calendarHolidayReminders?.resume(); void calendarTimeReminders?.resume(); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -5736,7 +5820,7 @@ async function bootstrap() {
     getCityPickerSuppressed: () => isQuitting || screenLocked,
     getAppearance: () => settings.codexQuotaAppearance,
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
-    onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },
+    onChange: packet => { calendarWindow?.updateWeather(); syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },
     onError: (error, context) => writeError('天气', error, context) });
   const weatherPetWindow = petWindow, initialWeatherWindow = weatherWindow;
   const isCurrentWeatherOwner = () => !isQuitting && petWindow === weatherPetWindow &&
@@ -5759,6 +5843,13 @@ async function bootstrap() {
   app.on('browser-window-created', (_event, win) => weatherObstacleWatcher.track(win));
   app.once('before-quit', () => weatherObstacleWatcher.close());
   weatherWindow.start();
+  calendarHolidayReminders = createCalendarHolidayReminders({ filePath: path.join(app.getPath('userData'), 'calendar-holiday-reminders.json'),
+    isEnabled: () => calendarWindow.getPreferences().holidayReminders !== false, isSuppressed: calendarInteractionSuppressed,
+    notify: notifyCalendarInteraction, onError: error => writeError('节假日互动', error) });
+  calendarTimeReminders = createCalendarTimeReminders({ filePath: path.join(app.getPath('userData'), 'calendar-time-reminders.json'),
+    getPreferences: () => calendarWindow.getPreferences(), isSuppressed: calendarInteractionSuppressed,
+    notify: notifyCalendarInteraction, onError: error => writeError('早中晚互动', error) });
+  void calendarHolidayReminders.start(); void calendarTimeReminders.start();
   if (ACCEPTANCE_KIND === 'weather' || process.argv.includes('--weather-preview')) weatherWindow.open();
   createTray();
   if (process.argv.includes('--shortcuts-preview')) openShortcuts();
@@ -5767,6 +5858,8 @@ async function bootstrap() {
   if (process.argv.includes('--settings-preview')) openGlobalSettings();
   if (IS_STORE_BUILD && process.argv.includes('--store-connections-preview')) openStoreConnections();
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
+  if (process.argv.includes('--calendar-preview')) calendarWindow.open();
+  if (process.argv.includes('--calendar-widgets-preview')) calendarWindow.open({ page: 'widgets' });
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
   if(FIRST_RELEASE) void (async()=>{
@@ -5791,6 +5884,8 @@ if (!hasSingleInstanceLock) {
     if (argv.includes('--shortcut-settings-preview')) openShortcuts(true);
     if (argv.includes('--settings-preview')) openGlobalSettings();
     if (argv.includes('--notes-preview')) notesCompanion?.openPanel();
+    if (argv.includes('--calendar-preview')) calendarWindow?.open();
+    if (argv.includes('--calendar-widgets-preview')) calendarWindow?.open({ page: 'widgets' });
     if (argv.includes('--pomodoro-preview')) openPomodoro();
   });
 
@@ -5822,6 +5917,8 @@ if (!hasSingleInstanceLock) {
       return;
     }
     quitCleanupStarted = true;
+    calendarHolidayReminders?.dispose(); calendarTimeReminders?.dispose();
+    calendarWindow?.destroy();
     quotaCardGroupTransition?.destroy();
     quotaCardGroup?.close(); quotaCardGroupWindow?.destroy();
     codexIconPreference?.close();
