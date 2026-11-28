@@ -7,6 +7,7 @@ const { createHash, X509Certificate } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const DEFAULT_ROOT = path.resolve(__dirname, '../..');
 const release = require('./mas-release-profile');
+const nativeWidgets = require('./package-native-widgets');
 const APP_NAME = '球球桌宠';
 // Fixed filters stay in the signed App; external integration writes only JSON.
 const MAS_ASAR_UNPACK = '{**/*.node,**/desktop-pet/assets/workbuddy-desktop-hook/plugins/qiuqiu-task-events/scripts/emit-metadata.sh,**/desktop-pet/assets/zcode-desktop-hook/plugins/qiuqiu-zcode-task-events/scripts/emit-metadata.sh}';
@@ -195,8 +196,10 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   buildWeatherLocation(root);
   (dependencies.buildCalendarEvents || require('./build-calendar-events').buildCalendarEvents)(root, { targetArch: config.arch });
   (dependencies.buildPluginHost || require('./build-plugin-host').buildPluginHost)(root);
+  const widgetArtifacts = await nativeWidgets.prepareNativeWidgets(root, pkg, config, dependencies.buildNativeWidgets);
   const icon = makeIcon(root);
   const staging = mac.prepareStaging(root, path.join(root, 'desktop-pet/build/mas-staging', config.arch), {pluginNative:true});
+  nativeWidgets.stageWidgetModule(staging,widgetArtifacts,io);
   const stagedPackage = JSON.parse(io.readFileSync(path.join(staging, 'package.json'), 'utf8'));
   stagedPackage.version = config.marketingVersion;
   delete stagedPackage.qiuqiuAcceptance;
@@ -216,6 +219,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   const rights = entitlementsFor(config), signingDirectory = path.join(options.out,'signing'); io.mkdirSync(signingDirectory,{recursive:true,mode:0o700});
   const mainFile = path.join(signingDirectory,'main.entitlements.plist'), childFile = path.join(signingDirectory,'child.entitlements.plist');
   io.writeFileSync(mainFile,plist(rights.main)); io.writeFileSync(childFile,plist(rights.child));
+  const embeddedWidgets=nativeWidgets.embedNativeWidgets(appPath,widgetArtifacts,signingDirectory,io);
   if (release.isFirstRelease(config)) {
     const manifest = path.join(DEFAULT_ROOT, 'desktop-pet/native/PrivacyInfo.xcprivacy');
     io.copyFileSync(manifest, path.join(appPath, 'Contents/Resources/PrivacyInfo.xcprivacy'));
@@ -224,7 +228,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   const codexBinary = path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex');
   await sign({ app:appPath,platform:'mas',type:'distribution',batchCodesignCalls:true,identity:application.fingerprint,
     identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,
-    binaries:release.isFirstRelease(config)?[]:[codexBinary],optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false}) });
+    binaries:[...(release.isFirstRelease(config)?[]:[codexBinary]),...(embeddedWidgets?[embeddedWidgets.helperPath,embeddedWidgets.extensionPath]:[])],optionsForFile:file=>({entitlements:nativeWidgets.entitlementFileFor(file,appPath,mainFile,childFile,embeddedWidgets),hardenedRuntime:false}) });
   let bundledManifestRefresh; try { bundledManifestRefresh = require('./package-mas-development').refreshBundledManifests(appPath,io,config.arch,config); }
   catch (_) { throw failure('MAS_BUNDLED_MANIFEST_REFRESH_FAILED'); }
   run('codesign',['--force','--sign',application.fingerprint,'--entitlements',mainFile,appPath]);
@@ -236,13 +240,14 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
     const expected=file===appPath?rights.main:rights.child;
     if(!actual||Object.keys(actual).length!==Object.keys(expected).length||Object.entries(expected).some(([key,value])=>JSON.stringify(actual?.[key])!==JSON.stringify(value))||['get-task-allow','com.apple.security.get-task-allow'].some(key=>actual?.[key]===true))throw failure('MAS_ENTITLEMENTS_UNVERIFIED');
   }
+  const widgetSigning=nativeWidgets.verifyNativeWidgets(embeddedWidgets,run,rights.child,parseSealed);
   const pkgPath = path.join(options.out, `Qiuqiu-${config.marketingVersion}-${config.buildVersion}-mas-${config.arch}.pkg`);
   await flatAsync({ app: appPath, pkg: pkgPath, platform: 'mas', identity: config.installerIdentity,
     identityValidation: true, install: '/Applications' });
   if (!io.existsSync(pkgPath)) throw failure('MAS_PKG_OUTPUT_MISSING');
   run('pkgutil', ['--check-signature', pkgPath]);
   return { platform: 'mas', releaseProfile: config.releaseProfile || null, ...release.providerRuntimeMetadata(config), arch: config.arch, marketingVersion: config.marketingVersion, buildVersion: config.buildVersion,
-    appPath, pkgPath, signedDistributionPackage: true, profileValidated: true, runtimeCache, bundledManifestRefresh, languageResources, signedEntitlementsValidated:true, runtimeAcceptancePassed:false,
+    appPath, pkgPath, signedDistributionPackage: true, profileValidated: true, runtimeCache, bundledManifestRefresh, languageResources, nativeWidgets:widgetSigning, signedEntitlementsValidated:true, runtimeAcceptancePassed:false,
     submissionReady: false, note: 'Signed build only; runtime acceptance, App Store processing/review and release are separate.' };
 }
 function argumentsFor(argv) {

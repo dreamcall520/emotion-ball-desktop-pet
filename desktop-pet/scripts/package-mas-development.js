@@ -6,6 +6,7 @@ const {createHash,X509Certificate}=require('node:crypto');
 const {execFileSync}=require('node:child_process');
 const {marketingVersion,identities,argumentsFor,MAS_ASAR_UNPACK}=require('./package-mas');
 const release=require('./mas-release-profile');
+const nativeWidgets=require('./package-native-widgets');
 const ROOT=path.resolve(__dirname,'../..'),NAME='球球桌宠-商店沙盒开发候选';
 const REQUIRED=['MAS_DEV_BUNDLE_ID','MAS_DEV_TEAM_ID','MAS_DEV_PROFILE','MAS_DEV_SIGN_IDENTITY','MAS_DEV_BUILD_VERSION','MAS_DEV_ELECTRON_ZIP_DIR'];
 const fail=code=>Object.assign(new Error(code),{code});
@@ -124,7 +125,19 @@ if(process.mas!==true){process.stderr.write('MAS_RUNTIME_REQUIRED\\n');process.e
 const runtimeProbe=process.argv.includes('--qiuqiu-mas-runtime-probe');
 const helperProbe=process.argv.includes('--qiuqiu-mas-helper-probe');
 const installerProbe=process.argv.includes('--qiuqiu-mas-installer-probe');
+const widgetProbe=process.argv.includes('--qiuqiu-native-widget-probe');
 if(installerProbe){process.stderr.write('MAS_FIRST_RELEASE_PLUGIN_INSTALL_DISABLED\\n');process.exit(2);}
+else if(widgetProbe){const {app}=require('electron');app.whenReady().then(async()=>{
+ const ownContainer=app.getPath('userData').includes('/Library/Containers/${bundleId}/Data/');
+ if(!ownContainer){process.stdout.write(JSON.stringify({mas:true,ownContainer:false})+'\\n');app.exit(2);return;}
+ const fs=require('node:fs');fs.mkdirSync(app.getPath('userData'),{recursive:true,mode:0o700});
+ const nativeCallerBundleID=require('./desktop-pet/native/widget-center.node').bundleIdentifier();
+ let report=null;const errors=[];
+ const service=require('./desktop-pet/lib/native-widget-sync').createNativeWidgetSync({userData:app.getPath('userData'),resourcesPath:process.resourcesPath,onPublished:report=>require('./desktop-pet/lib/native-widget-reload').reloadNativeWidgetChanges(report),onError:error=>errors.push(error.code)},
+  {spawn:(...args)=>{const child=require('node:child_process').spawn(...args);let text='';child.stdout.on('data',chunk=>{if(text.length<65536)text+=chunk.toString();});child.on('close',()=>{try{report=JSON.parse(text);}catch{}});return child;}});
+ await service.start();service.dispose();
+ process.stdout.write(JSON.stringify({mas:true,ownContainer,bridgeSandboxValidated:report?.ok===true&&errors.length===0&&nativeCallerBundleID==='${bundleId}',nativeCallerBundleID,report,errors})+'\\n');app.exit(report?.ok===true&&errors.length===0&&nativeCallerBundleID==='${bundleId}'?0:2);
+}).catch(()=>{process.stderr.write('MAS_WIDGET_BRIDGE_PROBE_FAILED\\n');app.exit(2);});}
 else if(runtimeProbe||helperProbe){const {app}=require('electron');app.whenReady().then(()=>{
  const ownContainer=app.getPath('userData').includes('/Library/Containers/${bundleId}/Data/');
  const capabilities=require('./desktop-pet/lib/plugin-host').createPluginHost().getSandboxCapabilities();
@@ -155,7 +168,9 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  (deps.buildWeatherLocation||require('./build-weather-location').buildWeatherLocation)(root);
  (deps.buildCalendarEvents||require('./build-calendar-events').buildCalendarEvents)(root,{targetArch:config.arch});
  (deps.buildPluginHost||require('./build-plugin-host').buildPluginHost)(root);
+ const widgetArtifacts=await nativeWidgets.prepareNativeWidgets(root,pkg,config,deps.buildNativeWidgets);
  const icon=makeIcon(root),staging=mac.prepareStaging(root,path.join(root,'desktop-pet/build/mas-development-staging',config.arch),{pluginNative:true});
+ nativeWidgets.stageWidgetModule(staging,widgetArtifacts,io);
  const staged=JSON.parse(io.readFileSync(path.join(staging,'package.json'),'utf8'));release.trimStaging(staging,config,io);if(release.isFirstRelease(config))staged.qiuqiuReleaseProfile=release.FIRST_RELEASE;Object.assign(staged,{version:config.version,qiuqiuAcceptance:'mas',qiuqiuDistribution:'mas-development',main:'mas-development-entry.js'});
  io.writeFileSync(path.join(staging,'package.json'),JSON.stringify(staged,null,2)+'\n');io.writeFileSync(path.join(staging,'mas-development-entry.js'),probeEntry(config.bundleId,config));
  const options=packagerOptions(root,config,staging,icon,mac.buildPackagerOptions(root,icon));
@@ -166,6 +181,7 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  const languageResources=release.trimElectronLocales(appPath,config,io);
  const plist=deps.buildPlist||require('plist').build,rights=entitlementsFor(config),signDir=path.join(options.out,'signing');io.mkdirSync(signDir,{recursive:true,mode:0o700});
  const mainFile=path.join(signDir,'main.entitlements.plist'),childFile=path.join(signDir,'child.entitlements.plist');io.writeFileSync(mainFile,plist(rights.main));io.writeFileSync(childFile,plist(rights.child));
+ const embeddedWidgets=nativeWidgets.embedNativeWidgets(appPath,widgetArtifacts,signDir,io);
  if (release.isFirstRelease(config)) {
     const manifest = path.join(ROOT, 'desktop-pet/native/PrivacyInfo.xcprivacy');
     io.copyFileSync(manifest, path.join(appPath, 'Contents/Resources/PrivacyInfo.xcprivacy'));
@@ -174,8 +190,8 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  const signing=deps.signing||await import('@electron/osx-sign'),sign=signing.signAsync||signing.sign;
  if(typeof sign!=='function')throw fail('MAS_DEV_SIGN_API_UNAVAILABLE');
  await sign({app:appPath,platform:'mas',type:'development',batchCodesignCalls:true,identity:identity.fingerprint,identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,
-  binaries:release.isFirstRelease(config)?[]:[path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex')],
-  optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false,timestamp:'none'})});
+  binaries:[...(release.isFirstRelease(config)?[]:[path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex')]),...(embeddedWidgets?[embeddedWidgets.helperPath,embeddedWidgets.extensionPath]:[])],
+  optionsForFile:file=>({entitlements:nativeWidgets.entitlementFileFor(file,appPath,mainFile,childFile,embeddedWidgets),hardenedRuntime:false,timestamp:'none'})});
  const resources=refreshBundledManifests(appPath,io,config.arch,config);
  // Updating a resource invalidates only the outer seal. Preserve nested helper
  // signatures and entitlements: never deep-resign after refreshing the digests.
@@ -186,14 +202,21 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  const ownTargets=release.isFirstRelease(config)?release.ownSigningTargets(appPath,io):[];
  for(const target of ownTargets)run('codesign',['--verify','--strict',target.path]);
  for(const child of (release.isFirstRelease(config)?ownTargets.filter(t=>t.entitlements).map(t=>t.path):[path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex'),path.join(appPath,'Contents/Frameworks',NAME+' Helper.app')])){let e;try{e=parse(run('codesign',['--display','--entitlements',':-',child]));}catch{throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}if(e['com.apple.security.app-sandbox']!==true||e['com.apple.security.inherit']!==true)throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}
+ const widgetSigning=nativeWidgets.verifyNativeWidgets(embeddedWidgets,run,rights.child,parse);
  let probe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-runtime-probe']);probe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');}
  if(probe?.mas!==true||probe.ownContainer!==true||probe.capabilities?.userSelectedExecutable!==false||!['known','sandbox','userSelectedReadWrite','appScopeBookmarks'].every(k=>probe.capabilities?.[k]===true))throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');
  let helperProbe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-helper-probe'],{timeout:90000});helperProbe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_HELPER_PROBE_FAILED');}
  if(release.isFirstRelease(config)){
   if(helperProbe?.mas!==true||helperProbe.ownContainer!==true||helperProbe.codexRuntime!=='user-installed'||helperProbe.bundled!==false||helperProbe.installedProviderAcceptance!==false||helperProbe.validationScope!=='app-sandbox-container-only'||helperProbe.modelRequestsSent!==false||helperProbe.originalCredentialsRead!==false)throw fail('MAS_DEV_HELPER_PROBE_FAILED');
  }else if(helperProbe?.mas!==true||helperProbe.ownContainer!==true||helperProbe.helper?.passed!==true||helperProbe.helper?.metadataTransport?.passed!==true||helperProbe.helper?.modelRequestsSent!==false||helperProbe.helper?.originalCredentialsRead!==false||helperProbe.helper?.workbuddy?.vendorAccountVerified!==false)throw fail('MAS_DEV_HELPER_PROBE_FAILED');
+ let widgetBridgeProbe=null;
+ if(embeddedWidgets){
+  try{widgetBridgeProbe=JSON.parse(run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-native-widget-probe']).trim());}
+  catch{throw fail('MAS_DEV_WIDGET_BRIDGE_PROBE_FAILED');}
+  if(widgetBridgeProbe?.mas!==true||widgetBridgeProbe.ownContainer!==true||widgetBridgeProbe.bridgeSandboxValidated!==true||widgetBridgeProbe.report?.ok!==true)throw fail('MAS_DEV_WIDGET_BRIDGE_PROBE_FAILED');
+ }
  return{platform:'mas',releaseProfile:config.releaseProfile||null,...release.providerRuntimeMetadata(config),purpose:'development-sandbox-validation',arch:config.arch,appPath,signedDevelopmentApp:true,identityValidated:true,profileValidated:true,currentDeviceRegistered:true,
-  bundledManifestRefresh:resources,languageResources,masRuntimeAndContainerProbePassed:true,sandboxCapabilities:probe.capabilities,managedHelperInitializationProbe:release.isFirstRelease(config)?null:helperProbe.helper,...(release.isFirstRelease(config)?{applicationSandboxProbe:helperProbe}:{}),chatAndDirectoryAcceptancePassed:false,submissionReady:false,
+  bundledManifestRefresh:resources,languageResources,nativeWidgets:widgetSigning,widgetBridgeProbe,masRuntimeAndContainerProbePassed:true,sandboxCapabilities:probe.capabilities,managedHelperInitializationProbe:release.isFirstRelease(config)?null:helperProbe.helper,...(release.isFirstRelease(config)?{applicationSandboxProbe:helperProbe}:{}),chatAndDirectoryAcceptancePassed:false,submissionReady:false,
   note:'Local development build only. Genuine MAS runtime/container initialization is separate from login/chat/task/directory acceptance and App Store review.'};
 }
 if(require.main===module){(async()=>{const {mode,arch}=argumentsFor(process.argv.slice(2));const value=mode==='plan'?planFor(JSON.parse(fs.readFileSync(path.join(ROOT,'package.json'),'utf8')),process.env,arch):await buildMasDevelopment({arch});process.stdout.write(JSON.stringify(value,null,2)+'\n');})().catch(e=>{process.stderr.write((e.code?.startsWith('MAS_DEV_')?e.code:'MAS_DEV_BUILD_FAILED')+'\n');process.exitCode=2;});}

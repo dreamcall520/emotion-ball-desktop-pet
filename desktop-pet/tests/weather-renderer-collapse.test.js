@@ -4,6 +4,8 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const { setImmediate: flush } = require('node:timers/promises');
 function fixture() {
  const elements=new Map(),calls=[],collapseRequests=[],animations=[],listeners=new Map();let observe,forcedCollapse,chooseCity,details,stateUpdate;
+ const html=fs.readFileSync(path.join(__dirname,'../weather.html'),'utf8');
+ const domIds=new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match=>match[1]));
  const media={matches:false,addEventListener(name,callback){this.change=callback;}};
  const element=id=>{
   if(!elements.has(id))elements.set(id,{id,dataset:{},hidden:false,style:{},classList:{add(){},remove(){}},
@@ -12,10 +14,10 @@ function fixture() {
   return elements.get(id);
  };
  const api={resize:async value=>{calls.push(JSON.parse(JSON.stringify(value)));},collapse:value=>new Promise(resolve=>collapseRequests.push({value,resolve})),onCollapse:callback=>{forcedCollapse=callback;},onChooseCity:callback=>{chooseCity=callback;},onDetails:callback=>{details=callback;},onState(callback){stateUpdate=callback;},get:()=>new Promise(()=>{}),onPointerReset(){}};
- const document={getElementById:element,createElement:tag=>element('created:'+tag),createTextNode:text=>({textContent:text}),documentElement:{dataset:{}},querySelector:selector=>element(selector),querySelectorAll:()=>[],addEventListener(name,callback){listeners.set(name,callback);}};
+ const document={getElementById:id=>domIds.has(id)?element(id):null,createElement:tag=>element('created:'+tag),createTextNode:text=>({textContent:text}),documentElement:{dataset:{}},querySelector:selector=>element(selector),querySelectorAll:()=>[],addEventListener(name,callback){listeners.set(name,callback);}};
  const window={qiuqiuWeather:api,matchMedia:()=>media,addEventListener(name,callback){listeners.set('window:'+name,callback);}};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../weather-renderer.js'),'utf8'),{window,document,setTimeout,clearTimeout,ResizeObserver:class{constructor(callback){observe=callback;}observe(){}disconnect(){}}});
- return{api,publish:value=>stateUpdate(value),element,calls,collapseRequests,animations,media,observe:()=>observe(),force:()=>forcedCollapse(),choose:()=>chooseCity(),details:()=>details(),open:()=>element('folded').onclick(),close:()=>element('collapse').onclick()};
+ return{api,document,publish:value=>stateUpdate(value),element,calls,collapseRequests,animations,media,observe:()=>observe(),force:()=>forcedCollapse(),choose:()=>chooseCity(),details:()=>details(),open:()=>element('folded').onclick(),close:()=>element('collapse').onclick()};
 }
 test('weather collapse delegates continuous geometry to one main request, not a renderer fade or resize loop',async()=>{
  const f=fixture();f.open();assert.equal(f.calls.length,1);for(let i=0;i<10;i++)f.observe();assert.equal(f.calls.length,1);
@@ -44,6 +46,8 @@ test('closing the city picker informs main while keeping the weather details exp
 
 test('a main details request expands existing weather and exits the city picker without fetching or locating', () => {
  const f = fixture(); let externalCalls = 0;
+ assert.equal(f.document.getElementById('location-consent'), null, 'the real DOM no longer contains a location consent dialog');
+ assert.ok(f.document.getElementById('location-disclosure'), 'the location explanation is inline in the city picker');
  f.api.refresh = f.api.search = f.api.useLocation = () => { externalCalls++; throw Error('details must only reuse state'); };
  f.publish({ status: 'ready', city: { name: '北京', timezone: 'Asia/Shanghai' }, current: { temperature: 8 }, daily: [], hourly: [] });
  f.choose(); assert.equal(f.calls.at(-1).picker, true);

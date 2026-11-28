@@ -113,6 +113,17 @@ function weatherDialogue(event) {
   return text;
 }
 let weatherWindow = null;
+let nativeWidgetSync = null;
+let pendingNativeWidgetAction = null;
+function handleNativeWidgetURL(value) {
+  const action = require('./lib/native-widget-links').nativeWidgetAction(value);
+  if (!action) return false;
+  if (!calendarWindow || !notesCompanion || !weatherWindow) { pendingNativeWidgetAction = action; return true; }
+  if (action === 'todos' || action === 'connect-todos') notesCompanion.openPanel({ tab: 'todo' });
+  else if (action === 'connect-weather') weatherWindow.openCity();
+  else calendarWindow.open();
+  return true;
+}
 const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
@@ -5822,6 +5833,19 @@ async function bootstrap() {
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { calendarWindow?.updateWeather(); syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },
     onError: (error, context) => writeError('天气', error, context) });
+  if (process.platform === 'darwin' && app.isPackaged && process.mas === true) {
+    nativeWidgetSync = require('./lib/native-widget-sync').createNativeWidgetSync({
+      userData: app.getPath('userData'), resourcesPath: process.resourcesPath,
+      onPublished: report => require('./lib/native-widget-reload').reloadNativeWidgetChanges(report),
+      onError: error => writeError('系统小组件同步', { code: error?.code || 'NATIVE_WIDGET_SYNC_FAILED' }) });
+    nativeWidgetSync.start();
+    powerMonitor.on('resume', () => nativeWidgetSync?.refresh());
+  }
+  if (pendingNativeWidgetAction) {
+    const action = pendingNativeWidgetAction; pendingNativeWidgetAction = null;
+    handleNativeWidgetURL('qiuqiu-widget://' + action);
+  }
+  for (const value of process.argv) handleNativeWidgetURL(value);
   const weatherPetWindow = petWindow, initialWeatherWindow = weatherWindow;
   const isCurrentWeatherOwner = () => !isQuitting && petWindow === weatherPetWindow &&
     weatherWindow === initialWeatherWindow && !weatherPetWindow.isDestroyed() &&
@@ -5878,7 +5902,9 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
+  app.on('open-url', (event, value) => { if (handleNativeWidgetURL(value)) event.preventDefault(); });
   app.on('second-instance', (_event, argv) => {
+    for (const value of argv) handleNativeWidgetURL(value);
     if (settings) restorePet();
     if (argv.includes('--shortcuts-preview')) openShortcuts();
     if (argv.includes('--shortcut-settings-preview')) openShortcuts(true);
@@ -5917,6 +5943,7 @@ if (!hasSingleInstanceLock) {
       return;
     }
     quitCleanupStarted = true;
+    nativeWidgetSync?.dispose();
     calendarHolidayReminders?.dispose(); calendarTimeReminders?.dispose();
     calendarWindow?.destroy();
     quotaCardGroupTransition?.destroy();
