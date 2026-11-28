@@ -22,9 +22,10 @@ function embedNativeWidgets(appPath, artifacts, signingDirectory, io = fs) {
   if (!artifacts) return null;
   const extensionPath = path.join(appPath, 'Contents/PlugIns/QiuqiuCalendarWidgets.appex');
   const helperPath = path.join(appPath, 'Contents/Helpers/QiuqiuWidgetBridge');
-  const configPath = helperPath + '.json';
+  const configPath = path.join(appPath, 'Contents/Resources/QiuqiuWidgetBridge.json');
   io.mkdirSync(path.dirname(extensionPath), { recursive: true });
   io.mkdirSync(path.dirname(helperPath), { recursive: true });
+  io.mkdirSync(path.dirname(configPath), { recursive: true });
   io.cpSync(artifacts.extensionPath, extensionPath, { recursive: true, dereference: false });
   io.copyFileSync(artifacts.helperPath, helperPath);
   io.copyFileSync(artifacts.helperConfigPath, configPath);

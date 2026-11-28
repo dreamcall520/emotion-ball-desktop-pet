@@ -13,7 +13,7 @@ const artifacts = buildNativeWidgets(repoRoot, {
 
 Artifacts are in `desktop-pet/build/native-widgets/`: `QiuqiuWidgets.appex`, `QiuqiuWidgetBridge`, `QiuqiuWidgetBridge.json`, and `widget-center.node`. The extension uses `<bundleId>.widgets`, macOS 14 minimum, and `_NSExtensionMain`. The containing-app packager must embed and sign the extension with its own sandbox/App Group rights, sign the ordinary helper to inherit its parent's sandbox, and include the native module in the containing Electron process. This build script does not create provisioning profiles or establish App Store/TestFlight eligibility.
 
-The extension reads `QiuqiuWidgetAppGroup` and `QiuqiuWidgetURLScheme` from its Info.plist. The helper reads the adjacent, code-bundle-owned `QiuqiuWidgetBridge.json` (`appGroup`, `urlScheme`, `containingBundleId`, `widgetBundleId`). The default group is `<teamId>.<bundleId>`. All views use `WidgetStore.link` for `qiuqiu-widget://calendar`, `qiuqiu-widget://todos`, or `qiuqiu-widget://connect-weather`; the containing app handles these routes.
+The extension reads `QiuqiuWidgetAppGroup` and `QiuqiuWidgetURLScheme` from its Info.plist. An embedded helper reads `Contents/Resources/QiuqiuWidgetBridge.json`; a standalone CLI falls back to the adjacent `QiuqiuWidgetBridge.json` (`appGroup`, `urlScheme`, `containingBundleId`, `widgetBundleId`). The default group is `<teamId>.<bundleId>`. All views use `WidgetStore.link` for `qiuqiu-widget://calendar`, `qiuqiu-widget://todos`, or `qiuqiu-widget://connect-weather`; the containing app handles these routes.
 
 The host launches the helper with `--sync`, passes JSON on stdin, and waits for exit. Input is capped at 16 MiB total and 4 MiB per `value`:
 

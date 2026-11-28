@@ -37,7 +37,7 @@ test('native widget compilation uses the parent identity and the same package ve
   assert.deepEqual(received, ['/root', { bundleId: config.bundleId, teamId: config.teamId,
     version: '1.0.4', buildVersion: '123', targetArch: 'arm64' }]);
 });
-test('extension is a real PlugIns appex and helper is outside ASAR with its own config', t => {
+test('extension and helper are code, while helper config is a Resources payload', t => {
   const f = fixture(t), embedded = api.embedNativeWidgets(f.app, f.artifacts, f.signing);
   assert.equal(fs.readFileSync(path.join(embedded.extensionPath, 'Contents/MacOS/Widgets'), 'utf8'), 'fixture widget');
   assert.equal(fs.readFileSync(embedded.helperPath, 'utf8'), 'fixture helper');
@@ -47,6 +47,8 @@ test('extension is a real PlugIns appex and helper is outside ASAR with its own 
   });
   const info = plist.parse(fs.readFileSync(path.join(f.app, 'Contents/Info.plist'), 'utf8'));
   assert.deepEqual(info.CFBundleURLTypes.map(type => type.CFBundleURLSchemes[0]), ['existing', 'qiuqiu-widget']);
+  assert.equal(embedded.configPath, path.join(f.app, 'Contents/Resources/QiuqiuWidgetBridge.json'));
+  assert.equal(fs.existsSync(embedded.helperPath + '.json'), false);
   assert.equal(JSON.parse(fs.readFileSync(embedded.configPath)).appGroup, f.artifacts.appGroup);
 });
 test('parent native module is staged before ASAR creation and remains resolvable as an unpacked module', async t => {

@@ -15,7 +15,8 @@ const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const sourceNames = ['notes-todos.json', 'weather.json', 'weather.json.cache'];
 const helperSource = `#!/usr/bin/env node
 const fs = require('node:fs');
-const config = JSON.parse(fs.readFileSync(__filename + '.json', 'utf8'));
+const path = require('node:path');
+const config = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../Resources/QiuqiuWidgetBridge.json'), 'utf8'));
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', value => input += value);
@@ -39,12 +40,13 @@ async function fixture(t, overrides = {}, options = {}) {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'native-widget-sync-'));
   const resourcesPath = path.join(root, 'Test Widget.app/Contents/Resources');
   const helper = path.resolve(resourcesPath, '../Helpers/QiuqiuWidgetBridge');
+  const configPath = path.join(resourcesPath, 'QiuqiuWidgetBridge.json');
   const userData = path.join(root, 'private-profile');
   const log = path.join(root, 'helper-log.jsonl');
   await Promise.all([fs.promises.mkdir(resourcesPath, { recursive: true }),
     fs.promises.mkdir(path.dirname(helper), { recursive: true }), fs.promises.mkdir(userData)]);
   await fs.promises.writeFile(helper, helperSource, { mode: 0o755 });
-  const setConfig = async config => fs.promises.writeFile(`${helper}.json`, JSON.stringify({
+  const setConfig = async config => fs.promises.writeFile(configPath, JSON.stringify({
     group: 'test.group', widgetExtensionID: 'test.widgets', log, ...config
   }));
   await setConfig({});
@@ -77,7 +79,7 @@ async function fixture(t, overrides = {}, options = {}) {
       .map(child => new Promise(resolve => child.once('close', resolve))));
     await fs.promises.rm(root, { recursive: true, force: true });
   });
-  return { root, resourcesPath, userData, helper, log, instance, errors, children, setConfig, write, records,
+  return { root, resourcesPath, userData, helper, configPath, log, instance, errors, children, setConfig, write, records,
     peak: () => peak };
 }
 
@@ -104,7 +106,7 @@ test('unsupported systems, development resources and missing helpers/configs are
     platform: 'darwin', release: '23.0.0', spawn: () => assert.fail('development spawned')
   });
   await dev.start(); dev.dispose();
-  await fs.promises.unlink(`${f.helper}.json`);
+  await fs.promises.unlink(f.configPath);
   await f.instance.start(); await f.instance.refresh();
   assert.equal((await f.records()).length, 0);
   assert.equal(f.errors.length, 0);

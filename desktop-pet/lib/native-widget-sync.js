@@ -78,7 +78,7 @@ function createNativeWidgetSync(options = {}, dependencies = {}) {
       !/\.app\/Contents\/Resources\/?$/.test(options.resourcesPath)) return noop;
 
   const helperPath = path.resolve(options.resourcesPath, '../Helpers/QiuqiuWidgetBridge');
-  const configPath = `${helperPath}.json`;
+  const configPath = path.join(options.resourcesPath, 'QiuqiuWidgetBridge.json');
   const sourceRoot = path.resolve(options.userData);
   const spawnChild = dependencies.spawn || spawn;
   const watchDirectory = dependencies.watch || fs.watch;

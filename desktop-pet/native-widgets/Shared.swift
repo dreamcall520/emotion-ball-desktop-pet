@@ -7,11 +7,24 @@ enum WidgetStore {
             return ["appGroup": group, "urlScheme": Bundle.main.object(forInfoDictionaryKey: "QiuqiuWidgetURLScheme") as? String ?? "qiuqiu-widget"]
         }
         let executable = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
-        let url = executable.deletingLastPathComponent().appendingPathComponent("QiuqiuWidgetBridge.json")
-        guard let data = try? Data(contentsOf: url), data.count <= 4096,
-              let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
-        return value
+        for url in configurationURLs(for: executable) {
+            if let data = try? Data(contentsOf: url), data.count <= 4096,
+               let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { return value }
+        }
+        return [:]
     }()
+    static func configurationURLs(for executable: URL) -> [URL] {
+        let helperDirectory = executable.standardizedFileURL.deletingLastPathComponent()
+        let contents = helperDirectory.deletingLastPathComponent()
+        var urls: [URL] = []
+        if helperDirectory.lastPathComponent == "Helpers", contents.lastPathComponent == "Contents",
+           contents.deletingLastPathComponent().pathExtension == "app" {
+            urls.append(contents.appendingPathComponent("Resources/QiuqiuWidgetBridge.json"))
+        }
+        // The sibling is retained solely for standalone CLI builds and older local fixtures.
+        urls.append(helperDirectory.appendingPathComponent("QiuqiuWidgetBridge.json"))
+        return urls
+    }
     static let group: String = {
         guard let value = configuration["appGroup"] as? String,
               value.range(of: #"^[A-Z0-9]{10}\.[A-Za-z0-9][A-Za-z0-9.-]{1,200}$"#, options: .regularExpression) != nil else { return "" }
